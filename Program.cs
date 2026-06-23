@@ -77,7 +77,7 @@ internal static class Program
         StartupManager.Sync(); // fix the login entry if the exe moved
 
         ApplicationConfiguration.Initialize();
-        var form = new MainForm { StartHidden = opts.Tray };
+        var form = new MainForm(startHidden: opts.Tray);
 
         if (primary)
             SingleInstance.StartPipeServer(paths => form.EnqueueExternalPaths(paths));

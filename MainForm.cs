@@ -40,21 +40,11 @@ internal sealed partial class MainForm : Form
     readonly StatusStrip _status = new();
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
-    bool _shownOnce;
+    readonly bool _startHidden;
 
-    /// <summary>When true (launched with --tray at login), start hidden — only the tray icon shows.</summary>
-    public bool StartHidden;
-
-    protected override void SetVisibleCore(bool value)
+    public MainForm(bool startHidden = false)
     {
-        // Keep the window hidden on first show when launched to the tray at login.
-        if (StartHidden && !_shownOnce) { _shownOnce = true; base.SetVisibleCore(false); return; }
-        _shownOnce = true;
-        base.SetVisibleCore(value);
-    }
-
-    public MainForm()
-    {
+        _startHidden = startHidden;
         Text = AppConstants.AppTitle;
         ClientSize = new Size(1120, 720);
         MinimumSize = new Size(840, 560);
@@ -62,6 +52,15 @@ internal sealed partial class MainForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         AllowDrop = true;
         TryLoadIcon();
+
+        if (_startHidden)
+        {
+            // Launched at login with --tray: show invisibly (Application.Run needs a shown form
+            // to keep the loop alive), then Hide() on first Shown. Only the tray icon appears.
+            WindowState = FormWindowState.Minimized;
+            ShowInTaskbar = false;
+            Opacity = 0;
+        }
 
         BuildTabs();
         BuildStatusBar();
@@ -192,6 +191,8 @@ internal sealed partial class MainForm : Form
 
     void RestoreFromTray()
     {
+        ShowInTaskbar = true;
+        Opacity = 1;
         Show();
         WindowState = FormWindowState.Normal;
         Activate();
@@ -202,6 +203,8 @@ internal sealed partial class MainForm : Form
 
     void OnShownFirst(object? sender, EventArgs e)
     {
+        if (_startHidden) { Hide(); return; } // straight to tray; no wizard at login
+
         if (!Settings.FirstRunCompleted)
             RunFirstRunWizard();
         else if (ContextMenuInstaller.NeedsRepair())
