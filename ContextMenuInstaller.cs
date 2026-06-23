@@ -169,7 +169,8 @@ internal static class ContextMenuInstaller
 
     static void DeleteTree(string keyPath)
     {
-        try { Registry.LocalMachine.DeleteSubKeyTree(keyPath, throwOnMissingSubKey: false); } catch { }
+        try { Registry.LocalMachine.DeleteSubKeyTree(keyPath, throwOnMissingSubKey: false); }
+        catch (Exception ex) { Log("Registry delete failed (" + keyPath + "): " + ex.Message, LogLevel.Warning); }
     }
 
     static string ExtractExe(string command)

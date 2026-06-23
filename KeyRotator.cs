@@ -39,7 +39,7 @@ internal sealed class KeyRotator
 
             if (key != null)
             {
-                if (waited) { Log("Keys reset; scanning resumed.", LogLevel.Info); try { OnResumed?.Invoke(); } catch { } }
+                if (waited) { Log("Keys reset; scanning resumed.", LogLevel.Info); try { OnResumed?.Invoke(); } catch (Exception ex) { Log("OnResumed handler failed: " + ex.Message, LogLevel.Warning); } }
                 return key;
             }
 
@@ -50,7 +50,7 @@ internal sealed class KeyRotator
             if (wait > TimeSpan.FromSeconds(60)) wait = TimeSpan.FromSeconds(60); // re-check at least once a minute
 
             waited = true;
-            try { OnAllExhausted?.Invoke(target); } catch { }
+            try { OnAllExhausted?.Invoke(target); } catch (Exception ex) { Log("OnAllExhausted handler failed: " + ex.Message, LogLevel.Warning); }
             Log($"All keys exhausted. Waiting {wait.TotalSeconds:F0}s (soonest reset {target:HH:mm:ss} UTC).", LogLevel.Warning);
             await Task.Delay(wait, ct);
         }

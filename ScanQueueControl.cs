@@ -84,7 +84,7 @@ internal sealed class ScanQueueControl : UserControl
 
         _grid.SelectionChanged += (_, _) => _detail.Show(SelectedItem());
 
-        _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch { } };
+        _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
         _scheduler.ProgressChanged += OnProgress;
         _scheduler.ItemFinished += OnItemFinished;
         _scheduler.Started += () => SafeUi(() => UpdateRunningState(true));
@@ -300,8 +300,8 @@ internal sealed class ScanQueueControl : UserControl
     }
 
     ScanItem? SelectedItem() => _grid.CurrentRow?.DataBoundItem as ScanItem;
-    static void CopySafe(string? s) { if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch { } } }
-    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch { } }
+    static void CopySafe(string? s) { if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } } }
+    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
 
     public void ApplyTheme()
     {

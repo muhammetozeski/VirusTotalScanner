@@ -29,8 +29,8 @@ internal static class AppServices
     /// <summary>Persists counters and cache on shutdown.</summary>
     public static void Shutdown()
     {
-        try { Vault.Flush(); } catch { }
-        try { Cache.Flush(); } catch { }
-        try { GuiScrapeService.Shutdown(); } catch { }
+        try { Vault.Flush(); } catch (Exception ex) { Log("Vault flush failed: " + ex.Message, LogLevel.Warning); }
+        try { Cache.Flush(); } catch (Exception ex) { Log("Cache flush failed: " + ex.Message, LogLevel.Warning); }
+        try { GuiScrapeService.Shutdown(); } catch (Exception ex) { Log("WebView2 shutdown failed: " + ex.Message, LogLevel.Warning); }
     }
 }

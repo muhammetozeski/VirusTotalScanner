@@ -98,7 +98,7 @@ internal sealed class KeyVault
     public void Save()
     {
         PersistToConfig();
-        try { Changed?.Invoke(); } catch { }
+        try { Changed?.Invoke(); } catch (Exception ex) { Log("Vault Changed handler failed: " + ex.Message, LogLevel.Warning); }
     }
 
     /// <summary>Throttled counter persistence (called frequently during scans).</summary>
@@ -111,7 +111,7 @@ internal sealed class KeyVault
     /// <summary>Force-write counters (e.g. on shutdown).</summary>
     public void Flush() => PersistToConfig();
 
-    public void RaiseCountersUpdated() { try { CountersUpdated?.Invoke(); } catch { } }
+    public void RaiseCountersUpdated() { try { CountersUpdated?.Invoke(); } catch (Exception ex) { Log("CountersUpdated handler failed: " + ex.Message, LogLevel.Warning); } }
 
     void PersistToConfig()
     {

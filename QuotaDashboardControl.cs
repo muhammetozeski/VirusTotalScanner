@@ -156,7 +156,7 @@ internal sealed class QuotaDashboardControl : UserControl
     void Tick()
     {
         var now = DateTime.UtcNow;
-        foreach (var u in _updaters) { try { u(now); } catch { } }
+        foreach (var u in _updaters) { try { u(now); } catch (Exception ex) { Log("Quota card update failed: " + ex.Message, LogLevel.Warning); } }
 
         if (_resumeAtUtc is { } at)
         {
@@ -195,7 +195,7 @@ internal sealed class QuotaDashboardControl : UserControl
         return $"{t.Seconds}sn";
     }
 
-    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch { } }
+    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
 
     public void ApplyTheme() => BuildCards();
 }

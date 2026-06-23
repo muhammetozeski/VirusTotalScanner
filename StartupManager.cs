@@ -48,6 +48,6 @@ internal static class StartupManager
             if (!string.Equals(current, Command, StringComparison.OrdinalIgnoreCase))
                 SetEnabled(true);
         }
-        catch { }
+        catch (Exception ex) { Log("Startup sync failed: " + ex.Message, LogLevel.Warning); }
     }
 }

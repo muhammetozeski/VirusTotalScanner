@@ -328,7 +328,7 @@ internal sealed class SettingsControl : UserControl
         return row;
     }
 
-    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch { } }
+    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
 
     public void ApplyTheme()
     {

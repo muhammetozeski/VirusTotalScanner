@@ -57,6 +57,24 @@ internal static class Program
         LoggerHost.Initialize();
         Theme.ApplyFromSettings();
         AppServices.Initialize();
+        InstallGlobalExceptionLogging();
+    }
+
+    /// <summary>
+    /// Safety net: nothing crashes silently. Every unhandled exception (background threads,
+    /// unobserved tasks, the UI thread) is forced to ActivateLogging-independent Error logging.
+    /// Hardening does NOT mean swallowing — these are logged, not hidden.
+    /// </summary>
+    static void InstallGlobalExceptionLogging()
+    {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Log("UNHANDLED exception: " + (e.ExceptionObject as Exception)?.ToString() ?? e.ExceptionObject?.ToString(), LogLevel.Error);
+
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Log("UNOBSERVED task exception: " + e.Exception, LogLevel.Error);
+            e.SetObserved();
+        };
     }
 
     static int RunGui(CliOptions opts)
@@ -77,6 +95,13 @@ internal static class Program
         StartupManager.Sync(); // fix the login entry if the exe moved
 
         ApplicationConfiguration.Initialize();
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) =>
+        {
+            Log("UNHANDLED UI exception: " + e.Exception, LogLevel.Error);
+            try { NativeMessageBox.Error("Beklenmeyen bir hata oluştu (loglandı):\n" + e.Exception.Message); }
+            catch (Exception ex) { Log("Error dialog failed: " + ex.Message, LogLevel.Warning); }
+        };
         var form = new MainForm(startHidden: opts.Tray);
 
         if (primary)

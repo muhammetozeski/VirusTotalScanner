@@ -94,7 +94,7 @@ internal sealed class ScanDetailControl : UserControl
         valueLabel.Font = new Font("Consolas", 9f);
         valueLabel.Margin = new Padding(0, 4, 6, 0);
         var copy = new Button { Text = "Kopyala", AutoSize = true, Margin = new Padding(0) };
-        copy.Click += (_, _) => { var v = getter(); if (!string.IsNullOrEmpty(v)) { try { Clipboard.SetText(v); } catch { } } };
+        copy.Click += (_, _) => { var v = getter(); if (!string.IsNullOrEmpty(v)) { try { Clipboard.SetText(v); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } } };
         ThemeManager.StyleButton(copy);
         row.Controls.Add(l);
         row.Controls.Add(valueLabel);

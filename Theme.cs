@@ -69,7 +69,7 @@ internal static class Theme
         bool dark = Settings.FollowWindowsTheme ? IsWindowsDark() :
             string.Equals(Settings.Theme.Value, "Dark", StringComparison.OrdinalIgnoreCase);
         Current = dark ? Palette.Dark : Palette.Light;
-        try { Changed?.Invoke(); } catch { }
+        try { Changed?.Invoke(); } catch (Exception ex) { Log("Theme Changed handler failed: " + ex.Message, LogLevel.Warning); }
     }
 
     public static void SetTheme(string name, bool follow)

@@ -23,7 +23,7 @@ internal sealed class LogViewerControl : UserControl
         _enable.CheckedChanged += (_, _) => LoggerHost.SetEnabled(_enable.Checked);
         bar.Controls.Add(_enable);
         bar.Controls.Add(ThemeManager.MakeButton("Temizle", (_, _) => { _box.Clear(); _lines = 0; Logger.ClearAllLogs(); }));
-        bar.Controls.Add(ThemeManager.MakeButton("Tümünü kopyala", (_, _) => { try { Clipboard.SetText(Logger.GetAllLogsText()); } catch { } }));
+        bar.Controls.Add(ThemeManager.MakeButton("Tümünü kopyala", (_, _) => { try { Clipboard.SetText(Logger.GetAllLogsText()); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } }));
         bar.Controls.Add(ThemeManager.MakeButton("Log klasörünü aç", (_, _) =>
         {
             try { Directory.CreateDirectory(ConfigPathResolver.LogsFolder); OpenWithDefaultProgram(ConfigPathResolver.LogsFolder); } catch { }

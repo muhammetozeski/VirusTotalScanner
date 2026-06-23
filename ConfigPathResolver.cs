@@ -49,7 +49,7 @@ internal static class ConfigPathResolver
         string appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             AppConstants.AppFolderName);
-        try { Directory.CreateDirectory(appData); } catch { }
+        try { Directory.CreateDirectory(appData); } catch (Exception ex) { Log("AppData dir create failed: " + ex.Message, LogLevel.Warning); }
         return appData;
     }
 

@@ -283,5 +283,5 @@ internal sealed partial class MainForm : Form
         _statusKeys.Text = $"  Anahtar: {usable}/{total} kullanılabilir   •   Ayar: {ConfigPathResolver.ConfigPath}";
     }
 
-    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch { } }
+    void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
 }

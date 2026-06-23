@@ -48,7 +48,7 @@ internal sealed class ScanScheduler
 
     public void Pause() { _pause.Pause(); Log("Scan paused.", LogLevel.Info); }
     public void Resume() { _pause.Resume(); Log("Scan resumed.", LogLevel.Info); }
-    public void Cancel() { try { _cts?.Cancel(); } catch { } Log("Scan cancel requested.", LogLevel.Info); }
+    public void Cancel() { try { _cts?.Cancel(); } catch (Exception ex) { Log("Cancel failed: " + ex.Message, LogLevel.Warning); } Log("Scan cancel requested.", LogLevel.Info); }
 
     public async Task RunAsync(IEnumerable<string> paths, ScanOptions opts, CancellationToken externalCt = default)
     {
@@ -59,7 +59,7 @@ internal sealed class ScanScheduler
         IsRunning = true;
         ResetCounters();
         UiPost(() => Items.Clear());
-        try { Started?.Invoke(); } catch { }
+        try { Started?.Invoke(); } catch (Exception ex) { Log("Started handler failed: " + ex.Message, LogLevel.Warning); }
 
         try
         {
@@ -202,7 +202,7 @@ internal sealed class ScanScheduler
         finally
         {
             DoneOne();
-            try { ItemFinished?.Invoke(item); } catch { }
+            try { ItemFinished?.Invoke(item); } catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); }
         }
     }
 
@@ -278,6 +278,6 @@ internal sealed class ScanScheduler
             Skipped = _skipped,
             SignedSkipped = _signedSkipped,
         };
-        UiPost(() => { try { ProgressChanged?.Invoke(p); } catch { } });
+        UiPost(() => { try { ProgressChanged?.Invoke(p); } catch (Exception ex) { Log("ProgressChanged handler failed: " + ex.Message, LogLevel.Warning); } });
     }
 }
