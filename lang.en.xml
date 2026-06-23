@@ -32,4 +32,16 @@
   <s name="DropHint">  You can also drag and drop files/folders here.</s>
   <s name="SettingsLanguageLabel">Language:</s>
   <s name="LanguageRestartNote">The language change takes full effect after the app is restarted.</s>
+  <s name="ColFile">File</s>
+  <s name="ColSize">Size</s>
+  <s name="ColStatus">Status</s>
+  <s name="ColProgress">Progress</s>
+  <s name="StatusReady">Ready.</s>
+  <s name="ShowAllEngines">Show all engines</s>
+  <s name="OpenVtReport">Open VirusTotal report ↗</s>
+  <s name="ColEngine">Antivirus</s>
+  <s name="ColCategory">Category</s>
+  <s name="ColResult">Result</s>
+  <s name="ColVersion">Version</s>
+  <s name="BtnCopy">Copy</s>
 </strings>

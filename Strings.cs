@@ -57,4 +57,20 @@ internal static class Strings
     // ---- settings: language switch ----
     public static string SettingsLanguageLabel = "Dil:";
     public static string LanguageRestartNote = "Dil değişikliği uygulama yeniden başlatılınca tam olarak uygulanır.";
+
+    // ---- scan queue grid + status ----
+    public static string ColFile = "Dosya";
+    public static string ColSize = "Boyut";
+    public static string ColStatus = "Durum";
+    public static string ColProgress = "İlerleme";
+    public static string StatusReady = "Hazır.";
+
+    // ---- detail pane ----
+    public static string ShowAllEngines = "Tüm motorları göster";
+    public static string OpenVtReport = "VirusTotal raporunu aç ↗";
+    public static string ColEngine = "Antivirüs";
+    public static string ColCategory = "Kategori";
+    public static string ColResult = "Sonuç";
+    public static string ColVersion = "Sürüm";
+    public static string BtnCopy = "Kopyala";
 }

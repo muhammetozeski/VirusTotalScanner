@@ -76,7 +76,7 @@ internal sealed class ScanQueueControl : UserControl
         _overall.Height = 16;
         _overall.Style = ProgressBarStyle.Continuous;
         _summary.AutoSize = true;
-        _summary.Text = "Hazır.";
+        _summary.Text = Strings.StatusReady;
         bottom.Controls.Add(_overall, 0, 0);
         bottom.Controls.Add(_summary, 0, 1);
 
@@ -102,10 +102,10 @@ internal sealed class ScanQueueControl : UserControl
     {
         _grid.Dock = DockStyle.Fill;
         _grid.AutoGenerateColumns = false;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(ScanItem.FileName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Boyut", DataPropertyName = nameof(ScanItem.SizeText), Width = 80 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Durum", DataPropertyName = nameof(ScanItem.StatusText), Width = 220 });
-        var prog = new DataGridViewTextBoxColumn { HeaderText = "İlerleme", Width = 110 };
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.FileName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColSize, DataPropertyName = nameof(ScanItem.SizeText), Width = 80 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(ScanItem.StatusText), Width = 220 });
+        var prog = new DataGridViewTextBoxColumn { HeaderText = Strings.ColProgress, Width = 110 };
         _progressCol = _grid.Columns.Add(prog);
         ThemeManager.StyleGrid(_grid);
         _grid.DataSource = _scheduler.Items;

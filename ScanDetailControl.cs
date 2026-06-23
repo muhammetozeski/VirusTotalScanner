@@ -54,11 +54,11 @@ internal sealed class ScanDetailControl : UserControl
         hashPanel.Controls.Add(HashRow("SHA-256", _sha, () => _item?.Sha256));
 
         var togglePanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
-        _showAll.Text = "Tüm motorları göster";
+        _showAll.Text = Strings.ShowAllEngines;
         _showAll.AutoSize = true;
         _showAll.Checked = true; // default: show every engine's result, not just detections
         _showAll.CheckedChanged += (_, _) => Populate();
-        _link.Text = "VirusTotal raporunu aç ↗";
+        _link.Text = Strings.OpenVtReport;
         _link.AutoSize = true;
         _link.Margin = new Padding(16, 3, 0, 0);
         _link.LinkClicked += (_, _) => { if (_item?.Report != null) OpenUrlInBrowser(_item.Report.ReportUrl); };
@@ -94,7 +94,7 @@ internal sealed class ScanDetailControl : UserControl
         valueLabel.AutoSize = true;
         valueLabel.Font = new Font("Consolas", 9f);
         valueLabel.Margin = new Padding(0, 4, 6, 0);
-        var copy = new Button { Text = "Kopyala", AutoSize = true, Margin = new Padding(0) };
+        var copy = new Button { Text = Strings.BtnCopy, AutoSize = true, Margin = new Padding(0) };
         copy.Click += (_, _) => { var v = getter(); if (!string.IsNullOrEmpty(v)) { try { Clipboard.SetText(v); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } } };
         ThemeManager.StyleButton(copy);
         row.Controls.Add(l);
@@ -106,10 +106,10 @@ internal sealed class ScanDetailControl : UserControl
     void ConfigureEnginesGrid()
     {
         _engines.AutoGenerateColumns = false;
-        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Antivirüs", DataPropertyName = nameof(VtEngineResult.EngineName), Width = 160 });
-        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kategori", DataPropertyName = nameof(VtEngineResult.Category), Width = 110 });
-        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Sonuç", DataPropertyName = nameof(VtEngineResult.Result), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
-        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Sürüm", DataPropertyName = nameof(VtEngineResult.EngineVersion), Width = 110 });
+        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColEngine, DataPropertyName = nameof(VtEngineResult.EngineName), Width = 160 });
+        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColCategory, DataPropertyName = nameof(VtEngineResult.Category), Width = 110 });
+        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColResult, DataPropertyName = nameof(VtEngineResult.Result), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVersion, DataPropertyName = nameof(VtEngineResult.EngineVersion), Width = 110 });
         _engines.CellFormatting += Engines_CellFormatting;
         ThemeManager.StyleGrid(_engines);
     }
