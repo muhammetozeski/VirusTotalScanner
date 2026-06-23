@@ -27,10 +27,15 @@ A Windows (WinForms, .NET 10) single-exe app that scans files/folders with Virus
 - Detail pane shows all engine results by default; community votes (harmless/malicious), toggleable.
 - CLI `--report <html|json|txt>` + `--fail-on <N>` exit-code gate (shared `ReportWriter`).
 - GUI "Export report (HTML/JSON/text)" button.
+- Detection-name normalization → most-common malware family label (detail + CLI + cache).
+- Download-origin signal from the NTFS Zone.Identifier stream (detail pane).
+- Verdict re-check sweep: keyless re-lookup of cached files older than a configurable period,
+  one batch confirm, reports verdict changes (GUI button + setting).
+- Folder rollup dialog: per-folder verdict breakdown, threats worst-first.
+- Size pre-filter: skip files over a configurable MB cap, shown as skip-ledger rows.
 
 ## Not yet done (in the queue)
-Localization EN/TR, community comments, verdict-change re-check queue, quota-exhausted 3-option,
-folder rollup, spread resilient recovery chains, behavior/sandbox summary, archive expansion,
-origin (Zone.Id), expected-hash, scheduled sweep, size/type pre-filter, detection-name
-normalization, find-all-copies, folder neighbors, integrity baseline, scan running processes,
-context menus everywhere, UI polish/emojis.
+Localization EN/TR (next), community comments, quota-exhausted 3-option, spread resilient
+recovery chains, behavior/sandbox summary, archive expansion, expected-hash, scheduled sweep,
+find-all-copies, folder neighbors, integrity baseline, scan running processes, context menus
+everywhere, UI polish/emojis.
