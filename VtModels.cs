@@ -31,6 +31,13 @@ internal sealed class VtFileAttributes
     [JsonPropertyName("times_submitted")] public int TimesSubmitted { get; set; }
     [JsonPropertyName("first_submission_date")] public long FirstSubmissionDate { get; set; }
     [JsonPropertyName("last_submission_date")] public long LastSubmissionDate { get; set; }
+    [JsonPropertyName("total_votes")] public VtVotesDto? TotalVotes { get; set; }
+}
+
+internal sealed class VtVotesDto
+{
+    [JsonPropertyName("harmless")] public int Harmless { get; set; }
+    [JsonPropertyName("malicious")] public int Malicious { get; set; }
 }
 
 internal sealed class VtStatsDto
@@ -111,6 +118,8 @@ internal sealed class VtFileReport
     public int TimesSubmitted { get; set; }
     public DateTime? FirstSeenUtc { get; set; }
     public DateTime? LastSeenUtc { get; set; }
+    public int VotesHarmless { get; set; }
+    public int VotesMalicious { get; set; }
 
     public int Malicious { get; set; }
     public int Suspicious { get; set; }
@@ -156,6 +165,13 @@ internal sealed class VtFileReport
             return $"İlk görülme: {first:yyyy-MM-dd} ({ageStr}){prev}{rare}";
         }
     }
+
+    /// <summary>Community vote tally, shown when the user enables it. A strong harmless lean is
+    /// a useful false-positive signal (e.g. a game exe the community marked clean).</summary>
+    [JsonIgnore]
+    public string? VotesText => (VotesHarmless > 0 || VotesMalicious > 0)
+        ? $"Topluluk: 👍 {VotesHarmless} zararsız  •  👎 {VotesMalicious} zararlı"
+        : null;
 
     /// <summary>"Who flagged it" — splits detections into major vs minor engines so a few
     /// obscure-engine hits read as a likely false positive.</summary>

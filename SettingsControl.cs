@@ -245,7 +245,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 315, out var body);
+        var card = Card("Genel", 345, out var body);
 
         var themeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         themeRow.Controls.Add(ThemeManager.MakeLabel("Tema:"));
@@ -263,6 +263,8 @@ internal sealed class SettingsControl : UserControl
         tray.CheckedChanged += (_, _) => { Settings.MinimizeToTray.Value = tray.Checked; SettingsManager.SaveSettings(); };
         var notify = new CheckBox { Text = "Tehdit bulununca bildirim göster", AutoSize = true, Checked = Settings.NotifyOnThreat };
         notify.CheckedChanged += (_, _) => { Settings.NotifyOnThreat.Value = notify.Checked; SettingsManager.SaveSettings(); };
+        var votes = new CheckBox { Text = "Topluluk oylarını göster", AutoSize = true, Checked = Settings.ShowCommunityVotes };
+        votes.CheckedChanged += (_, _) => { Settings.ShowCommunityVotes.Value = votes.Checked; SettingsManager.SaveSettings(); };
         var logging = new CheckBox { Text = "Loglama açık", AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
@@ -281,6 +283,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(autoResume);
         body.Controls.Add(tray);
         body.Controls.Add(notify);
+        body.Controls.Add(votes);
         body.Controls.Add(logging);
         return card;
     }

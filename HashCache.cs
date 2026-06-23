@@ -72,6 +72,8 @@ internal sealed class HashCache
             TimesSubmitted = report.TimesSubmitted,
             FirstSeenUtc = report.FirstSeenUtc,
             LastSeenUtc = report.LastSeenUtc,
+            VotesHarmless = report.VotesHarmless,
+            VotesMalicious = report.VotesMalicious,
             Malicious = report.Malicious,
             Suspicious = report.Suspicious,
             Harmless = report.Harmless,

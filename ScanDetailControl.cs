@@ -179,6 +179,7 @@ internal sealed class ScanDetailControl : UserControl
             (report.Reputation != 0 ? $"\nİtibar: {report.Reputation}" : "") +
             (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
+            (Settings.ShowCommunityVotes && report.VotesText != null ? $"\n{report.VotesText}" : "") +
             $"\n{provenance}";
 
         _md5.Text = report.Md5 ?? item.Md5 ?? "-";

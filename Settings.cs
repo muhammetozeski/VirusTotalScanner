@@ -64,6 +64,9 @@ internal static class Settings
     /// <summary>Show a Windows toast/notification when a threat is found.</summary>
     public static readonly Setting<bool> NotifyOnThreat = new(true);
 
+    /// <summary>Show VirusTotal community votes in the detail pane.</summary>
+    public static readonly Setting<bool> ShowCommunityVotes = new(true);
+
     /// <summary>Skip safe-extension files during scans to save quota.</summary>
     public static readonly Setting<bool> SkipSafeExtensionsOnScan = new(false);
 

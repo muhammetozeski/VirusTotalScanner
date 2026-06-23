@@ -152,6 +152,8 @@ internal sealed class VtApiClient
             TimesSubmitted = a.TimesSubmitted,
             FirstSeenUtc = a.FirstSubmissionDate > 0 ? DateTimeOffset.FromUnixTimeSeconds(a.FirstSubmissionDate).UtcDateTime : null,
             LastSeenUtc = a.LastSubmissionDate > 0 ? DateTimeOffset.FromUnixTimeSeconds(a.LastSubmissionDate).UtcDateTime : null,
+            VotesHarmless = a.TotalVotes?.Harmless ?? 0,
+            VotesMalicious = a.TotalVotes?.Malicious ?? 0,
             Malicious = a.Stats?.Malicious ?? 0,
             Suspicious = a.Stats?.Suspicious ?? 0,
             Harmless = a.Stats?.Harmless ?? 0,
