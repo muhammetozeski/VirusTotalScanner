@@ -19,6 +19,7 @@ internal sealed class ScanQueueControl : UserControl
     readonly Button _cancelBtn;
     readonly System.Windows.Forms.Timer _repaintTimer = new() { Interval = 250 };
     int _progressCol;
+    bool _exhaustPromptShown; // show the quota-exhausted choice dialog once per exhaustion episode
 
     /// <summary>Raised when a scan is requested but no API key is configured.</summary>
     public event Action? NeedApiKey;
@@ -90,8 +91,10 @@ internal sealed class ScanQueueControl : UserControl
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
         _scheduler.ProgressChanged += OnProgress;
         _scheduler.ItemFinished += OnItemFinished;
-        _scheduler.Started += () => SafeUi(() => UpdateRunningState(true));
+        _scheduler.Started += () => SafeUi(() => { _exhaustPromptShown = false; UpdateRunningState(true); });
         _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); });
+        AppServices.Rotator.OnAllExhausted += t => SafeUi(() => OnAllKeysExhausted(t));
+        AppServices.Rotator.OnResumed += () => SafeUi(() => _exhaustPromptShown = false);
 
         _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) _grid.Invalidate(); };
 
@@ -297,6 +300,34 @@ internal sealed class ScanQueueControl : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
         finally { try { _summary.Text = oldSummary; } catch { } }
+    }
+
+    void OnAllKeysExhausted(DateTime resumeUtc)
+    {
+        // Once per episode, and only while actually scanning. If the keyless GUI is already the
+        // engine, there is nothing to ask — the scan keeps going without quota.
+        if (_exhaustPromptShown || !_scheduler.IsRunning) return;
+        if (Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable) return;
+        _exhaustPromptShown = true;
+
+        using var dlg = new QuotaExhaustedDialog(resumeUtc);
+        if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+        switch (dlg.Choice)
+        {
+            case QuotaExhaustedChoice.Keyless:
+                Settings.KeylessGuiLookup.Value = true;
+                SettingsManager.SaveSettings();
+                NativeMessageBox.Info("Anahtarsız (GUI) mod açıldı. Sıradaki dosyalar kotasız sorgulanacak.");
+                break;
+            case QuotaExhaustedChoice.NewKey:
+                using (var key = new ApiKeyDialog())
+                    if (key.ShowDialog(FindForm()) == DialogResult.OK)
+                        AppServices.Vault.Add(key.KeyLabel, key.KeyValue);
+                break;
+            case QuotaExhaustedChoice.Wait:
+            default:
+                break; // the rotator is already counting down to the soonest reset
+        }
     }
 
     void ExportReport()
