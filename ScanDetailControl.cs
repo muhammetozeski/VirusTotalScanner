@@ -154,6 +154,7 @@ internal sealed class ScanDetailControl : UserControl
                 $"Dosya: {item!.FileName}\n" +
                 $"Durum: {item.SkipReason ?? "İmzalı"}" +
                 (item.Publisher != null ? $"\nYayıncı: {item.Publisher}" : "") +
+                (ZoneIdentifier.Read(item.FilePath)?.Summary is { } z ? $"\n{z}" : "") +
                 "\n\nGeçerli bir kod imzası bulundu; kota harcamamak için VirusTotal'e gönderilmedi.\n" +
                 "Not: imza güveni = yayıncının doğrulanması demektir, \"temiz\" garantisi değildir.\n" +
                 "Yine de VT'ye göndermek için kuyrukta satıra sağ tıklayıp \"Güveni yok say, VT ile tara\".";
@@ -181,6 +182,7 @@ internal sealed class ScanDetailControl : UserControl
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +
             (Settings.ShowCommunityVotes && report.VotesText != null ? $"\n{report.VotesText}" : "") +
+            (ZoneIdentifier.Read(item.FilePath)?.Summary is { } zone ? $"\n{zone}" : "") +
             $"\n{provenance}";
 
         _md5.Text = report.Md5 ?? item.Md5 ?? "-";
