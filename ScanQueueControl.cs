@@ -227,14 +227,14 @@ internal sealed class ScanQueueControl : UserControl
     {
         var i = SelectedItem();
         if (i == null || !File.Exists(i.FilePath)) return;
-        if (!NativeMessageBox.Confirm($"'{i.FileName}' karantinaya taşınsın mı?")) return;
+        if (!ConfirmGates.Quarantine.Ask(this, $"'{i.FileName}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz)")) return;
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.QuarantineFolder);
-            string dest = Path.Combine(ConfigPathResolver.QuarantineFolder, i.FileName + ".quarantine");
+            string dest = Path.Combine(ConfigPathResolver.QuarantineFolder, i.FileName + ".VIRUS");
             File.Move(i.FilePath, dest, overwrite: true);
             Log($"Quarantined: {i.FilePath} -> {dest}", LogLevel.Warning);
-            NativeMessageBox.Info("Dosya karantinaya taşındı:\n" + dest);
+            NativeMessageBox.Info("Dosya karantinaya alındı (çalıştırılamaz):\n" + dest);
         }
         catch (Exception ex) { NativeMessageBox.Error("Karantina başarısız: " + ex.Message); }
     }

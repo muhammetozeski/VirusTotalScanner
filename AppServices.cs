@@ -20,6 +20,7 @@ internal static class AppServices
         _initialized = true;
 
         VerdictCategories.Load();
+        ConfirmGateManager.Load();
         Vault.Load();
         Cache.Load();
         KnownGoodDb.Reload();

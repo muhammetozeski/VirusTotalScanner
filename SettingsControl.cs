@@ -35,6 +35,7 @@ internal sealed class SettingsControl : UserControl
         _flow.Controls.Add(BuildVerdictCard());
         _flow.Controls.Add(BuildScanCard());
         _flow.Controls.Add(BuildGeneralCard());
+        _flow.Controls.Add(BuildConfirmGatesCard());
         _flow.Controls.Add(BuildAboutCard());
 
         Resize += (_, _) => ResizeCards();
@@ -229,7 +230,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 285, out var body);
+        var card = Card("Genel", 315, out var body);
 
         var themeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         themeRow.Controls.Add(ThemeManager.MakeLabel("Tema:"));
@@ -256,12 +257,40 @@ internal sealed class SettingsControl : UserControl
         var resume = new CheckBox { Text = "Açılışta yarım kalan taramayı sor", AutoSize = true, Checked = Settings.ResumeInterruptedScans };
         resume.CheckedChanged += (_, _) => { Settings.ResumeInterruptedScans.Value = resume.Checked; SettingsManager.SaveSettings(); };
 
+        var autoResume = new CheckBox { Text = "Açılışta yarım kalan taramayı SORMADAN devam et", AutoSize = true, Checked = Settings.AutoResumeScans };
+        autoResume.CheckedChanged += (_, _) => { Settings.AutoResumeScans.Value = autoResume.Checked; SettingsManager.SaveSettings(); };
+
         body.Controls.Add(themeRow);
         body.Controls.Add(startup);
         body.Controls.Add(resume);
+        body.Controls.Add(autoResume);
         body.Controls.Add(tray);
         body.Controls.Add(notify);
         body.Controls.Add(logging);
+        return card;
+    }
+
+    Panel BuildConfirmGatesCard()
+    {
+        var gates = ConfirmGateManager.All.ToList();
+        var card = Card("Onay Soruları (bir daha sorma)", 70 + gates.Count * 30, out var body);
+        body.Controls.Add(ThemeManager.MakeLabel("'Bir daha sorma' dediğin onaylar burada görünür; istersen tekrar sormaya açabilirsin.", subtle: true));
+        foreach (var gate in gates)
+        {
+            var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+            var lbl = ThemeManager.MakeLabel("");
+            var btn = ThemeManager.MakeButton("Tekrar sor", null);
+            void Refresh()
+            {
+                lbl.Text = gate.Title + (gate.Suppressed ? $"  —  KAPALI (yanıt: {(gate.RememberedAnswer ? "Evet" : "Hayır")})" : "  —  soruluyor");
+                btn.Enabled = gate.Suppressed;
+            }
+            btn.Click += (_, _) => { gate.ResetSuppression(); Refresh(); };
+            Refresh();
+            row.Controls.Add(lbl);
+            row.Controls.Add(btn);
+            body.Controls.Add(row);
+        }
         return card;
     }
 
