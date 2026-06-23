@@ -63,6 +63,7 @@ internal sealed class ScanScheduler
 
         try
         {
+            if (Settings.ResumeInterruptedScans) ScanSessionStore.SaveRunning(paths, opts.Recurse, opts.BypassTrust);
             KnownGoodDb.Reload();
             var safe = SelectionEnumerator.ParseExtensions(Settings.SafeExtensions);
             var files = await Task.Run(() => SelectionEnumerator.Expand(paths, safe, opts.Recurse, opts.ApplySafeFilter), ct);
@@ -91,9 +92,10 @@ internal sealed class ScanScheduler
         }
         finally
         {
+            ScanSessionStore.Clear(); // normal finish or cancel — only a crash leaves it for resume
             _cache.Flush();
             IsRunning = false;
-            try { Finished?.Invoke(); } catch { }
+            try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
             Log("Scan finished.", LogLevel.Info);
         }
     }

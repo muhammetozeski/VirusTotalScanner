@@ -172,7 +172,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 250, out var body);
+        var card = Card("Genel", 285, out var body);
 
         var themeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         themeRow.Controls.Add(ThemeManager.MakeLabel("Tema:"));
@@ -196,8 +196,12 @@ internal sealed class SettingsControl : UserControl
         var startup = new CheckBox { Text = "Windows ile başlat (arka planda, tepside)", AutoSize = true, Checked = StartupManager.IsEnabled() };
         startup.CheckedChanged += (_, _) => StartupManager.SetEnabled(startup.Checked);
 
+        var resume = new CheckBox { Text = "Açılışta yarım kalan taramayı sor", AutoSize = true, Checked = Settings.ResumeInterruptedScans };
+        resume.CheckedChanged += (_, _) => { Settings.ResumeInterruptedScans.Value = resume.Checked; SettingsManager.SaveSettings(); };
+
         body.Controls.Add(themeRow);
         body.Controls.Add(startup);
+        body.Controls.Add(resume);
         body.Controls.Add(tray);
         body.Controls.Add(notify);
         body.Controls.Add(logging);

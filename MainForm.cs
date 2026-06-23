@@ -212,6 +212,24 @@ internal sealed partial class MainForm : Form
             if (NativeMessageBox.Confirm("Sağ tuş menüsü kaydı eski exe yolunu gösteriyor (uygulama taşınmış). Şimdi onarılsın mı?"))
                 ContextMenuInstaller.Repair(out _);
         }
+
+        OfferResume();
+    }
+
+    void OfferResume()
+    {
+        if (!Settings.ResumeInterruptedScans) return;
+        var s = ScanSessionStore.TryLoad();
+        if (s == null || s.Paths.Length == 0) return;
+        ScanSessionStore.Clear();
+
+        string list = string.Join(", ", s.Paths.Take(3).Select(p => Path.GetFileName(p.TrimEnd('\\'))));
+        if (s.Paths.Length > 3) list += " …";
+        if (NativeMessageBox.Confirm($"Yarım kalan bir tarama bulundu:\n{list}\n\nKaldığı yerden devam edilsin mi?", "Yarım kalan tarama"))
+        {
+            _tabs.SelectedIndex = 0;
+            _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
+        }
     }
 
     void RunFirstRunWizard()
