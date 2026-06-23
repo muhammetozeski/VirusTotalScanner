@@ -139,22 +139,20 @@ internal sealed class ScanScheduler
             await _pause.WaitWhilePausedAsync(ct);
             SetStatus(item, ScanStatus.LookingUp);
 
-            // Keyless mode: query via the GUI (WebView2), no API key / no quota. Lookup-only.
-            bool useKeyless = (Settings.KeylessGuiLookup || !_rotator.HasUsableKeys) && GuiScrapeService.IsRuntimeAvailable;
+            // Resilient lookup chain: GUI engine first (keyless, default), then the API with
+            // Polly; if a brand-new file is unknown to VT, the API uploads it. If the API path
+            // is what fails/exhausts, the GUI is tried as a last resort.
+            bool preferGui = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
+            VtFileReport? report = null;
 
-            VtFileReport? report;
-            bool keylessNotFound = false;
-            if (useKeyless)
-            {
+            if (preferGui)
                 report = await GuiScrapeService.LookupAsync(sha256, ct);
-                keylessNotFound = report == null;
-            }
-            else
+
+            if (report == null && _rotator.HasUsableKeys)
             {
                 report = await CallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ct);
                 if (report == null)
                 {
-                    // Unknown to VT -> upload and analyze (needs a key).
                     await _pause.WaitWhilePausedAsync(ct);
                     SetStatus(item, ScanStatus.Uploading);
                     var progress = new ActionProgress<UploadProgress>(p => UiPost(() =>
@@ -162,23 +160,22 @@ internal sealed class ScanScheduler
                         item.Progress = (int)Math.Round(p.Percent);
                         item.Detail = $"Yükleniyor… {p.Percent:F0}%  {FormatBytes(p.BytesSent)}/{FormatBytes(p.TotalBytes)}  ({FormatBytes(p.BytesPerSecond)}/s)";
                     }));
-
                     string analysisId = await CallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ct);
-
                     SetStatus(item, ScanStatus.Polling);
                     report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
                 }
             }
 
-            // Cache any real report (clean or not) so re-scans skip VT. Never cache a 404 (report == null).
+            // Last resort: API was off/exhausted -> try the GUI engine once.
+            if (report == null && !preferGui && GuiScrapeService.IsRuntimeAvailable)
+                report = await GuiScrapeService.LookupAsync(sha256, ct);
+
             if (report != null && opts.UseCache && report.TotalEngines > 0)
                 _cache.Put(md5, report);
 
             if (report == null)
             {
-                item.Error = keylessNotFound
-                    ? "VT'de yok veya anahtarsız sorgu engellendi (yükleme için API anahtarı gerekir)."
-                    : "Analiz zaman aşımına uğradı.";
+                item.Error = "VT'de bulunamadı veya sorgu sonuç vermedi (yükleme için API anahtarı gerekir).";
                 SetStatus(item, ScanStatus.Failed);
                 Bump(ref _failed);
             }

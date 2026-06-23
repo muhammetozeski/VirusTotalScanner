@@ -50,9 +50,9 @@ internal static class Settings
     /// <summary>Optional path to a user-supplied known-good hash list (one md5/sha256 per line).</summary>
     public static readonly Setting<string> KnownGoodHashDbPath = new("");
 
-    /// <summary>Query VirusTotal keylessly via the public GUI (WebView2) instead of the API.
-    /// No key, no quota, but slower and lookup-only (cannot upload unknown files).</summary>
-    public static readonly Setting<bool> KeylessGuiLookup = new(false);
+    /// <summary>Prefer the keyless GUI (WebView2) engine for lookups; the API is the fallback.
+    /// Default ON: every lookup tries the GUI first (no key, no quota), then the API with Polly.</summary>
+    public static readonly Setting<bool> KeylessGuiLookup = new(true);
 
     /// <summary>Minimize to the system tray instead of closing.</summary>
     public static readonly Setting<bool> MinimizeToTray = new(true);
