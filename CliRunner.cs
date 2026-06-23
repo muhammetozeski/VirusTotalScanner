@@ -56,9 +56,23 @@ internal static class CliRunner
 
         if (opts.Json) PrintJson(scheduler.Items);
 
+        if (opts.ReportPath != null)
+        {
+            try
+            {
+                ReportWriter.Write(opts.ReportPath, scheduler.Items.ToList());
+                if (!opts.Quiet && !opts.Json) Console.WriteLine($"Rapor yazıldı: {opts.ReportPath}");
+            }
+            catch (Exception ex) { Console.Error.WriteLine("Rapor yazılamadı: " + ex.Message); }
+        }
+
         AppServices.Shutdown();
 
-        bool threat = scheduler.Items.Any(i => i.Report?.IsMalicious == true);
+        // Gate: --fail-on N flips the exit code on any file with >= N detections; otherwise the
+        // verdict categories decide what counts as a threat.
+        bool threat = opts.FailOn >= 0
+            ? scheduler.Items.Any(i => (i.Report?.DetectionCount ?? 0) >= opts.FailOn)
+            : scheduler.Items.Any(i => i.Report?.IsMalicious == true);
         if (!opts.Json && !opts.Quiet)
         {
             int mal = scheduler.Items.Count(i => i.Report?.IsMalicious == true);
@@ -196,6 +210,8 @@ internal static class CliRunner
           -n, --nogui, --cli  Grafik arayüz açmadan terminalde çalış
           -g, --gui           Terminalden bile olsa grafik arayüzü aç
           -j, --json          Sonuçları JSON olarak yaz (stdout)
+              --report <yol>  Rapor dosyası yaz (.html/.json/.txt — uzantıdan biçim seçilir)
+              --fail-on <N>   N+ tespit olan dosyada çıkış kodu 1 (CI kapısı)
           -q, --quiet         Yalın çıktı (yalnızca verdict satırları)
               --install       Sağ tuş menüsüne ekle
               --uninstall     Sağ tuş menüsünden kaldır

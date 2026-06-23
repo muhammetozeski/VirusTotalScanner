@@ -31,6 +31,8 @@ internal sealed class CliOptions
     public string? RemoveKeyValue;
     public string? LookupHash;
     public string? SnapshotPath;
+    public string? ReportPath;
+    public int FailOn = -1; // -1 = use verdict categories; >=0 = fail when any file hits >= N detections
     public List<string> Paths { get; } = [];
 }
 
@@ -56,6 +58,8 @@ internal static class ArgumentDef
     static readonly CmdArg RemoveKey = new("--removekey", "--removekey");
     static readonly CmdArg Lookup = new("--lookup", "--lookup");
     static readonly CmdArg Snapshot = new("--snapshot", "--snapshot");
+    static readonly CmdArg Report = new("--report", "--report");
+    static readonly CmdArg FailOn = new("--fail-on", "--failon");
 
     public static CliOptions Parse(string[] args)
     {
@@ -82,6 +86,8 @@ internal static class ArgumentDef
             else if (RemoveKey.IsMatch(a)) { if (i + 1 < args.Length) o.RemoveKeyValue = args[++i]; o.NoGui = true; }
             else if (Lookup.IsMatch(a)) { if (i + 1 < args.Length) o.LookupHash = args[++i]; o.NoGui = true; }
             else if (Snapshot.IsMatch(a)) { if (i + 1 < args.Length) o.SnapshotPath = args[++i]; }
+            else if (Report.IsMatch(a)) { if (i + 1 < args.Length) o.ReportPath = args[++i]; o.NoGui = true; }
+            else if (FailOn.IsMatch(a)) { if (i + 1 < args.Length && int.TryParse(args[++i], out var n)) o.FailOn = n; o.NoGui = true; }
             else if (!a.StartsWith('-')) o.Paths.Add(a.Trim('"'));
         }
         return o;
