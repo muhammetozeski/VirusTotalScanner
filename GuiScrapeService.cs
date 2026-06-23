@@ -183,8 +183,19 @@ internal static class GuiScrapeService
             ForeColor = Color.Black,
         };
         btn.Click += (_, _) => OnSolvedClicked();
+        var apiBtn = new Button
+        {
+            Text = "API anahtarına geç",
+            Dock = DockStyle.Right,
+            Width = 160,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.White,
+            ForeColor = Color.Black,
+        };
+        apiBtn.Click += (_, _) => OnSwitchToApi();
         _bar.Controls.Add(lbl);
         _bar.Controls.Add(btn);
+        _bar.Controls.Add(apiBtn);
     }
 
     // ---- reCAPTCHA detection (three independent paths) ----
@@ -265,7 +276,7 @@ internal static class GuiScrapeService
 
         try
         {
-            _timeoutCts?.CancelAfter(TimeSpan.FromMinutes(5)); // give the user time to solve
+            _timeoutCts?.CancelAfter(Timeout.InfiniteTimeSpan); // no timeout while the user is solving — only the button (or cancel) continues
             _form.BeginInvoke(() =>
             {
                 try
@@ -295,11 +306,20 @@ internal static class GuiScrapeService
         {
             _bar!.Visible = false;
             _captchaShown = false;
-            _timeoutCts?.CancelAfter(TimeSpan.FromSeconds(45));
+            _timeoutCts?.CancelAfter(TimeSpan.FromSeconds(45)); // safety net for the re-fetch only
             Log("User reports reCAPTCHA solved — retrying lookup.", LogLevel.Info);
             _web!.CoreWebView2.Navigate(_currentUrl); // re-fetch with the now-valid session
         }
         catch (Exception ex) { Log("Solve-retry failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>User chose to use an API key instead of solving the reCAPTCHA — give up the GUI
+    /// lookup so the scan falls back to the API path.</summary>
+    static void OnSwitchToApi()
+    {
+        Log("User chose API over reCAPTCHA.", LogLevel.Info);
+        _pending?.TrySetResult(null);
+        HideBrowser();
     }
 
     static void HideBrowser()
