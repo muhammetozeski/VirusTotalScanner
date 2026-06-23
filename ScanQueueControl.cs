@@ -44,6 +44,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(_pauseBtn);
         bar.Controls.Add(_cancelBtn);
         bar.Controls.Add(ThemeManager.MakeButton("⬇  Dışa aktar (CSV)", (_, _) => ExportCsv()));
+        bar.Controls.Add(ThemeManager.MakeButton("📄  Rapor (HTML)", (_, _) => ExportReport()));
         bar.Controls.Add(ThemeManager.MakeButton("🗑  Önbelleği temizle", (_, _) => ClearCache()));
         var hint = ThemeManager.MakeLabel("  Dosya/klasörleri buraya da sürükleyip bırakabilirsiniz.", subtle: true);
         bar.Controls.Add(hint);
@@ -254,6 +255,20 @@ internal sealed class ScanQueueControl : UserControl
         }
         try { File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8); NativeMessageBox.Info("Kaydedildi: " + dlg.FileName); }
         catch (Exception ex) { NativeMessageBox.Error("Kaydetme hatası: " + ex.Message); }
+    }
+
+    void ExportReport()
+    {
+        var items = _scheduler.Items.Where(i => i.Report != null || i.Status == ScanStatus.TrustedSkipped).ToList();
+        if (items.Count == 0) { NativeMessageBox.Info("Dışa aktarılacak sonuç yok."); return; }
+        using var dlg = new SaveFileDialog
+        {
+            Filter = "HTML rapor|*.html|JSON|*.json|Metin|*.txt",
+            FileName = "virustotal-rapor.html",
+        };
+        if (dlg.ShowDialog() != DialogResult.OK) return;
+        try { ReportWriter.Write(dlg.FileName, items); NativeMessageBox.Info("Rapor kaydedildi: " + dlg.FileName); }
+        catch (Exception ex) { NativeMessageBox.Error("Rapor yazılamadı: " + ex.Message); }
     }
 
     void ClearCache()
