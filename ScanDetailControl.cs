@@ -56,6 +56,7 @@ internal sealed class ScanDetailControl : UserControl
         var togglePanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
         _showAll.Text = "Tüm motorları göster";
         _showAll.AutoSize = true;
+        _showAll.Checked = true; // default: show every engine's result, not just detections
         _showAll.CheckedChanged += (_, _) => Populate();
         _link.Text = "VirusTotal raporunu aç ↗";
         _link.AutoSize = true;
