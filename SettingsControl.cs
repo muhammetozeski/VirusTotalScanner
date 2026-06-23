@@ -150,7 +150,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildVerdictCard()
     {
-        var card = Card("Verdict Kategorileri (tespit sayısı → ad + renk)", 250, out var body);
+        var card = Card("Verdict Kategorileri (tespit sayısı → ad + renk)", 340, out var body);
 
         _catGrid = new DataGridView { Dock = DockStyle.Top, Height = 130, AutoGenerateColumns = false };
         _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min. tespit", DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
@@ -188,9 +188,21 @@ internal sealed class SettingsControl : UserControl
         buttons.Controls.Add(ThemeManager.MakeButton("Kaydet", (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info("Kategoriler kaydedildi."); }));
         buttons.Controls.Add(ThemeManager.MakeButton("Varsayılan", (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
 
+        var majorBox = new TextBox { Dock = DockStyle.Top, Text = Settings.MajorEnginesList };
+        var majorSave = ThemeManager.MakeButton("Büyük motor listesini kaydet", (_, _) =>
+        {
+            Settings.MajorEnginesList.Value = majorBox.Text.Trim();
+            SettingsManager.SaveSettings();
+            MajorEngines.Load();
+            NativeMessageBox.Info("Büyük motor listesi kaydedildi.");
+        });
+
         body.Controls.Add(buttons);
         body.Controls.Add(_catGrid);
         body.Controls.Add(ThemeManager.MakeLabel("Eşikler benzersiz olmalı. Örn: 0→TEMİZ, 2→ŞÜPHELİ, 3→VİRÜS.", subtle: true));
+        body.Controls.Add(majorSave);
+        body.Controls.Add(majorBox);
+        body.Controls.Add(ThemeManager.MakeLabel("Büyük (yüksek itibarlı) motorlar — konsensüs için (; ile ayır):", subtle: true));
         return card;
     }
 
