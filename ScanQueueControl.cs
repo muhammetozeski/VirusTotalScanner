@@ -176,11 +176,36 @@ internal sealed class ScanQueueControl : UserControl
         }
         var opts = ScanOptions.FromSettings(recurse);
         opts.BypassTrust = bypassTrust;
+
+        // Archive found? Ask once whether to scan the archive itself or expand and scan its members.
+        var pathList = paths.ToList();
+        if (!_scheduler.IsRunning && HasArchives(pathList))
+            opts.ExpandArchives = NativeMessageBox.Confirm(
+                "Seçimde arşiv var (zip/nupkg/jar…).\n\nÜyelerini açıp her birini ayrı ayrı (kotasız) sorgulamak ister misiniz?\n\nEvet = üyeleri tara   •   Hayır = arşivin kendisini tara",
+                "Arşiv bulundu");
+
         _ = Task.Run(async () =>
         {
-            try { await _scheduler.RunAsync(paths, opts); }
+            try { await _scheduler.RunAsync(pathList, opts); }
             catch (Exception ex) { Log("Scan start failed: " + ex, LogLevel.Error); }
         });
+    }
+
+    /// <summary>Quick bounded check for any archive among the selection (files + shallow folder walk).</summary>
+    static bool HasArchives(IEnumerable<string> paths)
+    {
+        foreach (var p in paths)
+        {
+            try
+            {
+                if (File.Exists(p) && ArchiveExpander.IsArchive(p)) return true;
+                if (Directory.Exists(p) &&
+                    Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Take(5000).Any(ArchiveExpander.IsArchive))
+                    return true;
+            }
+            catch (Exception ex) { Log("Archive pre-check failed for " + p + ": " + ex.Message, LogLevel.Warning); }
+        }
+        return false;
     }
 
     async Task HashLookupAsync()

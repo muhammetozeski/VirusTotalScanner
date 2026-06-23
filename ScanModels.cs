@@ -119,6 +119,8 @@ internal sealed class ScanOptions
     public int MaxUploads { get; set; } = 2;
     /// <summary>Skip files larger than this before hashing (0 = no cap). VT's own ceiling is ~650 MB.</summary>
     public long MaxFileSizeBytes { get; set; }
+    /// <summary>Expand ZIP-family archives and scan their members instead of the archive file.</summary>
+    public bool ExpandArchives { get; set; }
     public bool UseCache { get; set; } = true;
     public int CacheDays { get; set; } = 7;
 

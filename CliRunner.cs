@@ -52,6 +52,7 @@ internal static class CliRunner
 
         var scanOpts = ScanOptions.FromSettings(opts.Recurse);
         scanOpts.BypassTrust = opts.NoTrust;
+        scanOpts.ExpandArchives = opts.ExpandArchives;
         await scheduler.RunAsync(opts.Paths, scanOpts);
 
         if (opts.Json) PrintJson(scheduler.Items);
@@ -209,6 +210,7 @@ internal static class CliRunner
           -r, --recurse       Klasörleri alt klasörlerle birlikte tara
               --no-trust      İmza güvenini yok say (imzalı dosyaları da VT'ye gönder)
           -k, --keyless       Anahtarsız sorgula (GUI/WebView2 üzerinden, kotasız, yavaş)
+              --expand-archives  Arşivleri (zip/nupkg/jar…) aç, üyelerini ayrı ayrı tara
           -n, --nogui, --cli  Grafik arayüz açmadan terminalde çalış
           -g, --gui           Terminalden bile olsa grafik arayüzü aç
           -j, --json          Sonuçları JSON olarak yaz (stdout)

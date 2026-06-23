@@ -21,6 +21,7 @@ internal sealed class CliOptions
     public bool Recurse;
     public bool NoTrust;
     public bool Keyless;
+    public bool ExpandArchives;
     public bool ShowHelp;
     public bool ShowVersion;
     public bool InstallMenu;
@@ -42,6 +43,7 @@ internal static class ArgumentDef
     static readonly CmdArg Recurse = new("--recurse", "-r");
     static readonly CmdArg NoTrust = new("--no-trust", "--notrust");
     static readonly CmdArg Keyless = new("--keyless", "-k");
+    static readonly CmdArg ExpandArchives = new("--expand-archives", "--expand");
     static readonly CmdArg NoGui = new("--nogui", "-n");
     static readonly CmdArg Cli = new("--cli", "-c");
     static readonly CmdArg Gui = new("--gui", "-g");
@@ -71,6 +73,7 @@ internal static class ArgumentDef
             else if (Recurse.IsMatch(a)) o.Recurse = true;
             else if (NoTrust.IsMatch(a)) o.NoTrust = true;
             else if (Keyless.IsMatch(a)) o.Keyless = true;
+            else if (ExpandArchives.IsMatch(a)) o.ExpandArchives = true;
             else if (NoGui.IsMatch(a) || Cli.IsMatch(a)) o.NoGui = true;
             else if (Gui.IsMatch(a)) o.ForceGui = true;
             else if (Tray.IsMatch(a)) { o.Tray = true; o.ForceGui = true; }

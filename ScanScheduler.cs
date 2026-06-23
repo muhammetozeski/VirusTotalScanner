@@ -62,6 +62,7 @@ internal sealed class ScanScheduler
         UiPost(() => Items.Clear());
         try { Started?.Invoke(); } catch (Exception ex) { Log("Started handler failed: " + ex.Message, LogLevel.Warning); }
 
+        var archiveTemps = new List<string>(); // temp folders from archive expansion, cleaned in finally
         try
         {
             if (Settings.ResumeInterruptedScans) ScanSessionStore.SaveRunning(paths, opts.Recurse, opts.BypassTrust);
@@ -70,6 +71,11 @@ internal sealed class ScanScheduler
             var oversize = new List<string>();
             var files = await Task.Run(() => SelectionEnumerator.Expand(
                 paths, safe, opts.Recurse, opts.ApplySafeFilter, opts.MaxFileSizeBytes, oversize), ct);
+
+            // Archive expansion: swap each ZIP-family archive for its extracted members so each member
+            // is hashed and looked up on its own (no upload). Archives we cannot open stay as-is.
+            if (opts.ExpandArchives)
+                files = await Task.Run(() => ExpandArchives(files, archiveTemps), ct);
 
             _total = files.Count;
             var items = files.Select(f => new ScanItem(f)).ToList();
@@ -109,11 +115,27 @@ internal sealed class ScanScheduler
             // Keep the session if the user stopped (cancelled) so it can be resumed; clear it on
             // a natural finish. A crash also leaves it (finally never runs) -> resume offered.
             if (!ct.IsCancellationRequested) ScanSessionStore.Clear();
+            foreach (var td in archiveTemps) ArchiveExpander.CleanupTemp(td);
             _cache.Flush();
             IsRunning = false;
             try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
             Log("Scan finished.", LogLevel.Info);
         }
+    }
+
+    /// <summary>Replaces each expandable archive with its extracted member paths (tracking the temp
+    /// folders for cleanup). Archives that fail to open are scanned as the archive file itself.</summary>
+    static List<string> ExpandArchives(List<string> files, List<string> tempDirs)
+    {
+        var result = new List<string>();
+        foreach (var f in files)
+        {
+            if (!ArchiveExpander.IsExpandable(f)) { result.Add(f); continue; }
+            var members = ArchiveExpander.ExpandToTemp(f, out var td);
+            if (members.Count > 0) { result.AddRange(members); tempDirs.Add(td); }
+            else { ArchiveExpander.CleanupTemp(td); result.Add(f); }
+        }
+        return result;
     }
 
     async Task ProcessAsync(ScanItem item, ScanOptions opts, CancellationToken ct)
