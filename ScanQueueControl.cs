@@ -116,15 +116,44 @@ internal sealed class ScanQueueControl : UserControl
         _grid.CellPainting += Grid_CellPainting;
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("VirusTotal'de aç", null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
-        menu.Items.Add("SHA-256 kopyala", null, (_, _) => CopySafe(SelectedItem()?.Sha256));
-        menu.Items.Add("MD5 kopyala", null, (_, _) => CopySafe(SelectedItem()?.Md5));
-        menu.Items.Add("Dosya konumunu aç", null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
-        menu.Items.Add("Yeniden tara", null, (_, _) => RescanSelected());
-        menu.Items.Add("Güveni yok say, VT ile tara", null, (_, _) => RescanIgnoringTrust());
-        menu.Items.Add("Karantinaya al", null, (_, _) => QuarantineSelected());
+        var miOpenVt = (ToolStripMenuItem)menu.Items.Add("🔗  VirusTotal'de aç", null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
+
+        var copyMenu = new ToolStripMenuItem("📋  Kopyala");
+        copyMenu.DropDownItems.Add("SHA-256", null, (_, _) => CopySafe(SelectedItem()?.Sha256));
+        copyMenu.DropDownItems.Add("MD5", null, (_, _) => CopySafe(SelectedItem()?.Md5));
+        copyMenu.DropDownItems.Add("Dosya yolu", null, (_, _) => CopySafe(SelectedItem()?.FilePath));
+        copyMenu.DropDownItems.Add("Dosya adı", null, (_, _) => CopySafe(SelectedItem()?.FileName));
+        copyMenu.DropDownItems.Add("Verdikt satırı", null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(VerdictLine(i)); });
+        menu.Items.Add(copyMenu);
+
+        var miReveal = (ToolStripMenuItem)menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
+        menu.Items.Add(new ToolStripSeparator());
+        var miRescan = (ToolStripMenuItem)menu.Items.Add("🔄  Yeniden tara", null, (_, _) => RescanSelected());
+        var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add("🛡  Güveni yok say, VT ile tara", null, (_, _) => RescanIgnoringTrust());
+        menu.Items.Add(new ToolStripSeparator());
+        var miQuarantine = (ToolStripMenuItem)menu.Items.Add("⚠  Karantinaya al (.VIRUS)", null, (_, _) => QuarantineSelected());
+
+        // Context-aware: disable actions that don't apply to the selected row's current state.
+        menu.Opening += (_, e) =>
+        {
+            var i = SelectedItem();
+            if (i == null) { e.Cancel = true; return; }
+            bool exists = File.Exists(i.FilePath);
+            miOpenVt.Enabled = i.Report != null;
+            copyMenu.Enabled = true;
+            miReveal.Enabled = exists;
+            miRescan.Enabled = exists;
+            miRescanNoTrust.Enabled = exists;
+            miQuarantine.Enabled = exists;
+        };
         _grid.ContextMenuStrip = menu;
+
+        // Double-click a row -> jump to the file in Explorer.
+        _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); } };
     }
+
+    static string VerdictLine(ScanItem i) =>
+        i.Report is { } r ? $"{r.Verdict} ({r.DetectionCount}/{r.TotalEngines})  {i.FileName}" : $"{i.StatusText}  {i.FileName}";
 
     void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
     {

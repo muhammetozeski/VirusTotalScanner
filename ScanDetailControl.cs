@@ -111,7 +111,32 @@ internal sealed class ScanDetailControl : UserControl
         _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColResult, DataPropertyName = nameof(VtEngineResult.Result), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVersion, DataPropertyName = nameof(VtEngineResult.EngineVersion), Width = 110 });
         _engines.CellFormatting += Engines_CellFormatting;
+
+        // Right-click an engine row: copy the engine name, its result, or search the result online.
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("📋  Motor adını kopyala", null, (_, _) => CopyEngine(r => r.EngineName));
+        menu.Items.Add("📋  Sonucu kopyala", null, (_, _) => CopyEngine(r => r.Result));
+        menu.Items.Add("🔎  Sonucu internette ara", null, (_, _) => SearchEngineResult());
+        _engines.ContextMenuStrip = menu;
+
         ThemeManager.StyleGrid(_engines);
+    }
+
+    VtEngineResult? SelectedEngine() => _engines.CurrentRow?.DataBoundItem as VtEngineResult;
+
+    void CopyEngine(Func<VtEngineResult, string?> pick)
+    {
+        var v = SelectedEngine();
+        if (v == null) return;
+        string? s = pick(v);
+        if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } }
+    }
+
+    void SearchEngineResult()
+    {
+        var v = SelectedEngine();
+        if (v?.Result is { Length: > 0 } res)
+            OpenUrlInBrowser("https://www.google.com/search?q=" + Uri.EscapeDataString(res + " malware"));
     }
 
     void Engines_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
