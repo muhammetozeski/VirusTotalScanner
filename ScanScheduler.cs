@@ -22,6 +22,7 @@ internal sealed class ScanScheduler
     readonly PauseTokenSource _pause = new();
 
     CancellationTokenSource? _cts;
+    SemaphoreSlim? _uploadGate; // limits how many files upload to VT in parallel (set per run)
 
     /// <summary>Marshals an action to the UI thread (set by the GUI; direct call by default/CLI).</summary>
     public Action<Action> UiPost { get; set; } = a => a();
@@ -79,6 +80,7 @@ internal sealed class ScanScheduler
                 return;
             }
 
+            _uploadGate = new SemaphoreSlim(Math.Max(1, opts.MaxUploads));
             var po = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, opts.MaxConcurrency), CancellationToken = ct };
             await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
         }
@@ -162,7 +164,10 @@ internal sealed class ScanScheduler
                         item.Progress = (int)Math.Round(p.Percent);
                         item.Detail = $"Yükleniyor… {p.Percent:F0}%  {FormatBytes(p.BytesSent)}/{FormatBytes(p.TotalBytes)}  ({FormatBytes(p.BytesPerSecond)}/s)";
                     }));
-                    string analysisId = await CallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ct);
+                    await _uploadGate!.WaitAsync(ct);
+                    string analysisId;
+                    try { analysisId = await CallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ct); }
+                    finally { _uploadGate.Release(); }
                     SetStatus(item, ScanStatus.Polling);
                     report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
                 }

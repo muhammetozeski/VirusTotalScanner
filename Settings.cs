@@ -23,6 +23,10 @@ internal static class Settings
     /// <summary>Max files scanned concurrently (true throttle is the 4/min key limit).</summary>
     public static readonly Setting<int> MaxConcurrentScans = new(2);
 
+    /// <summary>Max files uploaded to VirusTotal in parallel (uploads are bandwidth-heavy, so
+    /// this is throttled separately from lookups).</summary>
+    public static readonly Setting<int> MaxConcurrentUploads = new(2);
+
     /// <summary>Use the local hash cache to avoid re-querying VirusTotal for known files.</summary>
     public static readonly Setting<bool> UseLocalHashCache = new(true);
 

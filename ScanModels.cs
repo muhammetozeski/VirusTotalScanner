@@ -116,6 +116,7 @@ internal sealed class ScanOptions
     public bool Recurse { get; set; } = true;
     public bool ApplySafeFilter { get; set; }
     public int MaxConcurrency { get; set; } = 2;
+    public int MaxUploads { get; set; } = 2;
     public bool UseCache { get; set; } = true;
     public int CacheDays { get; set; } = 7;
 
@@ -129,6 +130,7 @@ internal sealed class ScanOptions
         Recurse = recurse,
         ApplySafeFilter = Settings.SkipSafeExtensionsOnScan,
         MaxConcurrency = Math.Max(1, Settings.MaxConcurrentScans.Value),
+        MaxUploads = Math.Max(1, Settings.MaxConcurrentUploads.Value),
         UseCache = Settings.UseLocalHashCache,
         CacheDays = Math.Max(0, Settings.HashCacheDays.Value),
         SkipTrusted = Settings.TrustSkipSigned,
