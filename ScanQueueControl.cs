@@ -179,7 +179,9 @@ internal sealed class ScanQueueControl : UserControl
 
     async Task HashLookupAsync()
     {
-        string? input = Dialogs.InputBox("Sorgulanacak MD5 / SHA-1 / SHA-256 hash:", "Hash sorgula");
+        // Default is a precomputed example (notepad.exe's SHA-256) so there's something to test with.
+        const string exampleHash = "ab15a95de88ab0624307ae0e28e333756a2a522f650a0be78749901f7dc32ecf";
+        string? input = Dialogs.InputBox("Sorgulanacak MD5 / SHA-1 / SHA-256 hash:", "Hash sorgula", exampleHash);
         if (string.IsNullOrWhiteSpace(input)) return;
         input = input.Trim().ToLowerInvariant();
         if (!Regex.IsMatch(input, "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$"))
