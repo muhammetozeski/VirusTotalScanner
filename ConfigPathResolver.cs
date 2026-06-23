@@ -21,13 +21,13 @@ internal static class ConfigPathResolver
     /// <summary>Full path to the single config file.</summary>
     public static string ConfigPath => _configPath ??= Path.Combine(ConfigFolder, AppConstants.ConfigFileName);
 
-    /// <summary>%AppData%\VirusTotalScanner — logs, hash cache, quarantine.</summary>
-    public static string DataFolder => _dataFolder ??= ResolveDataFolder();
+    /// <summary>Everything (logs, cache, quarantine, webview2) lives next to the exe; falls
+    /// back to %AppData% only if the exe's folder is not writable.</summary>
+    public static string DataFolder => _dataFolder ??= ConfigFolder;
 
     public static string LogsFolder => Path.Combine(DataFolder, "Logs");
-    /// <summary>Scan result cache — kept next to the exe (portable), name "cache.json".</summary>
+    /// <summary>Scan result cache — kept next to the exe, name "cache.json".</summary>
     public static string HashCachePath => Path.Combine(ConfigFolder, "cache.json");
-    public static string HistoryPath => Path.Combine(DataFolder, "history.json");
     public static string QuarantineFolder => Path.Combine(DataFolder, "Quarantine");
 
     static string ResolveConfigFolder()
@@ -38,11 +38,9 @@ internal static class ConfigPathResolver
             if (!string.IsNullOrEmpty(exeFolder) && IsWritable(exeFolder))
                 return exeFolder;
         }
-        catch { }
+        catch (Exception ex) { Log("Config folder probe failed: " + ex.Message, LogLevel.Warning); }
         return EnsureAppData();
     }
-
-    static string ResolveDataFolder() => EnsureAppData();
 
     static string EnsureAppData()
     {
