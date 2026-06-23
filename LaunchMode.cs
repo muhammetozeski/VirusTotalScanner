@@ -31,6 +31,7 @@ internal sealed class CliOptions
     public string? AddKeyValue;
     public string? RemoveKeyValue;
     public string? LookupHash;
+    public string? ExpectedHash;
     public string? SnapshotPath;
     public string? ReportPath;
     public int FailOn = -1; // -1 = use verdict categories; >=0 = fail when any file hits >= N detections
@@ -59,6 +60,7 @@ internal static class ArgumentDef
     static readonly CmdArg AddKey = new("--addkey", "--addkey");
     static readonly CmdArg RemoveKey = new("--removekey", "--removekey");
     static readonly CmdArg Lookup = new("--lookup", "--lookup");
+    static readonly CmdArg Expect = new("--expect", "--verify-hash");
     static readonly CmdArg Snapshot = new("--snapshot", "--snapshot");
     static readonly CmdArg Report = new("--report", "--report");
     static readonly CmdArg FailOn = new("--fail-on", "--failon");
@@ -88,6 +90,7 @@ internal static class ArgumentDef
             else if (AddKey.IsMatch(a)) { if (i + 1 < args.Length) o.AddKeyValue = args[++i]; o.NoGui = true; }
             else if (RemoveKey.IsMatch(a)) { if (i + 1 < args.Length) o.RemoveKeyValue = args[++i]; o.NoGui = true; }
             else if (Lookup.IsMatch(a)) { if (i + 1 < args.Length) o.LookupHash = args[++i]; o.NoGui = true; }
+            else if (Expect.IsMatch(a)) { if (i + 1 < args.Length) o.ExpectedHash = args[++i]; o.NoGui = true; }
             else if (Snapshot.IsMatch(a)) { if (i + 1 < args.Length) o.SnapshotPath = args[++i]; }
             else if (Report.IsMatch(a)) { if (i + 1 < args.Length) o.ReportPath = args[++i]; o.NoGui = true; }
             else if (FailOn.IsMatch(a)) { if (i + 1 < args.Length && int.TryParse(args[++i], out var n)) o.FailOn = n; o.NoGui = true; }

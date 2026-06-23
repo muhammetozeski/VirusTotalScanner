@@ -24,6 +24,7 @@ internal static class CliRunner
         if (opts.RemoveKeyValue != null) return RemoveKey(opts.RemoveKeyValue);
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
+        if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
 
         if (opts.Paths.Count == 0) { PrintHelp(); return 2; }
 
@@ -81,6 +82,34 @@ internal static class CliRunner
             Console.WriteLine($"\nBitti. {total} dosya tarandı, {mal} tehdit bulundu.");
         }
         return threat ? 1 : 0;
+    }
+
+    static async Task<int> VerifyHashCmd(CliOptions opts)
+    {
+        if (opts.Paths.Count != 1 || !File.Exists(opts.Paths[0]))
+        {
+            Console.Error.WriteLine("HATA: --expect tek bir dosya yolu ister.");
+            return 2;
+        }
+        try
+        {
+            var r = await HashService.VerifyExpectedAsync(opts.Paths[0], opts.ExpectedHash!);
+            if (r.Algorithm == "?")
+            {
+                Console.Error.WriteLine("HATA: beklenen hash 32 (MD5), 40 (SHA-1) veya 64 (SHA-256) hex karakter olmalı.");
+                return 2;
+            }
+            if (r.Matched)
+            {
+                Console.WriteLine($"[EŞLEŞTİ] {r.Algorithm}: {r.Actual}  ✓  {opts.Paths[0]}");
+                return 0;
+            }
+            Console.WriteLine($"[EŞLEŞMEDİ] {opts.Paths[0]}");
+            Console.WriteLine($"   Beklenen {r.Algorithm}: {r.Expected}");
+            Console.WriteLine($"   Gerçek   {r.Algorithm}: {r.Actual}");
+            return 4;
+        }
+        catch (Exception ex) { Console.Error.WriteLine("HATA: " + ex.Message); return 3; }
     }
 
     static async Task<int> LookupAsync(string hash, bool json)
@@ -224,10 +253,11 @@ internal static class CliRunner
               --listkeys      Tanımlı anahtarları ve kotaları listele
               --removekey <id|all>  Anahtar(ları) sil
               --lookup <hash>  Bir MD5/SHA-1/SHA-256 hash'ini sorgula
+              --expect <hash>  Dosyayı beklenen hash ile doğrula (eşleşmezse çıkış kodu 4)
           -h, --help          Bu yardım
           -v, --version       Sürüm
 
-        Çıkış kodları: 0 temiz, 1 tehdit bulundu, 2 kullanım/IO hatası, 3 anahtar yok.
+        Çıkış kodları: 0 temiz, 1 tehdit bulundu, 2 kullanım/IO hatası, 3 anahtar yok, 4 hash eşleşmedi.
 
         Not: Bu bir GUI uygulamasıdır; betikte beklemek için 'Start-Process -Wait' kullanın.
         """);

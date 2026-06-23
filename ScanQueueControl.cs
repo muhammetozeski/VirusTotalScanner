@@ -40,6 +40,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFiles, (_, _) => SelectFiles(), accent: true));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFolder, (_, _) => SelectFolder(), accent: true));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHashLookup, (_, _) => _ = HashLookupAsync()));
+        bar.Controls.Add(ThemeManager.MakeButton("✓  Hash doğrula", (_, _) => _ = VerifyHashAsync()));
         _pauseBtn = ThemeManager.MakeButton(Strings.BtnPause, (_, _) => TogglePause());
         _cancelBtn = ThemeManager.MakeButton(Strings.BtnCancel, (_, _) => _scheduler.Cancel());
         bar.Controls.Add(_pauseBtn);
@@ -325,6 +326,22 @@ internal sealed class ScanQueueControl : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
         finally { try { _summary.Text = oldSummary; } catch { } }
+    }
+
+    async Task VerifyHashAsync()
+    {
+        using var fd = new OpenFileDialog { Title = "Beklenen hash ile doğrulanacak dosya" };
+        if (fd.ShowDialog() != DialogResult.OK) return;
+        string? exp = Dialogs.InputBox("Beklenen hash (MD5/SHA-1/SHA-256):", "Hash doğrula");
+        if (string.IsNullOrWhiteSpace(exp)) return;
+        try
+        {
+            var r = await HashService.VerifyExpectedAsync(fd.FileName, exp);
+            if (r.Algorithm == "?") { NativeMessageBox.Warn("Beklenen hash 32 (MD5), 40 (SHA-1) veya 64 (SHA-256) hex karakter olmalı."); return; }
+            if (r.Matched) NativeMessageBox.Info($"✓ EŞLEŞTİ ({r.Algorithm})\n\n{r.Actual}\n\n{fd.FileName}");
+            else NativeMessageBox.Error($"✗ EŞLEŞMEDİ ({r.Algorithm})\n\nBeklenen: {r.Expected}\nGerçek:   {r.Actual}\n\nDosya değiştirilmiş veya yanlış hash.");
+        }
+        catch (Exception ex) { NativeMessageBox.Error("Doğrulama hatası: " + ex.Message); }
     }
 
     void OnAllKeysExhausted(DateTime resumeUtc)
