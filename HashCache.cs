@@ -1,0 +1,97 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace VirusTotalScanner;
+
+internal sealed class HashCacheEntry
+{
+    public string Md5 { get; set; } = "";
+    public string? Sha256 { get; set; }
+    public DateTime CachedUtc { get; set; }
+    public VtFileReport? Report { get; set; }
+
+    [JsonIgnore] public bool IsMalicious => Report?.IsMalicious ?? false;
+}
+
+/// <summary>
+/// Local md5 -> report cache so repeat scans of known files don't spend VirusTotal quota.
+/// Persisted to %AppData%\VirusTotalScanner\hashcache.json. Never caches unknown (404) files.
+/// </summary>
+internal sealed class HashCache
+{
+    static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
+
+    readonly ConcurrentDictionary<string, HashCacheEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
+    readonly object _saveLock = new();
+    DateTime _lastSaveUtc = DateTime.MinValue;
+    bool _dirty;
+
+    public void Load()
+    {
+        try
+        {
+            string path = ConfigPathResolver.HashCachePath;
+            if (!File.Exists(path)) return;
+            var list = JsonSerializer.Deserialize<List<HashCacheEntry>>(File.ReadAllText(path), JsonOpts);
+            if (list != null)
+                foreach (var e in list)
+                    if (!string.IsNullOrEmpty(e.Md5)) _entries[e.Md5] = e;
+            Log($"Hash cache loaded: {_entries.Count} entr(ies).", LogLevel.Info);
+        }
+        catch (Exception ex) { Log("Hash cache load failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>Returns a cached report if present and fresh enough (within ttlDays).</summary>
+    public VtFileReport? TryGet(string md5, int ttlDays)
+    {
+        if (!_entries.TryGetValue(md5, out var e) || e.Report == null) return null;
+        if (ttlDays > 0 && DateTime.UtcNow - e.CachedUtc > TimeSpan.FromDays(ttlDays)) return null;
+        return e.Report;
+    }
+
+    public void Put(string md5, VtFileReport report)
+    {
+        _entries[md5] = new HashCacheEntry
+        {
+            Md5 = md5,
+            Sha256 = report.Sha256,
+            CachedUtc = DateTime.UtcNow,
+            Report = report,
+        };
+        _dirty = true;
+        MaybeSave();
+    }
+
+    public int Count => _entries.Count;
+
+    public void Clear()
+    {
+        _entries.Clear();
+        _dirty = true;
+        Flush();
+    }
+
+    public void MaybeSave()
+    {
+        if (!_dirty) return;
+        if (DateTime.UtcNow - _lastSaveUtc < TimeSpan.FromSeconds(5)) return;
+        Flush();
+    }
+
+    public void Flush()
+    {
+        if (!_dirty) return;
+        lock (_saveLock)
+        {
+            try
+            {
+                Directory.CreateDirectory(ConfigPathResolver.DataFolder);
+                File.WriteAllText(ConfigPathResolver.HashCachePath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
+                _lastSaveUtc = DateTime.UtcNow;
+                _dirty = false;
+            }
+            catch (Exception ex) { Log("Hash cache save failed: " + ex.Message, LogLevel.Warning); }
+        }
+    }
+}
