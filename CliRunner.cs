@@ -103,6 +103,7 @@ internal static class CliRunner
             Console.WriteLine($"[{report.Verdict}] ({report.DetectionCount}/{report.TotalEngines})  {report.MeaningfulName ?? hash}");
             if (report.ConsensusText != null) Console.WriteLine("   " + report.ConsensusText);
             if (report.FamilyLabel != null) Console.WriteLine("   " + report.FamilyLabel);
+            if (report.CapabilitySummary != null) Console.WriteLine("   " + report.CapabilitySummary);
             foreach (var d in report.Detections.Take(15)) Console.WriteLine($"   - {d.EngineName}: {d.Result}");
             Console.WriteLine("   " + report.ReportUrl);
             return report.IsMalicious ? 1 : 0;

@@ -82,6 +82,8 @@ internal sealed class HashCache
             MajorFlaggers = report.MajorFlaggers,
             Family = report.Family,
             FamilyCount = report.FamilyCount,
+            Tags = report.Tags,
+            ThreatLabel = report.ThreatLabel,
         };
         _entries[md5] = new HashCacheEntry
         {

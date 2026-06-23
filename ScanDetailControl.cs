@@ -181,6 +181,7 @@ internal sealed class ScanDetailControl : UserControl
             (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +
+            (report.CapabilitySummary != null ? $"\n{report.CapabilitySummary}" : "") +
             (Settings.ShowCommunityVotes && report.VotesText != null ? $"\n{report.VotesText}" : "") +
             (ZoneIdentifier.Read(item.FilePath)?.Summary is { } zone ? $"\n{zone}" : "") +
             $"\n{provenance}";

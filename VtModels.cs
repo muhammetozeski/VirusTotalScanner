@@ -32,6 +32,13 @@ internal sealed class VtFileAttributes
     [JsonPropertyName("first_submission_date")] public long FirstSubmissionDate { get; set; }
     [JsonPropertyName("last_submission_date")] public long LastSubmissionDate { get; set; }
     [JsonPropertyName("total_votes")] public VtVotesDto? TotalVotes { get; set; }
+    [JsonPropertyName("tags")] public List<string>? Tags { get; set; }
+    [JsonPropertyName("popular_threat_classification")] public VtThreatClassDto? ThreatClassification { get; set; }
+}
+
+internal sealed class VtThreatClassDto
+{
+    [JsonPropertyName("suggested_threat_label")] public string? SuggestedLabel { get; set; }
 }
 
 internal sealed class VtVotesDto
@@ -136,6 +143,14 @@ internal sealed class VtFileReport
     /// engines agree. Stored so it survives in the summary cache.</summary>
     public string? Family { get; set; }
     public int FamilyCount { get; set; }
+
+    /// <summary>VT capability/behavior tags (e.g. "checks-network-adapters", "long-sleeps") and the
+    /// crowd-suggested threat label. Both come straight from the file report (no extra request).</summary>
+    public List<string> Tags { get; set; } = [];
+    public string? ThreatLabel { get; set; }
+
+    [JsonIgnore]
+    public string? CapabilitySummary => BehaviorTags.Summarize(Tags, ThreatLabel);
 
     [JsonIgnore]
     public string? FamilyLabel => string.IsNullOrEmpty(Family) ? null
