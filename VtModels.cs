@@ -29,6 +29,8 @@ internal sealed class VtFileAttributes
     [JsonPropertyName("size")] public long Size { get; set; }
     [JsonPropertyName("reputation")] public int Reputation { get; set; }
     [JsonPropertyName("times_submitted")] public int TimesSubmitted { get; set; }
+    [JsonPropertyName("first_submission_date")] public long FirstSubmissionDate { get; set; }
+    [JsonPropertyName("last_submission_date")] public long LastSubmissionDate { get; set; }
 }
 
 internal sealed class VtStatsDto
@@ -106,6 +108,9 @@ internal sealed class VtFileReport
     public string? TypeDescription { get; set; }
     public long Size { get; set; }
     public int Reputation { get; set; }
+    public int TimesSubmitted { get; set; }
+    public DateTime? FirstSeenUtc { get; set; }
+    public DateTime? LastSeenUtc { get; set; }
 
     public int Malicious { get; set; }
     public int Suspicious { get; set; }
@@ -126,6 +131,25 @@ internal sealed class VtFileReport
         Malicious > 0 ? "ZARARLI" :
         Suspicious > 0 ? "ŞÜPHELİ" :
         TotalEngines > 0 ? "TEMİZ" : "BİLİNMİYOR";
+
+    /// <summary>Age + prevalence line: a 0/70 on a file the world first saw minutes ago is very
+    /// different from a 0/70 on a years-old, widely-seen file.</summary>
+    [JsonIgnore]
+    public string? FirstSeenText
+    {
+        get
+        {
+            if (FirstSeenUtc is not { } first) return null;
+            var age = DateTime.UtcNow - first;
+            string ageStr = age.TotalDays >= 365 ? $"{(int)(age.TotalDays / 365)} yıl önce"
+                : age.TotalDays >= 1 ? $"{(int)age.TotalDays} gün önce"
+                : age.TotalHours >= 1 ? $"{(int)age.TotalHours} saat önce"
+                : $"{(int)age.TotalMinutes} dakika önce";
+            string prev = TimesSubmitted > 0 ? $" • {TimesSubmitted} gönderim" : "";
+            string rare = age.TotalDays < 2 ? "  ⚠ çok yeni" : "";
+            return $"İlk görülme: {first:yyyy-MM-dd} ({ageStr}){prev}{rare}";
+        }
+    }
 }
 
 internal sealed class VtEngineResult

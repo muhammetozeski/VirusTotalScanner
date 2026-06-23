@@ -58,6 +58,26 @@ internal sealed class HashCache
 
     public void Put(string md5, VtFileReport report)
     {
+        // Store only the summary (no per-engine list) to keep cache.json small; the engine
+        // table is re-fetched if the user re-scans.
+        var compact = new VtFileReport
+        {
+            Md5 = report.Md5,
+            Sha1 = report.Sha1,
+            Sha256 = report.Sha256,
+            MeaningfulName = report.MeaningfulName,
+            TypeDescription = report.TypeDescription,
+            Size = report.Size,
+            Reputation = report.Reputation,
+            TimesSubmitted = report.TimesSubmitted,
+            FirstSeenUtc = report.FirstSeenUtc,
+            LastSeenUtc = report.LastSeenUtc,
+            Malicious = report.Malicious,
+            Suspicious = report.Suspicious,
+            Harmless = report.Harmless,
+            Undetected = report.Undetected,
+            Timeout = report.Timeout,
+        };
         _entries[md5] = new HashCacheEntry
         {
             Md5 = md5,
@@ -66,7 +86,7 @@ internal sealed class HashCache
             ReportUrl = report.ReportUrl,
             Detections = report.DetectionCount,
             TotalEngines = report.TotalEngines,
-            Report = report,
+            Report = compact,
         };
         _dirty = true;
         MaybeSave();

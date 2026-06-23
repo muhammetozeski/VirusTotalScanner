@@ -176,6 +176,7 @@ internal sealed class ScanDetailControl : UserControl
             $"Tür: {report.TypeDescription ?? "?"}\n" +
             $"Boyut: {(report.Size > 0 ? FormatBytes(report.Size) : item.SizeText)}" +
             (report.Reputation != 0 ? $"\nİtibar: {report.Reputation}" : "") +
+            (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
             $"\n{provenance}";
 
         _md5.Text = report.Md5 ?? item.Md5 ?? "-";
@@ -187,6 +188,9 @@ internal sealed class ScanDetailControl : UserControl
         var list = _showAll.Checked ? report.Engines : report.Detections.ToList();
         _engines.DataSource = null;
         _engines.DataSource = new List<VtEngineResult>(list);
+        // Cached entries keep only the summary (no per-engine list) to stay small.
+        if (report.Engines.Count == 0 && report.TotalEngines > 0)
+            _stats.Text += "   •   (önbellek: motor listesi saklanmadı, ayrıntı için yeniden tarayın)";
     }
 
     void RatioBar_Paint(object? sender, PaintEventArgs e)
