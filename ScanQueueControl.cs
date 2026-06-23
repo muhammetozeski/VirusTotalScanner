@@ -45,6 +45,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(_cancelBtn);
         bar.Controls.Add(ThemeManager.MakeButton("⬇  Dışa aktar (CSV)", (_, _) => ExportCsv()));
         bar.Controls.Add(ThemeManager.MakeButton("📄  Rapor (HTML)", (_, _) => ExportReport()));
+        bar.Controls.Add(ThemeManager.MakeButton("📊  Klasör özeti", (_, _) => ShowFolderRollup()));
         bar.Controls.Add(ThemeManager.MakeButton("🔁  Verdikt yeniden denetle", (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton("🗑  Önbelleği temizle", (_, _) => ClearCache()));
         var hint = ThemeManager.MakeLabel("  Dosya/klasörleri buraya da sürükleyip bırakabilirsiniz.", subtle: true);
@@ -256,6 +257,13 @@ internal sealed class ScanQueueControl : UserControl
         }
         try { File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8); NativeMessageBox.Info("Kaydedildi: " + dlg.FileName); }
         catch (Exception ex) { NativeMessageBox.Error("Kaydetme hatası: " + ex.Message); }
+    }
+
+    void ShowFolderRollup()
+    {
+        if (_scheduler.Items.Count == 0) { NativeMessageBox.Info("Önce bir tarama çalıştırın."); return; }
+        using var dlg = new FolderRollupDialog(_scheduler.Items.ToList());
+        dlg.ShowDialog(FindForm());
     }
 
     async Task RunRecheckAsync()
