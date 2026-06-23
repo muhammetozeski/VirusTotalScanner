@@ -99,6 +99,9 @@ internal sealed class HashCache
 
     public int Count => _entries.Count;
 
+    /// <summary>A point-in-time copy of all cache entries (for the verdict re-check sweep).</summary>
+    public IReadOnlyList<HashCacheEntry> Snapshot() => _entries.Values.ToList();
+
     public void Clear()
     {
         _entries.Clear();

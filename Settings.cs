@@ -67,6 +67,10 @@ internal static class Settings
     /// <summary>Show VirusTotal community votes in the detail pane.</summary>
     public static readonly Setting<bool> ShowCommunityVotes = new(true);
 
+    /// <summary>Re-check verdicts for cached files older than this many days (a clean file can be
+    /// flagged later as engines catch up). The sweep is keyless (GUI), so it costs no quota.</summary>
+    public static readonly Setting<int> RecheckPeriodDays = new(14);
+
     /// <summary>Skip safe-extension files during scans to save quota.</summary>
     public static readonly Setting<bool> SkipSafeExtensionsOnScan = new(false);
 

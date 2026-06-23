@@ -45,6 +45,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(_cancelBtn);
         bar.Controls.Add(ThemeManager.MakeButton("⬇  Dışa aktar (CSV)", (_, _) => ExportCsv()));
         bar.Controls.Add(ThemeManager.MakeButton("📄  Rapor (HTML)", (_, _) => ExportReport()));
+        bar.Controls.Add(ThemeManager.MakeButton("🔁  Verdikt yeniden denetle", (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton("🗑  Önbelleği temizle", (_, _) => ClearCache()));
         var hint = ThemeManager.MakeLabel("  Dosya/klasörleri buraya da sürükleyip bırakabilirsiniz.", subtle: true);
         bar.Controls.Add(hint);
@@ -255,6 +256,39 @@ internal sealed class ScanQueueControl : UserControl
         }
         try { File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8); NativeMessageBox.Info("Kaydedildi: " + dlg.FileName); }
         catch (Exception ex) { NativeMessageBox.Error("Kaydetme hatası: " + ex.Message); }
+    }
+
+    async Task RunRecheckAsync()
+    {
+        var due = RecheckService.DueForRecheck(AppServices.Cache, Settings.RecheckPeriodDays);
+        int days = Settings.RecheckPeriodDays.Value;
+        if (due.Count == 0) { NativeMessageBox.Info($"Yeniden denetlenecek dosya yok ({days} günden eski önbellek kaydı yok)."); return; }
+        // One question for the whole batch — not a per-file nag.
+        if (!NativeMessageBox.Confirm($"{due.Count} önbellek kaydı ({days} günden eski) yeniden denetlenecek.\nKotasız (GUI üzerinden) — biraz sürebilir. Devam edilsin mi?"))
+            return;
+
+        using var cts = new CancellationTokenSource();
+        string oldSummary = _summary.Text;
+        try
+        {
+            var changes = await RecheckService.RunAsync(AppServices.Cache, due,
+                (done, total) => { try { BeginInvoke(() => _summary.Text = $"🔁 Yeniden denetleniyor… {done}/{total}"); } catch { } },
+                cts.Token);
+
+            if (changes.Count == 0)
+                NativeMessageBox.Info($"{due.Count} dosya denetlendi. Hiçbir verdikt değişmedi.");
+            else
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine($"{due.Count} dosya denetlendi. {changes.Count} verdikt DEĞİŞTİ:\n");
+                foreach (var c in changes.Take(40))
+                    sb.AppendLine($"{(c.GotWorse ? "⬆ kötüleşti" : "⬇ iyileşti")}: {c.OldVerdict} ({c.OldDetections}) → {c.NewVerdict} ({c.NewDetections})\n   {c.Url}");
+                NativeMessageBox.Info(sb.ToString());
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
+        finally { try { _summary.Text = oldSummary; } catch { } }
     }
 
     void ExportReport()

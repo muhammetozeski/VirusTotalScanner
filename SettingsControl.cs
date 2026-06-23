@@ -215,10 +215,12 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildScanCard()
     {
-        var card = Card("Tarama", 285, out var body);
+        var card = Card("Tarama", 320, out var body);
 
         var concurrency = LabeledNumeric("Eşzamanlı tarama:", Settings.MaxConcurrentScans, 1, 16,
             v => { Settings.MaxConcurrentScans.Value = v; SettingsManager.SaveSettings(); });
+        var recheckDays = LabeledNumeric("Verdikt yeniden denetim (gün):", Settings.RecheckPeriodDays, 1, 365,
+            v => { Settings.RecheckPeriodDays.Value = v; SettingsManager.SaveSettings(); });
         var uploads = LabeledNumeric("Paralel yükleme (aynı anda):", Settings.MaxConcurrentUploads, 1, 16,
             v => { Settings.MaxConcurrentUploads.Value = v; SettingsManager.SaveSettings(); });
         var cache = new CheckBox { Text = "Yerel hash önbelleği kullan (kota tasarrufu)", AutoSize = true, Checked = Settings.UseLocalHashCache };
@@ -238,6 +240,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(skipSafe);
         body.Controls.Add(cacheDays);
         body.Controls.Add(cache);
+        body.Controls.Add(recheckDays);
         body.Controls.Add(uploads);
         body.Controls.Add(concurrency);
         return card;
