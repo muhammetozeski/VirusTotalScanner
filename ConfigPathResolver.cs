@@ -25,7 +25,8 @@ internal static class ConfigPathResolver
     public static string DataFolder => _dataFolder ??= ResolveDataFolder();
 
     public static string LogsFolder => Path.Combine(DataFolder, "Logs");
-    public static string HashCachePath => Path.Combine(DataFolder, "hashcache.json");
+    /// <summary>Scan result cache — kept next to the exe (portable), name "cache.json".</summary>
+    public static string HashCachePath => Path.Combine(ConfigFolder, "cache.json");
     public static string HistoryPath => Path.Combine(DataFolder, "history.json");
     public static string QuarantineFolder => Path.Combine(DataFolder, "Quarantine");
 

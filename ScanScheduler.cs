@@ -107,7 +107,8 @@ internal sealed class ScanScheduler
             var (md5, sha256) = await HashService.ComputeAsync(item.FilePath, ct);
             UiPost(() => { item.Md5 = md5; item.Sha256 = sha256; });
 
-            if (opts.UseCache)
+            // --no-trust (BypassTrust) forces a fresh scan: ignore the local cache too.
+            if (opts.UseCache && !opts.BypassTrust)
             {
                 var cached = _cache.TryGet(md5, opts.CacheDays);
                 if (cached != null)

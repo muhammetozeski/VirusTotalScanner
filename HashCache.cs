@@ -9,6 +9,12 @@ internal sealed class HashCacheEntry
     public string Md5 { get; set; } = "";
     public string? Sha256 { get; set; }
     public DateTime CachedUtc { get; set; }
+
+    // Explicitly recorded so cache.json is self-documenting (the user's ask): VT link + threat count.
+    public string? ReportUrl { get; set; }
+    public int Detections { get; set; }
+    public int TotalEngines { get; set; }
+
     public VtFileReport? Report { get; set; }
 
     [JsonIgnore] public bool IsMalicious => Report?.IsMalicious ?? false;
@@ -57,6 +63,9 @@ internal sealed class HashCache
             Md5 = md5,
             Sha256 = report.Sha256,
             CachedUtc = DateTime.UtcNow,
+            ReportUrl = report.ReportUrl,
+            Detections = report.DetectionCount,
+            TotalEngines = report.TotalEngines,
             Report = report,
         };
         _dirty = true;
@@ -86,7 +95,7 @@ internal sealed class HashCache
         {
             try
             {
-                Directory.CreateDirectory(ConfigPathResolver.DataFolder);
+                Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
                 File.WriteAllText(ConfigPathResolver.HashCachePath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
                 _lastSaveUtc = DateTime.UtcNow;
                 _dirty = false;
