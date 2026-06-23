@@ -25,6 +25,9 @@
     <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- keep the publish folder to just the exe -->
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
   </PropertyGroup>
 
   <ItemGroup>
