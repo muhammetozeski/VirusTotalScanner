@@ -20,7 +20,17 @@ A Windows (WinForms, .NET 10) single-exe app that scans files/folders with Virus
   code/UI/comments, central management, null-safety, Polly + CancellationToken wrapping).
 - Lessons in `öğrenilen değerli şeyler.md`.
 
+## Done in the loop so far
+- Parallel-upload setting (separate upload semaphore from the scan concurrency).
+- Major/minor engine consensus ("who flagged it"): editable major-engine set, shown in the
+  detail pane + CLI + cache; surfaces likely false positives (verified on ski32.exe: 1 major / 5 minor).
+- Detail pane shows all engine results by default; community votes (harmless/malicious), toggleable.
+- CLI `--report <html|json|txt>` + `--fail-on <N>` exit-code gate (shared `ReportWriter`).
+- GUI "Export report (HTML/JSON/text)" button.
+
 ## Not yet done (in the queue)
-Localization EN/TR, parallel upload, community votes/comments, re-check queue, CLI report/gate,
-HTML report, behavior/sandbox summary, archive expansion, origin (Zone.Id), expected-hash,
-scheduled sweep, size/type pre-filter, folder rollup, detection-name normalization, UI polish.
+Localization EN/TR, community comments, verdict-change re-check queue, quota-exhausted 3-option,
+folder rollup, spread resilient recovery chains, behavior/sandbox summary, archive expansion,
+origin (Zone.Id), expected-hash, scheduled sweep, size/type pre-filter, detection-name
+normalization, find-all-copies, folder neighbors, integrity baseline, scan running processes,
+context menus everywhere, UI polish/emojis.
