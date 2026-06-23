@@ -162,7 +162,7 @@ internal sealed class ScanScheduler
             VtFileReport? report = null;
 
             if (preferGui)
-                report = await GuiScrapeService.LookupAsync(sha256, ct);
+                report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
 
             if (report == null && _rotator.HasUsableKeys)
             {
@@ -187,7 +187,7 @@ internal sealed class ScanScheduler
 
             // Last resort: API was off/exhausted -> try the GUI engine once.
             if (report == null && !preferGui && GuiScrapeService.IsRuntimeAvailable)
-                report = await GuiScrapeService.LookupAsync(sha256, ct);
+                report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
 
             if (report != null && opts.UseCache && report.TotalEngines > 0)
                 _cache.Put(md5, report);
@@ -249,7 +249,8 @@ internal sealed class ScanScheduler
             string key = await _rotator.AcquireAsync(ct);
             try
             {
-                return await call(key);
+                // WaitAsync guarantees cancellation wins on time even if a slow HTTP path honors the token late (principle 43).
+                return await call(key).WaitAsync(ct);
             }
             catch (VtRateLimitException ex) { last = ex; _rotator.ReportRateLimited(key, ex.RetryAfter); }
             catch (VtAuthException ex) { last = ex; _rotator.ReportAuthError(key); }
