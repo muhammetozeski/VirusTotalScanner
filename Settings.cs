@@ -78,6 +78,9 @@ internal static class Settings
     /// flagged later as engines catch up). The sweep is keyless (GUI), so it costs no quota.</summary>
     public static readonly Setting<int> RecheckPeriodDays = new(14);
 
+    /// <summary>Folder configured for the scheduled sweep (Windows Scheduled Task).</summary>
+    public static readonly Setting<string> SweepFolder = new("");
+
     /// <summary>Skip safe-extension files during scans to save quota.</summary>
     public static readonly Setting<bool> SkipSafeExtensionsOnScan = new(false);
 
