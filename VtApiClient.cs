@@ -177,6 +177,11 @@ internal sealed class VtApiClient
                 .OrderByDescending(e => e.IsDetection)
                 .ThenBy(e => e.EngineName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+            report.MajorFlaggers = report.Detections
+                .Where(e => MajorEngines.IsMajor(e.EngineName))
+                .Select(e => e.EngineName)
+                .ToList();
         }
 
         return report;

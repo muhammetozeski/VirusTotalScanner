@@ -120,9 +120,17 @@ internal sealed class VtFileReport
 
     public List<VtEngineResult> Engines { get; set; } = [];
 
+    /// <summary>Major-engine names that flagged this file; stored so it survives in the summary cache.</summary>
+    public List<string> MajorFlaggers { get; set; } = [];
+
     [JsonIgnore] public IEnumerable<VtEngineResult> Detections => Engines.Where(e => e.IsDetection);
     [JsonIgnore] public int DetectionCount => Malicious + Suspicious;
     [JsonIgnore] public int TotalEngines => Malicious + Suspicious + Harmless + Undetected + Timeout;
+    [JsonIgnore] public int MajorDetectionCount => MajorFlaggers.Count;
+    [JsonIgnore] public int MinorDetectionCount => Math.Max(0, DetectionCount - MajorDetectionCount);
+    /// <summary>True when there are detections but no major/high-reputation engine flagged it
+    /// (the classic false-positive shape).</summary>
+    [JsonIgnore] public bool MajorClean => TotalEngines > 0 && DetectionCount > 0 && MajorDetectionCount == 0;
     /// <summary>A "threat" per the user's verdict categories (e.g. 1 detection may count as clean).</summary>
     [JsonIgnore] public bool IsMalicious => TotalEngines > 0 && VerdictCategories.IsThreat(DetectionCount);
     [JsonIgnore] public string ReportUrl => AppConstants.VtGuiFile + (Sha256 ?? Md5 ?? Sha1 ?? string.Empty);
@@ -146,6 +154,21 @@ internal sealed class VtFileReport
             string prev = TimesSubmitted > 0 ? $" • {TimesSubmitted} gönderim" : "";
             string rare = age.TotalDays < 2 ? "  ⚠ çok yeni" : "";
             return $"İlk görülme: {first:yyyy-MM-dd} ({ageStr}){prev}{rare}";
+        }
+    }
+
+    /// <summary>"Who flagged it" — splits detections into major vs minor engines so a few
+    /// obscure-engine hits read as a likely false positive.</summary>
+    [JsonIgnore]
+    public string? ConsensusText
+    {
+        get
+        {
+            if (TotalEngines == 0) return null;
+            if (DetectionCount == 0) return "🛡 Konsensüs: hiçbir motor işaretlemedi";
+            string majors = MajorFlaggers.Count > 0 ? "  →  " + string.Join(", ", MajorFlaggers.Take(6)) : "";
+            string hint = MajorClean ? "  (büyük motor yok → olası yanlış pozitif)" : "";
+            return $"Büyük motorlar: {MajorDetectionCount} işaretledi   •   Küçük motorlar: {MinorDetectionCount}{majors}{hint}";
         }
     }
 }

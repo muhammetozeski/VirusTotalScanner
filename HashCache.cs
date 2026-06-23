@@ -77,6 +77,7 @@ internal sealed class HashCache
             Harmless = report.Harmless,
             Undetected = report.Undetected,
             Timeout = report.Timeout,
+            MajorFlaggers = report.MajorFlaggers,
         };
         _entries[md5] = new HashCacheEntry
         {

@@ -177,6 +177,7 @@ internal sealed class ScanDetailControl : UserControl
             $"Boyut: {(report.Size > 0 ? FormatBytes(report.Size) : item.SizeText)}" +
             (report.Reputation != 0 ? $"\nİtibar: {report.Reputation}" : "") +
             (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
+            (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             $"\n{provenance}";
 
         _md5.Text = report.Md5 ?? item.Md5 ?? "-";

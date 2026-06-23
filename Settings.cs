@@ -84,4 +84,9 @@ internal static class Settings
 
     /// <summary>User-defined verdict categories (JSON list of {MinDetections, Name, ColorHex}).</summary>
     public static readonly Setting<string> VerdictCategoriesJson = new("");
+
+    /// <summary>Engine names considered "major" / high-reputation (; separated). Detections are
+    /// split into major vs minor so a few obscure-engine hits read clearly as a likely false positive.</summary>
+    public static readonly Setting<string> MajorEnginesList =
+        new("Microsoft;Kaspersky;ESET-NOD32;BitDefender;GData;Avast;AVG;Sophos;Malwarebytes;McAfee;McAfeeD;Symantec;TrendMicro;Google;DrWeb;Emsisoft;F-Secure;Fortinet;Ikarus");
 }
