@@ -72,6 +72,9 @@ internal static class Settings
     /// <summary>Remember a running scan and offer to resume it on the next startup if interrupted.</summary>
     public static readonly Setting<bool> ResumeInterruptedScans = new(false);
 
+    /// <summary>Resume an interrupted scan on startup WITHOUT asking.</summary>
+    public static readonly Setting<bool> AutoResumeScans = new(false);
+
     /// <summary>The API-key vault: Base64(DPAPI(JSON of all keys + quota counters)).</summary>
     public static readonly Setting<string> EncryptedKeyVault = new("");
 

@@ -218,14 +218,24 @@ internal sealed partial class MainForm : Form
 
     void OfferResume()
     {
-        if (!Settings.ResumeInterruptedScans) return;
         var s = ScanSessionStore.TryLoad();
         if (s == null || s.Paths.Length == 0) return;
+
+        // Auto-resume without asking, if enabled.
+        if (Settings.AutoResumeScans)
+        {
+            ScanSessionStore.Clear();
+            _tabs.SelectedIndex = 0;
+            _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
+            return;
+        }
+
+        if (!Settings.ResumeInterruptedScans) return;
         ScanSessionStore.Clear();
 
         string list = string.Join(", ", s.Paths.Take(3).Select(p => Path.GetFileName(p.TrimEnd('\\'))));
         if (s.Paths.Length > 3) list += " …";
-        if (NativeMessageBox.Confirm($"Yarım kalan bir tarama bulundu:\n{list}\n\nKaldığı yerden devam edilsin mi?", "Yarım kalan tarama"))
+        if (NativeMessageBox.Confirm($"Yarım kalan bir tarama bulundu ({s.Paths.Length} öğe):\n{list}\n\nKaldığı yerden devam edilsin mi?", "Yarım kalan tarama"))
         {
             _tabs.SelectedIndex = 0;
             _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);

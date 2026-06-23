@@ -92,7 +92,9 @@ internal sealed class ScanScheduler
         }
         finally
         {
-            ScanSessionStore.Clear(); // normal finish or cancel — only a crash leaves it for resume
+            // Keep the session if the user stopped (cancelled) so it can be resumed; clear it on
+            // a natural finish. A crash also leaves it (finally never runs) -> resume offered.
+            if (!ct.IsCancellationRequested) ScanSessionStore.Clear();
             _cache.Flush();
             IsRunning = false;
             try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
