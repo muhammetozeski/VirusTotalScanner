@@ -66,6 +66,9 @@ internal static class Settings
     /// <summary>Set once the first-run wizard has completed.</summary>
     public static readonly Setting<bool> FirstRunCompleted = new(false);
 
+    /// <summary>Start with Windows (login) minimized to the tray.</summary>
+    public static readonly Setting<bool> StartWithWindows = new(false);
+
     /// <summary>The API-key vault: Base64(DPAPI(JSON of all keys + quota counters)).</summary>
     public static readonly Setting<string> EncryptedKeyVault = new("");
 }

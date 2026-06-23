@@ -15,6 +15,7 @@ internal sealed class CliOptions
 {
     public bool ForceGui;
     public bool NoGui;
+    public bool Tray;
     public bool Json;
     public bool Quiet;
     public bool Recurse;
@@ -42,6 +43,7 @@ internal static class ArgumentDef
     static readonly CmdArg NoGui = new("--nogui", "-n");
     static readonly CmdArg Cli = new("--cli", "-c");
     static readonly CmdArg Gui = new("--gui", "-g");
+    static readonly CmdArg Tray = new("--tray", "--background");
     static readonly CmdArg Json = new("--json", "-j");
     static readonly CmdArg Quiet = new("--quiet", "-q");
     static readonly CmdArg Help = new("--help", "-h");
@@ -67,6 +69,7 @@ internal static class ArgumentDef
             else if (Keyless.IsMatch(a)) o.Keyless = true;
             else if (NoGui.IsMatch(a) || Cli.IsMatch(a)) o.NoGui = true;
             else if (Gui.IsMatch(a)) o.ForceGui = true;
+            else if (Tray.IsMatch(a)) { o.Tray = true; o.ForceGui = true; }
             else if (Json.IsMatch(a)) { o.Json = true; o.NoGui = true; }
             else if (Quiet.IsMatch(a)) o.Quiet = true;
             else if (Help.IsMatch(a) || a == "-?" || a == "/?") o.ShowHelp = true;

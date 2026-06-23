@@ -40,6 +40,18 @@ internal sealed partial class MainForm : Form
     readonly StatusStrip _status = new();
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
+    bool _shownOnce;
+
+    /// <summary>When true (launched with --tray at login), start hidden — only the tray icon shows.</summary>
+    public bool StartHidden;
+
+    protected override void SetVisibleCore(bool value)
+    {
+        // Keep the window hidden on first show when launched to the tray at login.
+        if (StartHidden && !_shownOnce) { _shownOnce = true; base.SetVisibleCore(false); return; }
+        _shownOnce = true;
+        base.SetVisibleCore(value);
+    }
 
     public MainForm()
     {

@@ -74,8 +74,10 @@ internal static class Program
             Log("Forward failed; opening a standalone window.", LogLevel.Warning);
         }
 
+        StartupManager.Sync(); // fix the login entry if the exe moved
+
         ApplicationConfiguration.Initialize();
-        var form = new MainForm();
+        var form = new MainForm { StartHidden = opts.Tray };
 
         if (primary)
             SingleInstance.StartPipeServer(paths => form.EnqueueExternalPaths(paths));
