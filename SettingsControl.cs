@@ -251,7 +251,25 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 345, out var body);
+        var card = Card("Genel", 385, out var body);
+
+        var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
+        langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
+        var langCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+        foreach (var (_, name) in LocManager.Available) langCombo.Items.Add(name);
+        int curLang = Array.FindIndex(LocManager.Available, a => a.Code.Equals(Settings.Language.Value, StringComparison.OrdinalIgnoreCase));
+        langCombo.SelectedIndex = curLang < 0 ? 0 : curLang;
+        langCombo.SelectedIndexChanged += (_, _) =>
+        {
+            string code = LocManager.Available[langCombo.SelectedIndex].Code;
+            if (!string.Equals(code, Settings.Language.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                Settings.Language.Value = code;
+                SettingsManager.SaveSettings();
+                NativeMessageBox.Info(Strings.LanguageRestartNote);
+            }
+        };
+        langRow.Controls.Add(langCombo);
 
         var themeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         themeRow.Controls.Add(ThemeManager.MakeLabel("Tema:"));
@@ -283,6 +301,7 @@ internal sealed class SettingsControl : UserControl
         var autoResume = new CheckBox { Text = "Açılışta yarım kalan taramayı SORMADAN devam et", AutoSize = true, Checked = Settings.AutoResumeScans };
         autoResume.CheckedChanged += (_, _) => { Settings.AutoResumeScans.Value = autoResume.Checked; SettingsManager.SaveSettings(); };
 
+        body.Controls.Add(langRow);
         body.Controls.Add(themeRow);
         body.Controls.Add(startup);
         body.Controls.Add(resume);

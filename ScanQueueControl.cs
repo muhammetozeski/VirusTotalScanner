@@ -36,19 +36,19 @@ internal sealed class ScanQueueControl : UserControl
 
         // ---- action bar ----
         var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(6) };
-        bar.Controls.Add(ThemeManager.MakeButton("📄  Dosya seç…", (_, _) => SelectFiles(), accent: true));
-        bar.Controls.Add(ThemeManager.MakeButton("📁  Klasör seç…", (_, _) => SelectFolder(), accent: true));
-        bar.Controls.Add(ThemeManager.MakeButton("🔎  Hash sorgula…", (_, _) => _ = HashLookupAsync()));
-        _pauseBtn = ThemeManager.MakeButton("⏸  Duraklat", (_, _) => TogglePause());
-        _cancelBtn = ThemeManager.MakeButton("⏹  İptal", (_, _) => _scheduler.Cancel());
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFiles, (_, _) => SelectFiles(), accent: true));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFolder, (_, _) => SelectFolder(), accent: true));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHashLookup, (_, _) => _ = HashLookupAsync()));
+        _pauseBtn = ThemeManager.MakeButton(Strings.BtnPause, (_, _) => TogglePause());
+        _cancelBtn = ThemeManager.MakeButton(Strings.BtnCancel, (_, _) => _scheduler.Cancel());
         bar.Controls.Add(_pauseBtn);
         bar.Controls.Add(_cancelBtn);
-        bar.Controls.Add(ThemeManager.MakeButton("⬇  Dışa aktar (CSV)", (_, _) => ExportCsv()));
-        bar.Controls.Add(ThemeManager.MakeButton("📄  Rapor (HTML)", (_, _) => ExportReport()));
-        bar.Controls.Add(ThemeManager.MakeButton("📊  Klasör özeti", (_, _) => ShowFolderRollup()));
-        bar.Controls.Add(ThemeManager.MakeButton("🔁  Verdikt yeniden denetle", (_, _) => _ = RunRecheckAsync()));
-        bar.Controls.Add(ThemeManager.MakeButton("🗑  Önbelleği temizle", (_, _) => ClearCache()));
-        var hint = ThemeManager.MakeLabel("  Dosya/klasörleri buraya da sürükleyip bırakabilirsiniz.", subtle: true);
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportCsv, (_, _) => ExportCsv()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportReport, (_, _) => ExportReport()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFolderRollup, (_, _) => ShowFolderRollup()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
+        var hint = ThemeManager.MakeLabel(Strings.DropHint, subtle: true);
         bar.Controls.Add(hint);
 
         // ---- split ----
@@ -210,8 +210,8 @@ internal sealed class ScanQueueControl : UserControl
 
     void TogglePause()
     {
-        if (_scheduler.IsPaused) { _scheduler.Resume(); _pauseBtn.Text = "⏸  Duraklat"; }
-        else { _scheduler.Pause(); _pauseBtn.Text = "▶  Devam et"; }
+        if (_scheduler.IsPaused) { _scheduler.Resume(); _pauseBtn.Text = Strings.BtnPause; }
+        else { _scheduler.Pause(); _pauseBtn.Text = Strings.BtnResume; }
     }
 
     void RescanSelected()
@@ -340,7 +340,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         _pauseBtn.Enabled = running;
         _cancelBtn.Enabled = running;
-        if (!running) _pauseBtn.Text = "⏸  Duraklat";
+        if (!running) _pauseBtn.Text = Strings.BtnPause;
         if (running) { _repaintTimer.Start(); }
     }
 

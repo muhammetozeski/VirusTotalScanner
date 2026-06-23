@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English UI strings for VirusTotal Scanner. Names must match the fields in Strings.cs.
+     Multi-line values use a literal \n (handled by LocManager). Copied next to the exe at build. -->
+<strings>
+  <s name="TabScan">🛡  Scan</s>
+  <s name="TabQuota">📊  Quota</s>
+  <s name="TabLogs">📜  Logs</s>
+  <s name="TabSettings">⚙  Settings</s>
+  <s name="TrayShow">Show</s>
+  <s name="TrayExit">Exit</s>
+  <s name="TrayRunningText">Running in the background. Double-click the icon to open.</s>
+  <s name="StatusBarFormat">  Keys: {0}/{1} usable   •   Config: {2}</s>
+  <s name="ThreatBalloonTitle">Threat found!</s>
+  <s name="FirstRunWelcome">Welcome to VirusTotal Scanner!\n\n• Scan files/folders by drag-and-drop or the right-click menu.\n• Add a VirusTotal API key to get started.</s>
+  <s name="FirstRunAddKey">Would you like to add a VirusTotal API key now?</s>
+  <s name="FirstRunMenuPrompt">Add 'Scan with VirusTotal' to the right-click menu?\n(For all users; administrator permission / UAC will be requested.)</s>
+  <s name="FirstRunMenuTitle">Permission</s>
+  <s name="RepairMenuPrompt">The right-click menu entry points to an old exe path (the app was moved). Repair it now?</s>
+  <s name="ResumePromptFormat">An interrupted scan was found ({0} item(s)):\n{1}\n\nResume where it left off?</s>
+  <s name="ResumePromptTitle">Interrupted scan</s>
+  <s name="BtnSelectFiles">📄  Select files…</s>
+  <s name="BtnSelectFolder">📁  Select folder…</s>
+  <s name="BtnHashLookup">🔎  Look up hash…</s>
+  <s name="BtnPause">⏸  Pause</s>
+  <s name="BtnResume">▶  Resume</s>
+  <s name="BtnCancel">⏹  Cancel</s>
+  <s name="BtnExportCsv">⬇  Export (CSV)</s>
+  <s name="BtnExportReport">📄  Report (HTML)</s>
+  <s name="BtnFolderRollup">📊  Folder summary</s>
+  <s name="BtnRecheck">🔁  Re-check verdicts</s>
+  <s name="BtnClearCache">🗑  Clear cache</s>
+  <s name="DropHint">  You can also drag and drop files/folders here.</s>
+  <s name="SettingsLanguageLabel">Language:</s>
+  <s name="LanguageRestartNote">The language change takes full effect after the app is restarted.</s>
+</strings>

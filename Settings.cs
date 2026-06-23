@@ -13,6 +13,9 @@ internal static class Settings
     /// <summary>UI theme: "Dark" or "Light".</summary>
     public static readonly Setting<string> Theme = new("Dark");
 
+    /// <summary>UI language code ("tr" or "en"). Loaded into <see cref="Strings"/> at startup.</summary>
+    public static readonly Setting<string> Language = new("tr");
+
     /// <summary>Follow the Windows app theme instead of the fixed Theme value.</summary>
     public static readonly Setting<bool> FollowWindowsTheme = new(true);
 

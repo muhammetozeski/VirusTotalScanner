@@ -88,10 +88,10 @@ internal sealed partial class MainForm : Form
     void BuildTabs()
     {
         _tabs.Appearance = TabAppearance.Normal;
-        AddTab("🛡  Tarama", _scan);
-        AddTab("📊  Kotalar", _quota);
-        AddTab("📜  Loglar", _logs);
-        AddTab("⚙  Ayarlar", _settings);
+        AddTab(Strings.TabScan, _scan);
+        AddTab(Strings.TabQuota, _quota);
+        AddTab(Strings.TabLogs, _logs);
+        AddTab(Strings.TabSettings, _settings);
     }
 
     void AddTab(string text, Control content)
@@ -116,8 +116,8 @@ internal sealed partial class MainForm : Form
         _tray.Icon = Icon ?? SystemIcons.Application;
         _tray.Visible = true;
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Göster", null, (_, _) => RestoreFromTray());
-        menu.Items.Add("Çıkış", null, (_, _) => { _reallyExit = true; Close(); });
+        menu.Items.Add(Strings.TrayShow, null, (_, _) => RestoreFromTray());
+        menu.Items.Add(Strings.TrayExit, null, (_, _) => { _reallyExit = true; Close(); });
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => RestoreFromTray();
     }
@@ -165,7 +165,7 @@ internal sealed partial class MainForm : Form
         if (!Settings.NotifyOnThreat) return;
         SafeUi(() =>
         {
-            _tray.BalloonTipTitle = "Tehdit bulundu!";
+            _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
             _tray.BalloonTipText = $"{item.FileName}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             _tray.ShowBalloonTip(5000);
@@ -181,7 +181,7 @@ internal sealed partial class MainForm : Form
             e.Cancel = true;
             Hide();
             _tray.BalloonTipTitle = AppConstants.AppTitle;
-            _tray.BalloonTipText = "Arka planda çalışıyor. Açmak için simgeye çift tıklayın.";
+            _tray.BalloonTipText = Strings.TrayRunningText;
             _tray.ShowBalloonTip(2000);
             return;
         }
@@ -209,7 +209,7 @@ internal sealed partial class MainForm : Form
             RunFirstRunWizard();
         else if (ContextMenuInstaller.NeedsRepair())
         {
-            if (NativeMessageBox.Confirm("Sağ tuş menüsü kaydı eski exe yolunu gösteriyor (uygulama taşınmış). Şimdi onarılsın mı?"))
+            if (NativeMessageBox.Confirm(Strings.RepairMenuPrompt))
                 ContextMenuInstaller.Repair(out _);
         }
 
@@ -235,7 +235,7 @@ internal sealed partial class MainForm : Form
 
         string list = string.Join(", ", s.Paths.Take(3).Select(p => Path.GetFileName(p.TrimEnd('\\'))));
         if (s.Paths.Length > 3) list += " …";
-        if (NativeMessageBox.Confirm($"Yarım kalan bir tarama bulundu ({s.Paths.Length} öğe):\n{list}\n\nKaldığı yerden devam edilsin mi?", "Yarım kalan tarama"))
+        if (NativeMessageBox.Confirm(string.Format(Strings.ResumePromptFormat, s.Paths.Length, list), Strings.ResumePromptTitle))
         {
             _tabs.SelectedIndex = 0;
             _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
@@ -244,14 +244,11 @@ internal sealed partial class MainForm : Form
 
     void RunFirstRunWizard()
     {
-        NativeMessageBox.Info(
-            "VirusTotal Scanner'a hoş geldiniz!\n\n" +
-            "• Dosya/klasörleri sürükleyip bırakarak veya sağ tuş menüsünden tarayabilirsiniz.\n" +
-            "• Başlamak için bir VirusTotal API anahtarı ekleyin.");
+        NativeMessageBox.Info(Strings.FirstRunWelcome);
 
         if (!AppServices.Rotator.HasUsableKeys)
         {
-            if (NativeMessageBox.Confirm("Şimdi bir VirusTotal API anahtarı eklemek ister misiniz?"))
+            if (NativeMessageBox.Confirm(Strings.FirstRunAddKey))
             {
                 using var dlg = new ApiKeyDialog();
                 if (dlg.ShowDialog(this) == DialogResult.OK)
@@ -260,7 +257,7 @@ internal sealed partial class MainForm : Form
         }
 
         if (ContextMenuInstaller.Verify() != MenuState.Ok &&
-            NativeMessageBox.Confirm("Sağ tuş menüsüne 'VirusTotal ile tara' eklensin mi?\n(Tüm kullanıcılar için; yönetici izni/UAC istenecek.)", "İzin"))
+            NativeMessageBox.Confirm(Strings.FirstRunMenuPrompt, Strings.FirstRunMenuTitle))
         {
             _ = Task.Run(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out _));
         }
@@ -290,7 +287,7 @@ internal sealed partial class MainForm : Form
     {
         int total = AppServices.Vault.Keys.Count;
         int usable = AppServices.Vault.UsableKeyCount;
-        _statusKeys.Text = $"  Anahtar: {usable}/{total} kullanılabilir   •   Ayar: {ConfigPathResolver.ConfigPath}";
+        _statusKeys.Text = string.Format(Strings.StatusBarFormat, usable, total, ConfigPathResolver.ConfigPath);
     }
 
     void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
