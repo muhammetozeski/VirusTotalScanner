@@ -10,9 +10,10 @@ namespace VirusTotalScanner;
 /// and captures the page's own internal /ui/files/&lt;hash&gt; response — the same data the API
 /// returns, with NO API key and NO quota. If VirusTotal demands a reCAPTCHA, the hidden browser
 /// is brought to the foreground so the user can solve it, then it hides again and the lookup
-/// continues. reCAPTCHA is detected three independent ways (HTTP 429/403 on the data call, a
-/// recaptcha resource request, and a DOM check) to make detection reliable.
-/// Lookup-only: it cannot upload unknown files.
+/// continues. A reCAPTCHA is only acted on when it actually blocks us: the data call returns
+/// 429/403, or a genuinely VISIBLE challenge is in the DOM. (The page uses invisible reCAPTCHA, so
+/// the mere loading of recaptcha resources is ignored — otherwise the window would pop up on every
+/// clean lookup.) Lookup-only: it cannot upload unknown files.
 /// </summary>
 internal static class GuiScrapeService
 {
@@ -208,14 +209,10 @@ internal static class GuiScrapeService
         {
             string fullUri = e.Request.Uri;
 
-            // (1) recaptcha resource request -> a challenge is being shown
-            if (fullUri.Contains("recaptcha", StringComparison.OrdinalIgnoreCase) ||
-                fullUri.Contains("/api2/anchor", StringComparison.OrdinalIgnoreCase) ||
-                fullUri.Contains("/api2/bframe", StringComparison.OrdinalIgnoreCase))
-            {
-                ShowCaptcha("recaptcha-request");
-                return;
-            }
+            // NOTE: the VT page uses INVISIBLE reCAPTCHA, so it loads recaptcha / api2/anchor / bframe
+            // resources on every clean lookup for risk scoring. Their mere presence is NOT a challenge,
+            // so we do NOT trigger on resource requests — only a blocked data call (429/403) or a
+            // genuinely VISIBLE DOM challenge counts. This stops the browser popping up with no captcha.
 
             string path = fullUri.Split('?')[0].TrimEnd('/');
             if (!path.EndsWith("/ui/files/" + _targetHash, StringComparison.OrdinalIgnoreCase)) return;
@@ -258,12 +255,17 @@ internal static class GuiScrapeService
         if (_pending == null || _captchaShown || _web == null) return;
         try
         {
-            // (3) DOM check for a visible challenge
-            string js = "(function(){try{return !!(document.querySelector('iframe[src*=\\\"recaptcha\\\"]')||" +
-                        "document.querySelector('.g-recaptcha')||document.querySelector('#recaptcha,#captcha')||" +
-                        "(document.title&&/captcha|are you human|robot/i.test(document.title)));}catch(e){return false;}})()";
+            // (3) DOM check for a VISIBLE challenge only. Invisible reCAPTCHA always injects a 0-sized
+            // anchor iframe, so we must require the challenge frame (api2/bframe) to be actually shown
+            // with real size, or an explicit challenge widget / page title — otherwise we'd false-fire.
+            string js = "(function(){try{" +
+                        "var f=document.querySelector('iframe[src*=\\\"api2/bframe\\\"]');" +
+                        "if(f){var r=f.getBoundingClientRect();if(r.width>100&&r.height>100)return true;}" +
+                        "if(document.querySelector('#rc-imageselect,.rc-imageselect,.g-recaptcha-bubble-arrow'))return true;" +
+                        "if(document.title&&/are you human|verify you are|complete the captcha/i.test(document.title))return true;" +
+                        "return false;}catch(e){return false;}})()";
             string res = await _web.CoreWebView2.ExecuteScriptAsync(js);
-            if (res != null && res.Contains("true")) ShowCaptcha("dom");
+            if (res != null && res.Contains("true")) ShowCaptcha("dom-visible");
         }
         catch (Exception ex) { Log("Captcha DOM check failed: " + ex.Message, LogLevel.Warning); }
     }
