@@ -17,6 +17,8 @@ internal static class DetectionFamily
         "generic", "gen", "genericrl", "heur", "heuristic", "ml", "ai", "ti", "bscope", "variant",
         "application", "unwanted", "suspicious", "susgen", "susp", "agent", "a", "b", "c", "test",
         "behaveslike", "trj", "troj", "program", "potentially", "unsafe", "cloud", "static", "based",
+        "malicious", "unsafe", "detected", "detection", "threat", "confidence", "moderate", "high",
+        "probably", "header", "headerp", "aidetect", "malware2", "generic", "genericrl", "genericml",
     };
 
     /// <summary>The dominant family across the detecting engines, with how many engines agree,
