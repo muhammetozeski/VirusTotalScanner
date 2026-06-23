@@ -67,11 +67,23 @@ internal sealed class ScanScheduler
             if (Settings.ResumeInterruptedScans) ScanSessionStore.SaveRunning(paths, opts.Recurse, opts.BypassTrust);
             KnownGoodDb.Reload();
             var safe = SelectionEnumerator.ParseExtensions(Settings.SafeExtensions);
-            var files = await Task.Run(() => SelectionEnumerator.Expand(paths, safe, opts.Recurse, opts.ApplySafeFilter), ct);
+            var oversize = new List<string>();
+            var files = await Task.Run(() => SelectionEnumerator.Expand(
+                paths, safe, opts.Recurse, opts.ApplySafeFilter, opts.MaxFileSizeBytes, oversize), ct);
 
             _total = files.Count;
             var items = files.Select(f => new ScanItem(f)).ToList();
             UiPost(() => { foreach (var it in items) Items.Add(it); });
+
+            // Ledger: show each size-skipped file as a row so the user sees what was excluded and why.
+            if (oversize.Count > 0)
+            {
+                int capMb = (int)(opts.MaxFileSizeBytes / (1024 * 1024));
+                var skipped = oversize.Select(f => new ScanItem(f) { Status = ScanStatus.Skipped, SkipReason = $"çok büyük (>{capMb} MB)" }).ToList();
+                UiPost(() => { foreach (var it in skipped) Items.Add(it); });
+                for (int n = 0; n < oversize.Count; n++) Bump(ref _skipped);
+                Log($"{oversize.Count} file(s) skipped by the {capMb} MB size cap.", LogLevel.Info);
+            }
             ReportProgress();
 
             if (items.Count == 0)

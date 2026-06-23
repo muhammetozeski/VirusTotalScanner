@@ -77,7 +77,7 @@ internal sealed class ScanItem : INotifyPropertyChanged
         ScanStatus.Completed => Report == null ? "Tamamlandı" :
             $"{Report.Verdict} ({Report.DetectionCount}/{Report.TotalEngines})" + (FromCache ? " • önbellek" : ""),
         ScanStatus.Failed => "Hata: " + (Error ?? "bilinmiyor"),
-        ScanStatus.Skipped => "Atlandı (güvenli tür)",
+        ScanStatus.Skipped => "Atlandı (" + (SkipReason ?? "güvenli tür") + ")",
         ScanStatus.TrustedSkipped => (SkipReason ?? "İmzalı") + " (VT atlandı)",
         ScanStatus.Cancelled => "İptal edildi",
         _ => _status.ToString(),
@@ -117,6 +117,8 @@ internal sealed class ScanOptions
     public bool ApplySafeFilter { get; set; }
     public int MaxConcurrency { get; set; } = 2;
     public int MaxUploads { get; set; } = 2;
+    /// <summary>Skip files larger than this before hashing (0 = no cap). VT's own ceiling is ~650 MB.</summary>
+    public long MaxFileSizeBytes { get; set; }
     public bool UseCache { get; set; } = true;
     public int CacheDays { get; set; } = 7;
 
@@ -131,6 +133,7 @@ internal sealed class ScanOptions
         ApplySafeFilter = Settings.SkipSafeExtensionsOnScan,
         MaxConcurrency = Math.Max(1, Settings.MaxConcurrentScans.Value),
         MaxUploads = Math.Max(1, Settings.MaxConcurrentUploads.Value),
+        MaxFileSizeBytes = Math.Max(0, (long)Settings.MaxFileSizeMB.Value) * 1024 * 1024,
         UseCache = Settings.UseLocalHashCache,
         CacheDays = Math.Max(0, Settings.HashCacheDays.Value),
         SkipTrusted = Settings.TrustSkipSigned,

@@ -33,6 +33,10 @@ internal static class Settings
     /// <summary>How many days a cached clean verdict stays valid.</summary>
     public static readonly Setting<int> HashCacheDays = new(7);
 
+    /// <summary>Skip files larger than this many MB before hashing (0 = no cap). VT's own upload
+    /// ceiling is ~650 MB, so very large files cannot be analyzed anyway.</summary>
+    public static readonly Setting<int> MaxFileSizeMB = new(0);
+
     /// <summary>Whether the Explorer context-menu entries have been installed.</summary>
     public static readonly Setting<bool> ContextMenuInstalled = new(false);
 
