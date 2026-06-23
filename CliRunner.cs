@@ -102,6 +102,7 @@ internal static class CliRunner
             if (json) { PrintJson([new ScanItem(hash) { Report = report, Md5 = report.Md5, Sha256 = report.Sha256 }]); return report.IsMalicious ? 1 : 0; }
             Console.WriteLine($"[{report.Verdict}] ({report.DetectionCount}/{report.TotalEngines})  {report.MeaningfulName ?? hash}");
             if (report.ConsensusText != null) Console.WriteLine("   " + report.ConsensusText);
+            if (report.FamilyLabel != null) Console.WriteLine("   " + report.FamilyLabel);
             foreach (var d in report.Detections.Take(15)) Console.WriteLine($"   - {d.EngineName}: {d.Result}");
             Console.WriteLine("   " + report.ReportUrl);
             return report.IsMalicious ? 1 : 0;

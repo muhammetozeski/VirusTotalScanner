@@ -184,6 +184,12 @@ internal sealed class VtApiClient
                 .Where(e => MajorEngines.IsMajor(e.EngineName))
                 .Select(e => e.EngineName)
                 .ToList();
+
+            if (DetectionFamily.MostCommon(report.Detections) is { } fam)
+            {
+                report.Family = fam.Family;
+                report.FamilyCount = fam.Count;
+            }
         }
 
         return report;

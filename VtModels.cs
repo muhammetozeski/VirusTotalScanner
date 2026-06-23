@@ -132,6 +132,15 @@ internal sealed class VtFileReport
     /// <summary>Major-engine names that flagged this file; stored so it survives in the summary cache.</summary>
     public List<string> MajorFlaggers { get; set; } = [];
 
+    /// <summary>Most-common normalized malware family across engines (e.g. "Swrort"), and how many
+    /// engines agree. Stored so it survives in the summary cache.</summary>
+    public string? Family { get; set; }
+    public int FamilyCount { get; set; }
+
+    [JsonIgnore]
+    public string? FamilyLabel => string.IsNullOrEmpty(Family) ? null
+        : $"🏷 En sık aile: {Family}" + (FamilyCount > 1 ? $" ({FamilyCount} motor)" : "");
+
     [JsonIgnore] public IEnumerable<VtEngineResult> Detections => Engines.Where(e => e.IsDetection);
     [JsonIgnore] public int DetectionCount => Malicious + Suspicious;
     [JsonIgnore] public int TotalEngines => Malicious + Suspicious + Harmless + Undetected + Timeout;

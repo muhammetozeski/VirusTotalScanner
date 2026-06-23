@@ -80,6 +80,8 @@ internal sealed class HashCache
             Undetected = report.Undetected,
             Timeout = report.Timeout,
             MajorFlaggers = report.MajorFlaggers,
+            Family = report.Family,
+            FamilyCount = report.FamilyCount,
         };
         _entries[md5] = new HashCacheEntry
         {
