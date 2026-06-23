@@ -30,16 +30,22 @@ VirusTotalScanner.exe <dosya|klasör> [...]   # tara
 Çıkış kodları: `0` temiz, `1` tehdit, `2` kullanım/IO, `3` anahtar yok.
 Betikte beklemek için: `Start-Process -Wait VirusTotalScanner.exe ...`
 
-## Anahtarsız / kotasız kontrol (imza ön-filtresi)
+## Anahtarsız / kotasız kontrol
 VirusTotal API'si her hash sorgusu için anahtar ister (kotaya sayılır); eski anahtarsız
-Cymru MHR servisi kapanmış, `vt` CLI de aynı anahtarı/kotayı kullanır. Bunun yerine uygulama
-**yerel kod imzası** kontrolü yapar: geçerli imzalı (gömülü VEYA katalog imzalı — örn. tüm
-Windows dosyaları) dosyalar `WinVerifyTrust` ile doğrulanıp **VT'ye hiç gönderilmez** —
-anahtar gerekmez, kota harcanmaz, pratikte sınırsız. Bu dosyalar "İmzalı (taranmadı)" diye
-işaretlenir; imza = yayıncı doğrulandı demektir, "temiz" garantisi DEĞİLDİR (yeşil rozet
-verilmez, "temiz" sayılmaz). Varsayılan: yalnızca Microsoft imzalılar atlanır; Ayarlar →
-Güven Kaynakları'ndan ek yayıncılar, "tüm geçerli imzalar" veya bir bilinen-temiz hash listesi
-eklenebilir. Bir dosyayı yine de VT'ye göndermek için sağ tık → "Güveni yok say, VT ile tara".
+Cymru MHR servisi kapanmış, `vt` CLI de aynı anahtarı/kotayı kullanır. İki gerçek anahtarsız yol var:
+
+**1) Yerel imza ön-filtresi.** Geçerli imzalı (gömülü VEYA katalog imzalı — örn. tüm Windows
+dosyaları) dosyalar `WinVerifyTrust` ile doğrulanıp **VT'ye hiç gönderilmez** — anahtar yok, kota
+yok, pratikte sınırsız. "İmzalı (taranmadı)" diye işaretlenir; imza = yayıncı doğrulandı demektir,
+"temiz" garantisi DEĞİLDİR (yeşil rozet verilmez). Varsayılan: yalnızca Microsoft imzalılar atlanır;
+Ayarlar → Güven Kaynakları'ndan ek yayıncı, "tüm geçerli imzalar" veya bilinen-temiz hash listesi
+eklenebilir. Sağ tık → "Güveni yok say, VT ile tara" ile zorla.
+
+**2) Anahtarsız GUI sorgusu (WebView2).** Ayarlar → Güven Kaynakları → "Anahtarsız sorgu" (veya CLI
+`--keyless`). Gizli bir tarayıcı (WebView2) VirusTotal'in herkese açık sayfasını açar ve sayfanın
+kendi veri çağrısının yanıtını yakalar — anahtar yok, kota yok, ama **yavaştır** ve yalnızca sorgu
+yapar (bilinmeyen dosyayı yükleyemez). Çalışması için Windows'ta WebView2 Runtime gerekir (Win11'de
+hazır gelir).
 
 ## Özellikler
 - MD5 ile var-mı kontrolü; yoksa ayrıntılı yükleme çubuğuyla yükleyip analiz bekler.
