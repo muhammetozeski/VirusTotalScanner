@@ -123,14 +123,12 @@ internal sealed class VtFileReport
     [JsonIgnore] public IEnumerable<VtEngineResult> Detections => Engines.Where(e => e.IsDetection);
     [JsonIgnore] public int DetectionCount => Malicious + Suspicious;
     [JsonIgnore] public int TotalEngines => Malicious + Suspicious + Harmless + Undetected + Timeout;
-    [JsonIgnore] public bool IsMalicious => Malicious > 0 || Suspicious > 0;
+    /// <summary>A "threat" per the user's verdict categories (e.g. 1 detection may count as clean).</summary>
+    [JsonIgnore] public bool IsMalicious => TotalEngines > 0 && VerdictCategories.IsThreat(DetectionCount);
     [JsonIgnore] public string ReportUrl => AppConstants.VtGuiFile + (Sha256 ?? Md5 ?? Sha1 ?? string.Empty);
 
     [JsonIgnore]
-    public string Verdict =>
-        Malicious > 0 ? "ZARARLI" :
-        Suspicious > 0 ? "ŞÜPHELİ" :
-        TotalEngines > 0 ? "TEMİZ" : "BİLİNMİYOR";
+    public string Verdict => TotalEngines > 0 ? VerdictCategories.Classify(DetectionCount).Name : "BİLİNMİYOR";
 
     /// <summary>Age + prevalence line: a 0/70 on a file the world first saw minutes ago is very
     /// different from a 0/70 on a years-old, widely-seen file.</summary>

@@ -93,12 +93,10 @@ internal static class Theme
         return true;
     }
 
-    public static Color VerdictColor(string verdict) => verdict switch
+    public static Color VerdictColor(string verdict)
     {
-        "ZARARLI" => Current.Danger,
-        "ŞÜPHELİ" => Current.Warning,
-        "TEMİZ" => Current.Success,
-        "İMZALI" => Current.Accent, // trusted-skip: neutral, NOT the green "clean"
-        _ => Current.SubtleText,
-    };
+        if (verdict == "İMZALI") return Current.Accent; // trusted-skip: neutral, NOT the green "clean"
+        var cat = VerdictCategories.ByName(verdict);
+        return cat?.Color ?? Current.SubtleText;
+    }
 }

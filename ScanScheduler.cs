@@ -245,8 +245,13 @@ internal sealed class ScanScheduler
     void Complete(ScanItem item, VtFileReport report)
     {
         SetStatus(item, ScanStatus.Completed);
-        if (report.Malicious > 0) Bump(ref _malicious);
-        else if (report.Suspicious > 0) Bump(ref _suspicious);
+        // Bucket by the user's verdict categories: highest band -> malicious, any other threat
+        // band -> suspicious, else clean.
+        if (report.TotalEngines > 0 && report.IsMalicious)
+        {
+            bool topBand = ReferenceEquals(VerdictCategories.Classify(report.DetectionCount), VerdictCategories.All[^1]);
+            if (topBand) Bump(ref _malicious); else Bump(ref _suspicious);
+        }
         else Bump(ref _clean);
     }
 

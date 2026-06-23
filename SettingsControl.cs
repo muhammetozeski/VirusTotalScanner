@@ -32,6 +32,7 @@ internal sealed class SettingsControl : UserControl
         _flow.Controls.Add(BuildKeysCard());
         _flow.Controls.Add(BuildContextMenuCard());
         _flow.Controls.Add(BuildTrustCard());
+        _flow.Controls.Add(BuildVerdictCard());
         _flow.Controls.Add(BuildScanCard());
         _flow.Controls.Add(BuildGeneralCard());
         _flow.Controls.Add(BuildAboutCard());
@@ -141,6 +142,62 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(allow);
         body.Controls.Add(dbRow);
         return card;
+    }
+
+    System.ComponentModel.BindingList<VerdictCategory>? _catRows;
+    DataGridView? _catGrid;
+
+    Panel BuildVerdictCard()
+    {
+        var card = Card("Verdict Kategorileri (tespit sayısı → ad + renk)", 250, out var body);
+
+        _catGrid = new DataGridView { Dock = DockStyle.Top, Height = 130, AutoGenerateColumns = false };
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min. tespit", DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Ad", DataPropertyName = nameof(VerdictCategory.Name), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Renk", Width = 110, ReadOnly = true });
+        _catGrid.ReadOnly = false;
+        _catGrid.AllowUserToAddRows = false;
+        _catGrid.CellFormatting += (_, e) =>
+        {
+            if (e.ColumnIndex == 2 && _catGrid.Rows[e.RowIndex].DataBoundItem is VerdictCategory c)
+            {
+                e.Value = c.ColorHex;
+                e.CellStyle!.BackColor = c.Color;
+                e.CellStyle.ForeColor = c.Color.GetBrightness() < 0.5 ? System.Drawing.Color.White : System.Drawing.Color.Black;
+            }
+        };
+        ThemeManager.StyleGrid(_catGrid);
+        _catGrid.ReadOnly = false; // re-enable after StyleGrid (which sets ReadOnly=true)
+
+        RefreshCats();
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
+        buttons.Controls.Add(ThemeManager.MakeButton("Ekle", (_, _) =>
+        {
+            int next = (_catRows!.Count == 0 ? 0 : _catRows.Max(c => c.MinDetections) + 1);
+            _catRows.Add(new VerdictCategory { MinDetections = next, Name = "Yeni", ColorHex = "#888888" });
+        }, accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton("Renk seç…", (_, _) =>
+        {
+            if (_catGrid.CurrentRow?.DataBoundItem is not VerdictCategory c) return;
+            using var dlg = new ColorDialog { Color = c.Color, FullOpen = true };
+            if (dlg.ShowDialog() == DialogResult.OK) { c.ColorHex = "#" + dlg.Color.R.ToString("X2") + dlg.Color.G.ToString("X2") + dlg.Color.B.ToString("X2"); _catGrid.Invalidate(); }
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton("Sil", (_, _) => { if (_catGrid.CurrentRow?.DataBoundItem is VerdictCategory c) _catRows!.Remove(c); }));
+        buttons.Controls.Add(ThemeManager.MakeButton("Kaydet", (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info("Kategoriler kaydedildi."); }));
+        buttons.Controls.Add(ThemeManager.MakeButton("Varsayılan", (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
+
+        body.Controls.Add(buttons);
+        body.Controls.Add(_catGrid);
+        body.Controls.Add(ThemeManager.MakeLabel("Eşikler benzersiz olmalı. Örn: 0→TEMİZ, 2→ŞÜPHELİ, 3→VİRÜS.", subtle: true));
+        return card;
+    }
+
+    void RefreshCats()
+    {
+        _catRows = new System.ComponentModel.BindingList<VerdictCategory>(
+            VerdictCategories.All.Select(c => new VerdictCategory { MinDetections = c.MinDetections, Name = c.Name, ColorHex = c.ColorHex }).ToList());
+        if (_catGrid != null) _catGrid.DataSource = _catRows;
     }
 
     Panel BuildScanCard()

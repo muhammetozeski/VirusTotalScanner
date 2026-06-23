@@ -19,6 +19,7 @@ internal static class AppServices
         if (_initialized) return;
         _initialized = true;
 
+        VerdictCategories.Load();
         Vault.Load();
         Cache.Load();
         KnownGoodDb.Reload();

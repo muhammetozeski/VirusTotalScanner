@@ -74,4 +74,7 @@ internal static class Settings
 
     /// <summary>The API-key vault: Base64(DPAPI(JSON of all keys + quota counters)).</summary>
     public static readonly Setting<string> EncryptedKeyVault = new("");
+
+    /// <summary>User-defined verdict categories (JSON list of {MinDetections, Name, ColorHex}).</summary>
+    public static readonly Setting<string> VerdictCategoriesJson = new("");
 }
