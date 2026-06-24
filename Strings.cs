@@ -240,6 +240,15 @@ internal static class Strings
     public static string ColProgress = "İlerleme";
     public static string StatusReady = "Hazır.";
 
+    // ---- trust evaluation reasons (shown as the skip reason) ----
+    public static string TrustUnsigned = "imzasız";
+    public static string TrustCertExpired = "sertifika süresi dolmuş";
+    public static string TrustCertRevoked = "sertifika iptal edilmiş";
+    public static string TrustUntrustedPublisher = "güvenilmeyen yayıncı";
+    public static string TrustChainFailed = "güven zinciri kurulamadı";
+    public static string TrustSigInvalid = "imza geçersiz";
+    public static string TrustUntrustedFormat = "güvenilmiyor (0x{0:X8})";
+
     // ---- recommendation (Keep / Caution / Remove) ----
     public static string RecoHeadlineKeep = "Güvenli tutulabilir";
     public static string RecoHeadlineCautionDontRun = "Dikkatli ol — henüz çalıştırma";
