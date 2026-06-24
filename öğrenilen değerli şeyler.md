@@ -80,3 +80,57 @@ Bu dosyaya, çözmesi zor olan sorunları ve çözümlerini kaydediyorum ki bir 
 ## Local tool: copy-finding by size
 - `es file: size:<bytes>` (Everything CLI) lists same-size FILES across all drives in ms; hash only
   those and keep exact sha256 matches. `file:` excludes folders (Everything indexes folder "size" too).
+
+## WinForms overlay z-order: two Dock.Fill siblings race (see docs/winforms-overlay-zorder.md)
+- Adding an overlay Panel `Dock=Fill` + `BringToFront()` over a grid that is ALSO `Dock=Fill` does NOT
+  reliably render on top — `--snapshot` showed the overlay behind the grid even after BringToFront and an
+  `OnHandleCreated` re-assert. Fix: don't overlay, SWAP — only one `Dock=Fill` control `Visible` at a time
+  (`_grid.Visible = !empty; _card.Visible = empty;`). No z-order race possible. The critic-snapshot caught it.
+
+## BindingList<T>.ListChanged fires on item PROPERTY changes too
+- It fires for `ItemChanged` whenever a contained item raises `PropertyChanged` (e.g. every per-file verdict
+  update during a scan — thousands). To react only to structural changes (add/clear), filter:
+  `if (e.ListChangedType is ItemAdded or ItemDeleted or Reset)`. Otherwise a cheap handler runs per row.
+
+## DataGridViewComboBoxColumn bound to an enum
+- Bind with `DataPropertyName = nameof(X.EnumProp)` + `DataSource = Enum.GetValues<TEnum>()`. A DataError
+  ("value is not valid") fires if a row's value isn't in the DataSource — so make the enum's DEFAULT member
+  (value 0) a real, listed value (here `ToastOnly = 0`), and new rows default to it. After `StyleGrid` (which
+  sets ReadOnly=true) re-enable editing: `grid.ReadOnly = false`.
+
+## Cross-volume File.Move is a non-atomic copy+delete (see docs/quarantine-move-safety.md)
+- `File.Move` across volumes silently degrades to copy-then-delete; a disk-full / USB-yank mid-copy leaves a
+  half target or a deleted-but-uncopied source. For sensitive moves (quarantine), preflight free space, and
+  when `GetPathRoot(src) != GetPathRoot(dst)` do an explicit `File.Copy` then `File.Delete`, cleaning the
+  half target and keeping the source if the copy throws. Same-volume keeps the atomic rename.
+
+## Real-time process-start guard via WMI (see docs/wmi-process-start-guard.md)
+- `Win32_ProcessStartTrace` (ManagementEventWatcher, `System.Management` NuGet) needs admin. Off by default;
+  degrade gracefully — if `!AdminHelper.IsRunningAsAdmin()` log + don't start, never throw. The image path of
+  the new PID comes from `Process.GetProcessById(pid).MainModule?.FileName` (wrap in try; short-lived/protected
+  processes deny access). `System.Management` 9.0.0 restores fine on `net10.0-windows`.
+
+## --snapshot only covers some tabs
+- The `--snapshot` harness captured tabs 0–3 (Overview/Scan/Quotas/Logs) only — NOT Settings or History. For
+  GUI changes on those tabs the critic-snapshot can't see them; rely on a clean build + mirroring a proven
+  on-screen pattern (e.g. the verdict-category DataGridView editor) instead.
+
+## Brainstorm orchestration: feed shipped + deferred lists to the proposers (see docs/keyless-vt-brainstorm-orchestration.md)
+- A proposer/critic Workflow re-proposes already-shipped or deferred ideas unless you pass the SHIPPED feature
+  list AND an explicit "ASLA ÖNERME (deferred): …" block in the prompt. Even so a duplicate slips through —
+  verify against the codebase before building and move true duplicates to `Brainstorm/Rejected` with a reason.
+- The `Workflow` tool always runs in the background; there is no `run_in_background` param (passing it errors).
+- A workflow hit the session token limit mid-run (0/10 kept); after the quota reset, re-invoking with the same
+  `scriptPath` (no resume needed since nothing cached) re-ran it cleanly.
+
+## Autonomous loop: implicit questions are still questions (see docs/autonomous-loop-discipline.md)
+- The single worst loop failure: ending a turn with a plain-prose "devam dersen build ederim, yoksa
+  bekliyorum" — no tool call, but functionally identical to asking (I stopped, deferred to the user). The ban
+  is on the FUNCTION not the tool. Also forbidden: treating a status summary as a stop while the queue has
+  work, and treating "did a lot / context full" as a reason to pause. The cron heartbeat is the ONLY sanctioned
+  cross-turn continuation. Verdict band / protection-sensitive logic must stay correct; defer truly
+  unverifiable work (live-VT scrape, large-tree streaming) with notes rather than ship it unverified.
+
+## `bildirim` and apostrophes
+- The `bildirim` PowerShell command wraps the message in single quotes internally, so an apostrophe in the
+  body (`master'a`) breaks parsing. Keep notification titles/bodies ASCII and apostrophe-free.
