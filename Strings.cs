@@ -92,6 +92,30 @@ internal static class Strings
     public static string ColFirstSeen = "İlk görülme";
     public static string ColPaths = "Yollar";
 
+    // ---- scan queue control: extra bar buttons ----
+    public static string BtnVerifyHash = "✓  Hash doğrula";
+    public static string BtnScanRunning = "🔬  Çalışanları tara";
+    public static string BtnIntegrityCheck = "🛡  Bütünlük denetimi";
+    public static string BtnFamilyClusters = "🧬  Aile kümeleri";
+    public static string BtnQuarantineVault = "🗄  Karantina kasası";
+
+    // ---- scan queue control: right-click menu ----
+    public static string MenuOpenVt = "🔗  VirusTotal'de aç";
+    public static string MenuCopy = "📋  Kopyala";
+    public static string MenuCopyFilePath = "Dosya yolu";
+    public static string MenuCopyFileName = "Dosya adı";
+    public static string MenuCopyVerdictLine = "Verdikt satırı";
+    public static string MenuRevealFile = "📁  Dosya konumunu aç";
+    public static string MenuNeighbors = "📂  Klasör komşuları";
+    public static string MenuFindCopies = "🔁  Diğer kopyaları bul (disk)";
+    public static string MenuPinBaseline = "📌  Bütünlük izlemesine al";
+    public static string MenuHuntPersistence = "🪝  Autostart kancalarını bul";
+    public static string MenuRescan = "🔄  Yeniden tara";
+    public static string MenuRescanNoTrust = "🛡  Güveni yok say, VT ile tara";
+    public static string MenuQuarantine = "⚠  Karantinaya al (.VIRUS)";
+
+    public static string ProgressSummaryFormat = "Toplam {0} • Tamamlanan {1} • Zararlı {2} • Şüpheli {3} • Temiz {4} • İmzalı↷atlandı {5} • Hata {6}";
+
     // ---- quarantine vault dialog ----
     public static string DlgVaultTitle = "🗄 Karantina kasası";
     public static string ColDate = "Tarih (UTC)";

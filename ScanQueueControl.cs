@@ -40,9 +40,9 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFiles, (_, _) => SelectFiles(), accent: true));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFolder, (_, _) => SelectFolder(), accent: true));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHashLookup, (_, _) => _ = HashLookupAsync()));
-        bar.Controls.Add(ThemeManager.MakeButton("✓  Hash doğrula", (_, _) => _ = VerifyHashAsync()));
-        bar.Controls.Add(ThemeManager.MakeButton("🔬  Çalışanları tara", (_, _) => ScanRunning()));
-        bar.Controls.Add(ThemeManager.MakeButton("🛡  Bütünlük denetimi", (_, _) => _ = VerifyBaselineAsync()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnVerifyHash, (_, _) => _ = VerifyHashAsync()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnScanRunning, (_, _) => ScanRunning()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnIntegrityCheck, (_, _) => _ = VerifyBaselineAsync()));
         _pauseBtn = ThemeManager.MakeButton(Strings.BtnPause, (_, _) => TogglePause());
         _cancelBtn = ThemeManager.MakeButton(Strings.BtnCancel, (_, _) => _scheduler.Cancel());
         bar.Controls.Add(_pauseBtn);
@@ -50,8 +50,8 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportCsv, (_, _) => ExportCsv()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportReport, (_, _) => ExportReport()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFolderRollup, (_, _) => ShowFolderRollup()));
-        bar.Controls.Add(ThemeManager.MakeButton("🧬  Aile kümeleri", (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
-        bar.Controls.Add(ThemeManager.MakeButton("🗄  Karantina kasası", (_, _) => ShowQuarantineVault()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFamilyClusters, (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnQuarantineVault, (_, _) => ShowQuarantineVault()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
         var hint = ThemeManager.MakeLabel(Strings.DropHint, subtle: true);
@@ -121,26 +121,26 @@ internal sealed class ScanQueueControl : UserControl
         _grid.CellFormatting += Grid_CellFormatting;
 
         var menu = new ContextMenuStrip();
-        var miOpenVt = (ToolStripMenuItem)menu.Items.Add("🔗  VirusTotal'de aç", null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
+        var miOpenVt = (ToolStripMenuItem)menu.Items.Add(Strings.MenuOpenVt, null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
 
-        var copyMenu = new ToolStripMenuItem("📋  Kopyala");
+        var copyMenu = new ToolStripMenuItem(Strings.MenuCopy);
         copyMenu.DropDownItems.Add("SHA-256", null, (_, _) => CopySafe(SelectedItem()?.Sha256));
         copyMenu.DropDownItems.Add("MD5", null, (_, _) => CopySafe(SelectedItem()?.Md5));
-        copyMenu.DropDownItems.Add("Dosya yolu", null, (_, _) => CopySafe(SelectedItem()?.FilePath));
-        copyMenu.DropDownItems.Add("Dosya adı", null, (_, _) => CopySafe(SelectedItem()?.FileName));
-        copyMenu.DropDownItems.Add("Verdikt satırı", null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(VerdictLine(i)); });
+        copyMenu.DropDownItems.Add(Strings.MenuCopyFilePath, null, (_, _) => CopySafe(SelectedItem()?.FilePath));
+        copyMenu.DropDownItems.Add(Strings.MenuCopyFileName, null, (_, _) => CopySafe(SelectedItem()?.FileName));
+        copyMenu.DropDownItems.Add(Strings.MenuCopyVerdictLine, null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(VerdictLine(i)); });
         menu.Items.Add(copyMenu);
 
-        var miReveal = (ToolStripMenuItem)menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
-        var miNeighbors = (ToolStripMenuItem)menu.Items.Add("📂  Klasör komşuları", null, (_, _) => ShowNeighbors());
-        var miFindCopies = (ToolStripMenuItem)menu.Items.Add("🔁  Diğer kopyaları bul (disk)", null, (_, _) => _ = FindCopiesAsync());
-        var miPin = (ToolStripMenuItem)menu.Items.Add("📌  Bütünlük izlemesine al", null, (_, _) => _ = PinBaselineAsync());
-        var miPersist = (ToolStripMenuItem)menu.Items.Add("🪝  Autostart kancalarını bul", null, (_, _) => HuntPersistence());
+        var miReveal = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRevealFile, null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
+        var miNeighbors = (ToolStripMenuItem)menu.Items.Add(Strings.MenuNeighbors, null, (_, _) => ShowNeighbors());
+        var miFindCopies = (ToolStripMenuItem)menu.Items.Add(Strings.MenuFindCopies, null, (_, _) => _ = FindCopiesAsync());
+        var miPin = (ToolStripMenuItem)menu.Items.Add(Strings.MenuPinBaseline, null, (_, _) => _ = PinBaselineAsync());
+        var miPersist = (ToolStripMenuItem)menu.Items.Add(Strings.MenuHuntPersistence, null, (_, _) => HuntPersistence());
         menu.Items.Add(new ToolStripSeparator());
-        var miRescan = (ToolStripMenuItem)menu.Items.Add("🔄  Yeniden tara", null, (_, _) => RescanSelected());
-        var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add("🛡  Güveni yok say, VT ile tara", null, (_, _) => RescanIgnoringTrust());
+        var miRescan = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescan, null, (_, _) => RescanSelected());
+        var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescanNoTrust, null, (_, _) => RescanIgnoringTrust());
         menu.Items.Add(new ToolStripSeparator());
-        var miQuarantine = (ToolStripMenuItem)menu.Items.Add("⚠  Karantinaya al (.VIRUS)", null, (_, _) => QuarantineSelected());
+        var miQuarantine = (ToolStripMenuItem)menu.Items.Add(Strings.MenuQuarantine, null, (_, _) => QuarantineSelected());
 
         // Context-aware: disable actions that don't apply to the selected row's current state.
         menu.Opening += (_, e) =>
@@ -566,7 +566,7 @@ internal sealed class ScanQueueControl : UserControl
     void OnProgress(OverallProgress p)
     {
         _overall.Value = Math.Clamp((int)p.Percent, 0, 100);
-        _summary.Text = $"Toplam {p.Total} • Tamamlanan {p.Done} • Zararlı {p.Malicious} • Şüpheli {p.Suspicious} • Temiz {p.Clean} • İmzalı↷atlandı {p.SignedSkipped} • Hata {p.Failed}";
+        _summary.Text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed);
     }
 
     void OnItemFinished(ScanItem item)
