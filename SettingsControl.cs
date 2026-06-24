@@ -56,21 +56,21 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildKeysCard()
     {
-        var card = Card("API Anahtarları", 270, out var body);
+        var card = Card(Strings.CardApiKeys, 270, out var body);
 
         _keysGrid.Dock = DockStyle.Top;
         _keysGrid.Height = 150;
         _keysGrid.AutoGenerateColumns = false;
-        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Etiket", DataPropertyName = nameof(KeyRow.Label), Width = 160 });
-        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Anahtar", DataPropertyName = nameof(KeyRow.Anahtar), Width = 160 });
-        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Durum", DataPropertyName = nameof(KeyRow.Durum), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColLabel, DataPropertyName = nameof(KeyRow.Label), Width = 160 });
+        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColKey, DataPropertyName = nameof(KeyRow.Anahtar), Width = 160 });
+        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(KeyRow.Durum), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         ThemeManager.StyleGrid(_keysGrid);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
-        buttons.Controls.Add(ThemeManager.MakeButton("Ekle…", (_, _) => AddKey(), accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("Düzenle…", (_, _) => EditKey()));
-        buttons.Controls.Add(ThemeManager.MakeButton("Sil", (_, _) => RemoveKey()));
-        var hint = ThemeManager.MakeLabel("Birden çok anahtar ekleyebilirsiniz; biri dolunca diğerine geçilir.", subtle: true);
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAdd, (_, _) => AddKey(), accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnEdit, (_, _) => EditKey()));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => RemoveKey()));
+        var hint = ThemeManager.MakeLabel(Strings.KeysHint, subtle: true);
 
         body.Controls.Add(hint);
         body.Controls.Add(buttons);
@@ -80,17 +80,17 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildContextMenuCard()
     {
-        var card = Card("Sağ Tuş Menüsü", 180, out var body);
+        var card = Card(Strings.CardContextMenu, 180, out var body);
         _menuStatus.AutoSize = true;
         _menuStatus.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
 
-        var excludeSafe = new CheckBox { Text = "Güvenli türlerde (txt, resim, video…) menüde gösterme", AutoSize = true, Checked = Settings.ContextMenuExcludeSafe };
+        var excludeSafe = new CheckBox { Text = Strings.CtxExcludeSafe, AutoSize = true, Checked = Settings.ContextMenuExcludeSafe };
         excludeSafe.CheckedChanged += (_, _) => { Settings.ContextMenuExcludeSafe.Value = excludeSafe.Checked; SettingsManager.SaveSettings(); };
 
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        buttons.Controls.Add(ThemeManager.MakeButton("Sağ tuşa ekle (yönetici)", (_, _) => InstallMenu(), accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("Onar", (_, _) => RunMenuOp(() => ContextMenuInstaller.Repair(out var e), "Onarıldı.")));
-        buttons.Controls.Add(ThemeManager.MakeButton("Kaldır", (_, _) => RunMenuOp(() => ContextMenuInstaller.Uninstall(out var e), "Kaldırıldı.")));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnCtxInstall, (_, _) => InstallMenu(), accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRepair, (_, _) => RunMenuOp(() => ContextMenuInstaller.Repair(out var e), Strings.CtxRepaired)));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRemove, (_, _) => RunMenuOp(() => ContextMenuInstaller.Uninstall(out var e), Strings.CtxRemoved)));
 
         body.Controls.Add(excludeSafe);
         body.Controls.Add(buttons);
@@ -100,40 +100,38 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildTrustCard()
     {
-        var card = Card("Güven Kaynakları (kota tasarrufu)", 330, out var body);
+        var card = Card(Strings.CardTrust, 330, out var body);
 
-        var info = ThemeManager.MakeLabel(
-            "Geçerli kod imzası olan dosyalar kota harcamamak için VT'ye gönderilmez.\n" +
-            "Not: imza güveni = yayıncı doğrulandı demektir, \"temiz\" garantisi değildir.", subtle: true);
+        var info = ThemeManager.MakeLabel(Strings.TrustInfo, subtle: true);
 
-        var skipSigned = new CheckBox { Text = "İmzalı dosyaları VT'ye gönderme (anahtarsız, sınırsız)", AutoSize = true, Checked = Settings.TrustSkipSigned };
+        var skipSigned = new CheckBox { Text = Strings.TrustSkipSignedLabel, AutoSize = true, Checked = Settings.TrustSkipSigned };
         skipSigned.CheckedChanged += (_, _) => { Settings.TrustSkipSigned.Value = skipSigned.Checked; SettingsManager.SaveSettings(); };
 
-        var msOnly = new CheckBox { Text = "Yalnızca Microsoft imzalı dosyaları atla (güvenli varsayılan)", AutoSize = true, Checked = Settings.TrustMicrosoftOnly };
+        var msOnly = new CheckBox { Text = Strings.TrustMsOnlyLabel, AutoSize = true, Checked = Settings.TrustMicrosoftOnly };
         msOnly.CheckedChanged += (_, _) => { Settings.TrustMicrosoftOnly.Value = msOnly.Checked; SettingsManager.SaveSettings(); };
 
-        var allowLbl = ThemeManager.MakeLabel("Ek güvenilen yayıncılar (CN, ; ile ayır):");
+        var allowLbl = ThemeManager.MakeLabel(Strings.TrustAllowLabel);
         var allow = new TextBox { Dock = DockStyle.Top, Text = Settings.TrustPublisherAllowList };
         allow.Leave += (_, _) => { Settings.TrustPublisherAllowList.Value = allow.Text.Trim(); SettingsManager.SaveSettings(); };
 
         var dbRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
         var dbBox = new TextBox { Width = 360, Text = Settings.KnownGoodHashDbPath, ReadOnly = true };
-        var pick = ThemeManager.MakeButton("Bilinen-temiz hash listesi seç…", (_, _) =>
+        var pick = ThemeManager.MakeButton(Strings.TrustPickHashList, (_, _) =>
         {
-            using var dlg = new OpenFileDialog { Filter = "Metin/hash listesi|*.txt;*.csv;*.*" };
+            using var dlg = new OpenFileDialog { Filter = Strings.TrustHashFilter };
             if (dlg.ShowDialog() == DialogResult.OK)
             {
                 Settings.KnownGoodHashDbPath.Value = dlg.FileName;
                 SettingsManager.SaveSettings();
                 dbBox.Text = dlg.FileName;
                 KnownGoodDb.Reload();
-                NativeMessageBox.Info($"{KnownGoodDb.Count} hash yüklendi.");
+                NativeMessageBox.Info(string.Format(Strings.TrustHashLoadedFormat, KnownGoodDb.Count));
             }
         });
         dbRow.Controls.Add(dbBox);
         dbRow.Controls.Add(pick);
 
-        var keyless = new CheckBox { Text = "Anahtarsız sorgu: VirusTotal'i GUI üzerinden aç (yavaş, kotasız)", AutoSize = true, Checked = Settings.KeylessGuiLookup };
+        var keyless = new CheckBox { Text = Strings.TrustKeylessLabel, AutoSize = true, Checked = Settings.KeylessGuiLookup };
         keyless.CheckedChanged += (_, _) => { Settings.KeylessGuiLookup.Value = keyless.Checked; SettingsManager.SaveSettings(); };
 
         body.Controls.Add(info);
@@ -469,7 +467,7 @@ internal sealed class SettingsControl : UserControl
             Id = k.Id,
             Label = string.IsNullOrWhiteSpace(k.Label) ? "Key" : k.Label,
             Anahtar = k.Masked,
-            Durum = k.Disabled ? "Devre dışı" : k.IsExhausted(now) ? "Dolu" : "Aktif",
+            Durum = k.Disabled ? Strings.KeyStatusDisabled : k.IsExhausted(now) ? Strings.KeyStatusExhausted : Strings.KeyStatusActive,
         }).ToList();
         _keysGrid.DataSource = rows;
     }

@@ -64,6 +64,38 @@ internal static class Strings
     public static string DlgCancel = "İptal";
     public static string BtnSave = "Kaydet";
 
+    // ---- settings: API keys card ----
+    public static string CardApiKeys = "API Anahtarları";
+    public static string ColLabel = "Etiket";
+    public static string ColKey = "Anahtar";
+    public static string BtnAdd = "Ekle…";
+    public static string BtnEdit = "Düzenle…";
+    public static string BtnDelete = "Sil";
+    public static string KeysHint = "Birden çok anahtar ekleyebilirsiniz; biri dolunca diğerine geçilir.";
+    public static string KeyStatusDisabled = "Devre dışı";
+    public static string KeyStatusExhausted = "Dolu";
+    public static string KeyStatusActive = "Aktif";
+
+    // ---- settings: context-menu card ----
+    public static string CardContextMenu = "Sağ Tuş Menüsü";
+    public static string CtxExcludeSafe = "Güvenli türlerde (txt, resim, video…) menüde gösterme";
+    public static string BtnCtxInstall = "Sağ tuşa ekle (yönetici)";
+    public static string BtnRepair = "Onar";
+    public static string CtxRepaired = "Onarıldı.";
+    public static string BtnRemove = "Kaldır";
+    public static string CtxRemoved = "Kaldırıldı.";
+
+    // ---- settings: trust sources card ----
+    public static string CardTrust = "Güven Kaynakları (kota tasarrufu)";
+    public static string TrustInfo = "Geçerli kod imzası olan dosyalar kota harcamamak için VT'ye gönderilmez.\nNot: imza güveni = yayıncı doğrulandı demektir, \"temiz\" garantisi değildir.";
+    public static string TrustSkipSignedLabel = "İmzalı dosyaları VT'ye gönderme (anahtarsız, sınırsız)";
+    public static string TrustMsOnlyLabel = "Yalnızca Microsoft imzalı dosyaları atla (güvenli varsayılan)";
+    public static string TrustAllowLabel = "Ek güvenilen yayıncılar (CN, ; ile ayır):";
+    public static string TrustPickHashList = "Bilinen-temiz hash listesi seç…";
+    public static string TrustHashFilter = "Metin/hash listesi|*.txt;*.csv;*.*";
+    public static string TrustHashLoadedFormat = "{0} hash yüklendi.";
+    public static string TrustKeylessLabel = "Anahtarsız sorgu: VirusTotal'i GUI üzerinden aç (yavaş, kotasız)";
+
     // ---- API key dialog ----
     public static string DlgApiKeyAddTitle = "API anahtarı ekle";
     public static string DlgApiKeyEditTitle = "API anahtarını düzenle";
