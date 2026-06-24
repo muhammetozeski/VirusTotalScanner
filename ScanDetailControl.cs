@@ -9,7 +9,11 @@ namespace VirusTotalScanner;
 internal sealed class ScanDetailControl : UserControl
 {
     readonly VerdictHeroPanel _hero = new();
+    readonly FlowLayoutPanel _actionStrip = new() { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 6), Visible = false };
     readonly Label _meta = new();
+
+    /// <summary>The user chose the recommended action from the detail pane's guided strip.</summary>
+    public event Action<ScanItem>? QuarantineRequested, RescanRequested;
     readonly Label _stats = new();
     readonly Panel _ratioBar = new();
     readonly Label _md5 = new();
@@ -26,9 +30,10 @@ internal sealed class ScanDetailControl : UserControl
         Dock = DockStyle.Fill;
         Padding = new Padding(12);
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7, BackColor = Color.Transparent };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8, BackColor = Color.Transparent };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104)); // verdict hero card
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // guided action strip
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // meta
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // hashes
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // stats
@@ -140,12 +145,13 @@ internal sealed class ScanDetailControl : UserControl
         _empty.Tag = "subtle";
 
         root.Controls.Add(_hero, 0, 0);
-        root.Controls.Add(_meta, 0, 1);
-        root.Controls.Add(hashPanel, 0, 2);
-        root.Controls.Add(_stats, 0, 3);
-        root.Controls.Add(_ratioBar, 0, 4);
-        root.Controls.Add(togglePanel, 0, 5);
-        root.Controls.Add(_engines, 0, 6);
+        root.Controls.Add(_actionStrip, 0, 1);
+        root.Controls.Add(_meta, 0, 2);
+        root.Controls.Add(hashPanel, 0, 3);
+        root.Controls.Add(_stats, 0, 4);
+        root.Controls.Add(_ratioBar, 0, 5);
+        root.Controls.Add(togglePanel, 0, 6);
+        root.Controls.Add(_engines, 0, 7);
 
         Controls.Add(root);
         Controls.Add(_empty);
@@ -243,6 +249,7 @@ internal sealed class ScanDetailControl : UserControl
         {
             _empty.Visible = true;
             _empty.BringToFront();
+            _actionStrip.Visible = false;
             _engines.DataSource = null;
             return;
         }
@@ -252,6 +259,7 @@ internal sealed class ScanDetailControl : UserControl
         {
             _hero.Set(Strings.StatusSignedShort, "VirusTotal taraması atlandı",
                 RecommendationService.Build(item!).Headline, "✓", Theme.Current.Accent);
+            _actionStrip.Visible = false;
             _meta.Text =
                 $"{Strings.DetailLblFile}{item!.FileName}\n" +
                 $"{Strings.DetailLblStatus}{item.SkipReason ?? Strings.StatusSignedShort}" +
@@ -277,6 +285,7 @@ internal sealed class ScanDetailControl : UserControl
         string heroGlyph = report.IsMalicious ? "✕" : report.DetectionCount > 0 ? "!" : report.TotalEngines == 0 ? "?" : "✓";
         _hero.Set(verdict, string.Format(Strings.BannerVerdictFormat, verdict, report.DetectionCount, report.TotalEngines),
             reco.Headline, heroGlyph, Theme.VerdictColor(verdict));
+        BuildActionStrip(reco);
         _meta.Text =
             $"👉 {reco.Emoji} {reco.Headline}\n{reco.Rationale}\n\n" +
             $"{Strings.DetailLblName}{report.MeaningfulName ?? item.FileName}\n" +
@@ -307,6 +316,23 @@ internal sealed class ScanDetailControl : UserControl
         // Cached entries keep only the summary (no per-engine list) to stay small.
         if (report.Engines.Count == 0 && report.TotalEngines > 0)
             _stats.Text += Strings.StatsCacheNote;
+    }
+
+    /// <summary>Guided next step: surface the recommended action inline (primary highlighted) so the
+    /// user is led to one obvious safe move at the alarming moment instead of hunting the right-click menu.</summary>
+    void BuildActionStrip(RecommendationService.Reco reco)
+    {
+        _actionStrip.Controls.Clear();
+        if (reco.Level == RecommendationService.Level.Keep) { _actionStrip.Visible = false; return; }
+
+        bool remove = reco.Level == RecommendationService.Level.Remove;
+        var quar = ThemeManager.MakeButton("🛡  Karantinaya al", (_, _) => { if (_item != null) QuarantineRequested?.Invoke(_item); }, accent: remove);
+        var rescan = ThemeManager.MakeButton("🔄  Önce yeniden tara", (_, _) => { if (_item != null) RescanRequested?.Invoke(_item); }, accent: !remove);
+        var vt = ThemeManager.MakeButton("🔗  VT raporu", (_, _) => { if (_item?.Report != null) OpenUrlInBrowser(_item.Report.ReportUrl); });
+        if (remove) { _actionStrip.Controls.Add(quar); _actionStrip.Controls.Add(rescan); }
+        else { _actionStrip.Controls.Add(rescan); _actionStrip.Controls.Add(quar); }
+        _actionStrip.Controls.Add(vt);
+        _actionStrip.Visible = true;
     }
 
     void RatioBar_Paint(object? sender, PaintEventArgs e)

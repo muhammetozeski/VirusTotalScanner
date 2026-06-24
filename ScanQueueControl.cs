@@ -118,6 +118,8 @@ internal sealed class ScanQueueControl : UserControl
         Controls.Add(root);
 
         _grid.SelectionChanged += (_, _) => { var it = SelectedItem(); _detail.Show(it); UpdateRecallBar(it); };
+        _detail.QuarantineRequested += QuarantineItem;
+        _detail.RescanRequested += i => { if (File.Exists(i.FilePath)) StartScan([i.FilePath], recurse: false); };
 
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
         _scheduler.ProgressChanged += OnProgress;
@@ -644,6 +646,19 @@ internal sealed class ScanQueueControl : UserControl
     {
         var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
         if (paths.Length > 0) StartScan(paths, recurse: false, bypassTrust: true);
+    }
+
+    /// <summary>Quarantine one specific item (from the detail-pane action strip), with the undo bar.</summary>
+    void QuarantineItem(ScanItem i)
+    {
+        if (!File.Exists(i.FilePath)) return;
+        if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.QuarantineConfirmFormat, i.FileName))) return;
+        if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err))
+        {
+            var entry = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, i.FilePath, StringComparison.OrdinalIgnoreCase));
+            if (entry != null) ShowQuarantineUndo(i.FileName, entry); else NativeMessageBox.Info(Strings.QuarantineDoneInfo);
+        }
+        else NativeMessageBox.Error(Strings.QuarantineFailedPrefix + err);
     }
 
     void QuarantineSelected()
