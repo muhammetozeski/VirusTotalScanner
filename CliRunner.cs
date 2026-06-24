@@ -170,6 +170,8 @@ internal static class CliRunner
             if (report == null) { Console.WriteLine("Bulunamadı (VT'de yok)."); return 0; }
             if (json) { PrintJson([new ScanItem(hash) { Report = report, Md5 = report.Md5, Sha256 = report.Sha256 }]); return report.IsMalicious ? 1 : 0; }
             Console.WriteLine($"[{report.Verdict}] ({report.DetectionCount}/{report.TotalEngines})  {report.MeaningfulName ?? hash}");
+            var reco = RecommendationService.Build(new ScanItem(hash) { Report = report });
+            Console.WriteLine($"   👉 {reco.Headline} — {reco.Rationale}");
             if (report.ConsensusText != null) Console.WriteLine("   " + report.ConsensusText);
             if (report.ConfidenceText != null) Console.WriteLine("   " + report.ConfidenceText);
             if (report.FamilyLabel != null) Console.WriteLine("   " + report.FamilyLabel);

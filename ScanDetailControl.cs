@@ -198,7 +198,9 @@ internal sealed class ScanDetailControl : UserControl
         // Provenance line: where this verdict came from.
         string provenance = item!.FromCache ? "Kaynak: yerel önbellek (VT raporu)" : "Kaynak: VirusTotal taraması";
 
+        var reco = RecommendationService.Build(item);
         _meta.Text =
+            $"👉 {reco.Emoji} {reco.Headline}\n{reco.Rationale}\n\n" +
             $"Ad: {report.MeaningfulName ?? item.FileName}\n" +
             $"Tür: {report.TypeDescription ?? "?"}\n" +
             $"Boyut: {(report.Size > 0 ? FormatBytes(report.Size) : item.SizeText)}" +
