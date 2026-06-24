@@ -24,6 +24,7 @@ internal sealed class CliOptions
     public bool ExpandArchives;
     public bool Running;
     public bool VerifyBaseline;
+    public string? DriftReport;
     public bool ShowHelp;
     public bool ShowVersion;
     public bool InstallMenu;
@@ -52,6 +53,7 @@ internal static class ArgumentDef
     static readonly CmdArg ExpandArchives = new("--expand-archives", "--expand");
     static readonly CmdArg Running = new("--running", "--processes");
     static readonly CmdArg VerifyBaseline = new("--verify-baseline", "--baseline");
+    static readonly CmdArg DriftReport = new("--drift-report", "--drift");
     static readonly CmdArg NoGui = new("--nogui", "-n");
     static readonly CmdArg Cli = new("--cli", "-c");
     static readonly CmdArg Gui = new("--gui", "-g");
@@ -88,6 +90,7 @@ internal static class ArgumentDef
             else if (ExpandArchives.IsMatch(a)) o.ExpandArchives = true;
             else if (Running.IsMatch(a)) { o.Running = true; o.NoGui = true; }
             else if (VerifyBaseline.IsMatch(a)) { o.VerifyBaseline = true; o.NoGui = true; }
+            else if (DriftReport.IsMatch(a)) { if (i + 1 < args.Length) o.DriftReport = args[++i]; o.NoGui = true; }
             else if (NoGui.IsMatch(a) || Cli.IsMatch(a)) o.NoGui = true;
             else if (Gui.IsMatch(a)) o.ForceGui = true;
             else if (Tray.IsMatch(a)) { o.Tray = true; o.ForceGui = true; }

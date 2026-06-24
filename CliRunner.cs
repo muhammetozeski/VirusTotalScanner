@@ -26,6 +26,7 @@ internal static class CliRunner
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
         if (opts.VerifyBaseline) return await VerifyBaselineCmd();
+        if (opts.DriftReport != null) return await DriftReportCmd(opts.DriftReport);
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;
@@ -110,6 +111,34 @@ internal static class CliRunner
             Console.WriteLine($"\nBitti. {total} dosya tarandı, {mal} tehdit bulundu.");
         }
         return threat ? 1 : 0;
+    }
+
+    static async Task<int> DriftReportCmd(string path)
+    {
+        var due = RecheckService.DueForRecheck(AppServices.Cache, 0); // re-check every cached entry
+        if (due.Count == 0) { Console.WriteLine("Önbellekte denetlenecek kayıt yok."); return 0; }
+        Console.WriteLine($"{due.Count} önbellek kaydı yeniden denetleniyor (kotasız)…");
+        var changes = await RecheckService.RunAsync(AppServices.Cache, due, null, default);
+
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+        var sb = new System.Text.StringBuilder();
+        if (ext == ".csv")
+        {
+            sb.AppendLine("SHA256,OldVerdict,OldDetections,NewVerdict,NewDetections,GotWorse,ReportUrl");
+            foreach (var c in changes)
+                sb.AppendLine($"{c.Sha256},{c.OldVerdict},{c.OldDetections},{c.NewVerdict},{c.NewDetections},{c.GotWorse},{c.Url}");
+        }
+        else
+        {
+            sb.AppendLine($"Verdict drift — {changes.Count} değişiklik / {due.Count} denetlendi");
+            foreach (var c in changes)
+                sb.AppendLine($"{(c.GotWorse ? "⬆ kötüleşti" : "⬇ iyileşti")}: {c.OldVerdict}({c.OldDetections}) → {c.NewVerdict}({c.NewDetections})  {c.Url}");
+        }
+        try { File.WriteAllText(path, sb.ToString(), new System.Text.UTF8Encoding(false)); }
+        catch (Exception ex) { Console.Error.WriteLine("Rapor yazılamadı: " + ex.Message); return 2; }
+
+        Console.WriteLine($"{changes.Count} verdikt değişikliği yazıldı: {path}");
+        return changes.Any(c => c.GotWorse) ? 1 : 0;
     }
 
     static async Task<int> VerifyBaselineCmd()
