@@ -73,6 +73,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFamilyClusters, (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnQuarantineVault, (_, _) => ShowQuarantineVault()));
         bar.Controls.Add(ThemeManager.MakeButton("🕓  Olay zaman çizelgesi", (_, _) => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); }));
+        bar.Controls.Add(ThemeManager.MakeButton("📥  İndirilenler triyajı", (_, _) => { using var d = new DownloadsTriageDialog(); d.ScanRequested += paths => StartScan(paths, recurse: false); d.ShowDialog(FindForm()); }));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
         bar.Controls.Add(ThemeManager.MakeButton("❓  Yardım", (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
