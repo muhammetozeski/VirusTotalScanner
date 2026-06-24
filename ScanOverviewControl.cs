@@ -175,11 +175,24 @@ internal sealed class ScanOverviewControl : UserControl
         if (all.Count == 0)
             _recent.Controls.Add(ThemeManager.MakeLabel("Henüz tarama yok — yukarıdan bir dosya bırak.", subtle: true));
 
+        // Recency: lifetime tiles can't tell "clean today" from "haven't scanned in months".
+        DateTime? lastScan = all.Count > 0 ? all.Max(e => e.WhenUtc) : null;
+        string recency;
+        if (lastScan == null) { recency = "Son tarama: hiç"; _stale = true; }
+        else
+        {
+            var ago = DateTime.UtcNow - lastScan.Value;
+            string when = ago.TotalHours < 24 ? "bugün" : ago.TotalDays < 2 ? "dün" : $"{(int)ago.TotalDays} gün önce";
+            recency = "Son tarama: " + when;
+            _stale = ago.TotalDays > Math.Max(1, Settings.RecheckPeriodDays);
+        }
+
         int usable = AppServices.Vault.UsableKeyCount, total = AppServices.Vault.Keys.Count;
         int watching = ReverdictWatchStore.Count;
-        _quota.Text = $"Anahtar: {usable}/{total} kullanılabilir"
+        _quota.Text = recency + $"   •   Anahtar: {usable}/{total} kullanılabilir"
             + (Settings.KeylessGuiLookup ? "  •  anahtarsız (GUI) mod açık" : "")
             + (watching > 0 ? $"  •  👁 {watching} dosya izleniyor" : "");
+        _quota.ForeColor = _stale ? Theme.Current.Warning : Theme.Current.Text;
 
         UpdateAttention(tehdit);
         UpdateStatusBanner();
@@ -281,6 +294,7 @@ internal sealed class ScanOverviewControl : UserControl
         SetBanner("🟢  Korunuyorsun", "Diskte bilinen canlı tehdit yok.", Theme.Current.Success, "", null);
     }
 
+    bool _stale; // newest scan older than the recheck period (or never scanned)
     string? _sweepNotice;
     /// <summary>Set by the host when a scheduled sweep found threats while the app was closed — shown in
     /// the attention strip until the user acts on it.</summary>
@@ -290,6 +304,7 @@ internal sealed class ScanOverviewControl : UserControl
     {
         var msgs = new List<string>();
         if (!string.IsNullOrEmpty(_sweepNotice)) msgs.Add(_sweepNotice);
+        if (_stale) msgs.Add("Bir süredir tarama yapılmadı — 'İndirilenleri tara' ya da 'Yeniden denetle' ile güncel tut.");
         if (AppServices.Vault.UsableKeyCount == 0 && !Settings.KeylessGuiLookup)
             msgs.Add("Kullanılabilir API anahtarı yok — Ayarlar'dan anahtar ekle ya da anahtarsız modu aç.");
         int quarantined = SafeQuarantineCount();
