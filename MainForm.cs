@@ -62,7 +62,23 @@ internal sealed partial class MainForm : Form
         }
         catch { return; }
 
-        _pendingUsbDrive = letter + ":\\";
+        string drive = letter + ":\\";
+
+        // Hands-off: scan it right away in the background (auto-quarantines high-detection finds) instead
+        // of waiting for a click that's easy to miss.
+        if (Settings.AutoScanUsb)
+        {
+            _tabs.SelectedIndex = 1; // Tarama
+            _scan.StartScan([drive], recurse: true, background: true);
+            _toastAction = ToastAction.None;
+            _tray.BalloonTipTitle = "USB sürücü taranıyor";
+            _tray.BalloonTipText = $"{letter}: takıldı, otomatik taranıyor…";
+            _tray.BalloonTipIcon = ToolTipIcon.Info;
+            if (!Gated()) _tray.ShowBalloonTip(4000);
+            return;
+        }
+
+        _pendingUsbDrive = drive;
         _toastAction = ToastAction.ScanUsb;
         _tray.BalloonTipTitle = "USB sürücü takıldı";
         _tray.BalloonTipText = $"{letter}: sürücüsünü taramak için bu bildirime tıkla.";

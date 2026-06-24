@@ -109,6 +109,10 @@ internal static class Settings
     /// <summary>Offer to scan a removable drive (USB stick, SD card) when it is plugged in.</summary>
     public static readonly Setting<bool> WatchUsb = new(true);
 
+    /// <summary>Scan a plugged-in removable drive immediately (background) without waiting for the user to
+    /// click the toast — high-detection finds are auto-quarantined via the background threat path.</summary>
+    public static readonly Setting<bool> AutoScanUsb = new(false);
+
     /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
     public static readonly Setting<string> WatchFolders = new("");
 

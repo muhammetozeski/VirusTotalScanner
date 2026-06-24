@@ -459,6 +459,8 @@ internal sealed class SettingsControl : UserControl
         };
         var usb = new CheckBox { Text = "USB takıldığında taramayı öner", AutoSize = true, Checked = Settings.WatchUsb };
         usb.CheckedChanged += (_, _) => { Settings.WatchUsb.Value = usb.Checked; SettingsManager.SaveSettings(); };
+        var autoUsb = new CheckBox { Text = "USB takılınca tıklamadan hemen otomatik tara (arka planda)", AutoSize = true, Checked = Settings.AutoScanUsb };
+        autoUsb.CheckedChanged += (_, _) => { Settings.AutoScanUsb.Value = autoUsb.Checked; SettingsManager.SaveSettings(); };
 
         var autoQ = new CheckBox { Text = "Arka plan gözcüleri yüksek-tespitli tehditleri otomatik karantinaya alsın (geri alınabilir)", AutoSize = true, Checked = Settings.AutoQuarantineWatchers };
         autoQ.CheckedChanged += (_, _) => { Settings.AutoQuarantineWatchers.Value = autoQ.Checked; SettingsManager.SaveSettings(); };
@@ -518,6 +520,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(votes);
         body.Controls.Add(watch);
         body.Controls.Add(usb);
+        body.Controls.Add(autoUsb);
         body.Controls.Add(autoQ);
         body.Controls.Add(autoQRow);
         body.Controls.Add(mute);
