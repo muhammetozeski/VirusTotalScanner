@@ -32,6 +32,7 @@ internal static class CliRunner
         if (opts.ExportLedger != null) { int n = LedgerService.Export(AppServices.Cache, opts.ExportLedger); Console.WriteLine(string.Format(Strings.CliLedgerExportedFormat, n, opts.ExportLedger)); return 0; }
         if (opts.ImportLedger != null) { var (add, conf, ok) = LedgerService.Import(AppServices.Cache, opts.ImportLedger); Console.WriteLine(string.Format(Strings.CliLedgerImportedFormat, add, conf, ok ? Strings.CliLedgerOk : Strings.CliLedgerBad)); return 0; }
         if (opts.LedgerDiff != null) { var (nw, cf) = LedgerService.Diff(AppServices.Cache, opts.LedgerDiff); Console.WriteLine(string.Format(Strings.CliLedgerDiffFormat, nw.Count, cf.Count)); foreach (var x in nw.Take(20)) Console.WriteLine("  " + Strings.CliTagNew + " " + x); foreach (var x in cf.Take(20)) Console.WriteLine("  " + Strings.CliTagConflict + " " + x); return 0; }
+        if (opts.TimelineDays != null) return await TimelineCmd(opts.TimelineDays.Value);
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;
@@ -217,6 +218,25 @@ internal static class CliRunner
             return 4;
         }
         catch (Exception ex) { Console.Error.WriteLine(Strings.CliErrPrefix + ex.Message); return 3; }
+    }
+
+    static async Task<int> TimelineCmd(int days)
+    {
+        Console.WriteLine($"Son {days} günde gelen çalıştırılabilirler taranıyor (verdikt önbellekten)…");
+        var result = await IncidentTimelineService.BuildAsync(AppServices.Cache, days,
+            (d, t) => { if (d % 250 == 0 || d == t) { try { Console.Error.Write($"\r  {d}/{t}   "); } catch { } } }, default);
+        try { Console.Error.WriteLine(); } catch { }
+
+        int totalFiles = result.Sum(d => d.Count);
+        int totalThreats = result.Sum(d => d.Threats);
+        Console.WriteLine($"{result.Count} gün • {totalFiles} çalıştırılabilir • {totalThreats} tehdit (önbellekten)\n");
+        foreach (var d in result.Take(90))
+        {
+            Console.WriteLine($"{d.DayText}  —  {d.Count} dosya, {d.Threats} tehdit, {d.FromNet} internetten");
+            foreach (var f in d.Files.Where(f => f.Detections > 0).Take(10))
+                Console.WriteLine($"   [{f.Verdict} {f.Detections}] {f.ArrivalLocal:HH:mm}  {f.Name}{(f.Host != null ? "  <- " + f.Host : "")}");
+        }
+        return totalThreats > 0 ? 1 : 0;
     }
 
     static async Task<int> LookupAsync(string hash, bool json)

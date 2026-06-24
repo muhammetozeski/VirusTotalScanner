@@ -1,0 +1,160 @@
+using System.Drawing;
+
+namespace VirusTotalScanner;
+
+/// <summary>Chronological triage view: which executables landed on disk, grouped by day, with the few
+/// known-bad ones highlighted next to whatever arrived alongside them. Reads the local cache only.</summary>
+internal sealed class IncidentTimelineDialog : Form
+{
+    readonly ComboBox _window = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
+    readonly Button _scan;
+    readonly Label _status = new() { AutoSize = true, Margin = new Padding(8, 8, 0, 0) };
+    readonly DataGridView _days = new();
+    readonly DataGridView _files = new();
+    CancellationTokenSource? _cts;
+
+    static readonly int[] WindowDays = [30, 60, 90, 180];
+
+    public IncidentTimelineDialog()
+    {
+        Text = "🕓 Olay Zaman Çizelgesi";
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(920, 560);
+        MinimumSize = new Size(680, 400);
+
+        foreach (var d in WindowDays) _window.Items.Add($"Son {d} gün");
+        _window.SelectedIndex = 1; // 60 days
+
+        _scan = ThemeManager.MakeButton("🔍  Tara", (_, _) => _ = RunAsync(), accent: true);
+        var close = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Width = 90 };
+
+        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 8, 8, 4) };
+        top.Controls.Add(new Label { Text = "Pencere:", AutoSize = true, Margin = new Padding(0, 8, 6, 0) });
+        top.Controls.Add(_window);
+        top.Controls.Add(_scan);
+        top.Controls.Add(_status);
+
+        BuildDaysGrid();
+        BuildFilesGrid();
+
+        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 200 };
+        split.Panel1.Controls.Add(_days);
+        split.Panel2.Controls.Add(_files);
+
+        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(10, 6, 10, 6) };
+        close.Dock = DockStyle.Right;
+        bottom.Controls.Add(close);
+
+        Controls.Add(split);
+        Controls.Add(top);
+        Controls.Add(bottom);
+        CancelButton = close;
+
+        ThemeManager.Apply(this);
+        ThemeManager.StyleGrid(_days);
+        ThemeManager.StyleGrid(_files);
+        ThemeManager.StyleButton(_scan);
+        ThemeManager.StyleButton(close);
+
+        Shown += (_, _) => _ = RunAsync();
+        FormClosed += (_, _) => _cts?.Cancel();
+    }
+
+    void BuildDaysGrid()
+    {
+        _days.Dock = DockStyle.Fill;
+        _days.AutoGenerateColumns = false;
+        _days.AllowUserToAddRows = false;
+        _days.ReadOnly = true;
+        _days.RowHeadersVisible = false;
+        _days.MultiSelect = false;
+        _days.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _days.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Gün", DataPropertyName = nameof(TimelineDay.DayText), Width = 160 });
+        AddNum(_days, "Dosya", nameof(TimelineDay.Count));
+        AddNum(_days, "Tehdit", nameof(TimelineDay.Threats));
+        AddNum(_days, "İnternetten", nameof(TimelineDay.FromNet), 90);
+        _days.SelectionChanged += (_, _) => ShowSelectedDay();
+        _days.CellFormatting += (_, e) =>
+        {
+            if (_days.Rows[e.RowIndex].DataBoundItem is TimelineDay d && d.Threats > 0)
+                e.CellStyle!.ForeColor = Theme.Current.Danger;
+        };
+    }
+
+    void BuildFilesGrid()
+    {
+        _files.Dock = DockStyle.Fill;
+        _files.AutoGenerateColumns = false;
+        _files.AllowUserToAddRows = false;
+        _files.ReadOnly = true;
+        _files.RowHeadersVisible = false;
+        _files.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Saat", DataPropertyName = nameof(TimelineFile.ArrivalLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "HH:mm:ss" } });
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(TimelineFile.Name), Width = 200 });
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Verdikt", DataPropertyName = nameof(TimelineFile.Verdict), Width = 90 });
+        AddNum(_files, "Tespit", nameof(TimelineFile.Detections), 60);
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kaynak (indirme)", DataPropertyName = nameof(TimelineFile.Host), Width = 180 });
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Yol", DataPropertyName = nameof(TimelineFile.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _files.CellFormatting += (_, e) =>
+        {
+            if (_files.Rows[e.RowIndex].DataBoundItem is not TimelineFile f) return;
+            if (f.Detections > 0) e.CellStyle!.ForeColor = Theme.Current.Danger;
+            else if (e.ColumnIndex == 3 && !f.Known) e.Value = "—";
+        };
+        _files.CellDoubleClick += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && _files.Rows[e.RowIndex].DataBoundItem is TimelineFile f && File.Exists(f.Path))
+                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + f.Path + "\""); } catch { }
+        };
+    }
+
+    static void AddNum(DataGridView g, string header, string prop, int width = 70) =>
+        g.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = header,
+            DataPropertyName = prop,
+            Width = width,
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight },
+        });
+
+    async Task RunAsync()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+        int days = WindowDays[_window.SelectedIndex];
+
+        _scan.Enabled = false;
+        _window.Enabled = false;
+        _days.DataSource = null;
+        _files.DataSource = null;
+        _status.Text = "Taranıyor…";
+
+        try
+        {
+            var result = await IncidentTimelineService.BuildAsync(
+                AppServices.Cache, days,
+                (d, t) => { try { BeginInvoke(() => _status.Text = $"Taranıyor… {d}/{t}"); } catch { } },
+                ct);
+            if (ct.IsCancellationRequested) return;
+
+            _days.DataSource = result;
+            int totalFiles = result.Sum(d => d.Count);
+            int totalThreats = result.Sum(d => d.Threats);
+            _status.Text = $"{result.Count} gün • {totalFiles} çalıştırılabilir • {totalThreats} tehdit (önbellekten)";
+            if (result.Count > 0) { _days.ClearSelection(); _days.Rows[0].Selected = true; ShowSelectedDay(); }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _status.Text = "Hata: " + ex.Message;
+            Log("Incident timeline failed: " + ex, LogLevel.Warning);
+        }
+        finally { _scan.Enabled = true; _window.Enabled = true; }
+    }
+
+    void ShowSelectedDay()
+    {
+        _files.DataSource = (_days.CurrentRow?.DataBoundItem as TimelineDay)?.Files;
+    }
+}
