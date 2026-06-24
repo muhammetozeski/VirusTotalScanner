@@ -136,6 +136,37 @@ internal static class Strings
     public static string CacheClearedInfo = "Önbellek temizlendi.";
     public static string KeylessEnabledInfo = "Anahtarsız (GUI) mod açıldı. Sıradaki dosyalar kotasız sorgulanacak.";
 
+    // ---- scan queue control: recheck / persistence / baseline / running / verify-hash ----
+    public static string RunScanFirstInfo = "Önce bir tarama çalıştırın.";
+    public static string RecheckNoneDueFormat = "Yeniden denetlenecek dosya yok ({0} günden eski önbellek kaydı yok).";
+    public static string RecheckConfirmFormat = "{0} önbellek kaydı ({1} günden eski) yeniden denetlenecek.\nKotasız (GUI üzerinden) — biraz sürebilir. Devam edilsin mi?";
+    public static string RecheckingFormat = "🔁 Yeniden denetleniyor… {0}/{1}";
+    public static string RecheckNoChangeFormat = "{0} dosya denetlendi. Hiçbir verdikt değişmedi.";
+    public static string RecheckChangedHeaderFormat = "{0} dosya denetlendi. {1} verdikt DEĞİŞTİ:\n";
+    public static string RecheckWorse = "⬆ kötüleşti";
+    public static string RecheckBetter = "⬇ iyileşti";
+    public static string RecheckErrorPrefix = "Yeniden denetim hatası: ";
+    public static string PersistenceNoneFormat = "'{0}' için autostart kancası bulunamadı (Run/Startup/Görevler temiz).";
+    public static string PersistenceFoundFormat = "'{0}' için {1} autostart kancası bulundu:\n";
+    public static string PersistenceManualNote = "Not: bunlar yalnızca listelenir; kaldırma manuel yapılmalı (regedit / Görev Zamanlayıcı).";
+    public static string BaselineAddedFormat = "Bütünlük izlemesine eklendi:\n{0}\n\nToplam izlenen: {1}";
+    public static string BaselineAddFailed = "Eklenemedi (dosya okunamadı).";
+    public static string BaselineEmptyInfo = "İzlenen dosya yok.\nBir sonuca sağ tıklayıp 'Bütünlük izlemesine al' deyin.";
+    public static string IntegrityCheckingFormat = "🛡 Bütünlük denetimi… {0}/{1}";
+    public static string IntegrityErrorPrefix = "Bütünlük denetimi hatası: ";
+    public static string IntegrityResultFormat = "{0} izlenen dosya denetlendi — {1} ALARM, {2} değişiklik.\n";
+    public static string IntegrityAllUnchanged = "Hepsi değişmedi ✓";
+    public static string NoRunnableProcessInfo = "Okunabilir çalışan süreç imajı bulunamadı.";
+    public static string ScanRunningConfirmFormat = "Şu an çalışan {0} süreç imajı taranacak ({1} okunamadı/atlandı).\nÇoğu Microsoft imzalı olduğundan atlanır; yalnızca bilinmeyenler VT'ye gider.\n\nDevam edilsin mi?";
+    public static string FolderNotFoundInfo = "Bu dosyanın klasörü bulunamadı.";
+    public static string VerifyHashFileTitle = "Beklenen hash ile doğrulanacak dosya";
+    public static string VerifyHashPrompt = "Beklenen hash (MD5/SHA-1/SHA-256):";
+    public static string VerifyHashTitle = "Hash doğrula";
+    public static string VerifyHashFormatWarn = "Beklenen hash 32 (MD5), 40 (SHA-1) veya 64 (SHA-256) hex karakter olmalı.";
+    public static string VerifyHashMatchedFormat = "✓ EŞLEŞTİ ({0})\n\n{1}\n\n{2}";
+    public static string VerifyHashMismatchFormat = "✗ EŞLEŞMEDİ ({0})\n\nBeklenen: {1}\nGerçek:   {2}\n\nDosya değiştirilmiş veya yanlış hash.";
+    public static string VerifyHashErrorPrefix = "Doğrulama hatası: ";
+
     // ---- scan queue control: quarantine + find-copies messages ----
     public static string NeedVtResultInfo = "Önce dosyanın VT sonucu olmalı.";
     public static string QuarantineConfirmFormat = "'{0}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)";

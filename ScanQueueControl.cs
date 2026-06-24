@@ -388,7 +388,7 @@ internal sealed class ScanQueueControl : UserControl
 
     void ShowFolderRollup()
     {
-        if (_scheduler.Items.Count == 0) { NativeMessageBox.Info("Önce bir tarama çalıştırın."); return; }
+        if (_scheduler.Items.Count == 0) { NativeMessageBox.Info(Strings.RunScanFirstInfo); return; }
         using var dlg = new FolderRollupDialog(_scheduler.Items.ToList());
         dlg.ShowDialog(FindForm());
     }
@@ -397,9 +397,9 @@ internal sealed class ScanQueueControl : UserControl
     {
         var due = RecheckService.DueForRecheck(AppServices.Cache, Settings.RecheckPeriodDays);
         int days = Settings.RecheckPeriodDays.Value;
-        if (due.Count == 0) { NativeMessageBox.Info($"Yeniden denetlenecek dosya yok ({days} günden eski önbellek kaydı yok)."); return; }
+        if (due.Count == 0) { NativeMessageBox.Info(string.Format(Strings.RecheckNoneDueFormat, days)); return; }
         // One question for the whole batch — not a per-file nag.
-        if (!NativeMessageBox.Confirm($"{due.Count} önbellek kaydı ({days} günden eski) yeniden denetlenecek.\nKotasız (GUI üzerinden) — biraz sürebilir. Devam edilsin mi?"))
+        if (!NativeMessageBox.Confirm(string.Format(Strings.RecheckConfirmFormat, due.Count, days)))
             return;
 
         using var cts = new CancellationTokenSource();
@@ -407,22 +407,22 @@ internal sealed class ScanQueueControl : UserControl
         try
         {
             var changes = await RecheckService.RunAsync(AppServices.Cache, due,
-                (done, total) => { try { BeginInvoke(() => _summary.Text = $"🔁 Yeniden denetleniyor… {done}/{total}"); } catch { } },
+                (done, total) => { try { BeginInvoke(() => _summary.Text = string.Format(Strings.RecheckingFormat, done, total)); } catch { } },
                 cts.Token);
 
             if (changes.Count == 0)
-                NativeMessageBox.Info($"{due.Count} dosya denetlendi. Hiçbir verdikt değişmedi.");
+                NativeMessageBox.Info(string.Format(Strings.RecheckNoChangeFormat, due.Count));
             else
             {
                 var sb = new StringBuilder();
-                sb.AppendLine($"{due.Count} dosya denetlendi. {changes.Count} verdikt DEĞİŞTİ:\n");
+                sb.AppendLine(string.Format(Strings.RecheckChangedHeaderFormat, due.Count, changes.Count));
                 foreach (var c in changes.Take(40))
-                    sb.AppendLine($"{(c.GotWorse ? "⬆ kötüleşti" : "⬇ iyileşti")}: {c.OldVerdict} ({c.OldDetections}) → {c.NewVerdict} ({c.NewDetections})\n   {c.Url}");
+                    sb.AppendLine($"{(c.GotWorse ? Strings.RecheckWorse : Strings.RecheckBetter)}: {c.OldVerdict} ({c.OldDetections}) → {c.NewVerdict} ({c.NewDetections})\n   {c.Url}");
                 NativeMessageBox.Info(sb.ToString());
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.RecheckErrorPrefix + ex.Message); }
         finally { try { _summary.Text = oldSummary; } catch { } }
     }
 
@@ -431,11 +431,11 @@ internal sealed class ScanQueueControl : UserControl
         var i = SelectedItem();
         if (i == null) return;
         var hooks = PersistenceHunter.Find(i.FilePath);
-        if (hooks.Count == 0) { NativeMessageBox.Info($"'{i.FileName}' için autostart kancası bulunamadı (Run/Startup/Görevler temiz)."); return; }
+        if (hooks.Count == 0) { NativeMessageBox.Info(string.Format(Strings.PersistenceNoneFormat, i.FileName)); return; }
         var sb = new StringBuilder();
-        sb.AppendLine($"'{i.FileName}' için {hooks.Count} autostart kancası bulundu:\n");
+        sb.AppendLine(string.Format(Strings.PersistenceFoundFormat, i.FileName, hooks.Count));
         foreach (var h in hooks.Take(25)) sb.AppendLine($"[{h.Location}] {h.Name}\n   {h.Command}\n");
-        sb.AppendLine("Not: bunlar yalnızca listelenir; kaldırma manuel yapılmalı (regedit / Görev Zamanlayıcı).");
+        sb.AppendLine(Strings.PersistenceManualNote);
         NativeMessageBox.Warn(sb.ToString());
     }
 
@@ -444,30 +444,30 @@ internal sealed class ScanQueueControl : UserControl
         var i = SelectedItem();
         if (i == null || !File.Exists(i.FilePath)) return;
         if (await BaselineStore.PinAsync(i.FilePath))
-            NativeMessageBox.Info($"Bütünlük izlemesine eklendi:\n{i.FileName}\n\nToplam izlenen: {BaselineStore.Count}");
-        else NativeMessageBox.Error("Eklenemedi (dosya okunamadı).");
+            NativeMessageBox.Info(string.Format(Strings.BaselineAddedFormat, i.FileName, BaselineStore.Count));
+        else NativeMessageBox.Error(Strings.BaselineAddFailed);
     }
 
     async Task VerifyBaselineAsync()
     {
-        if (BaselineStore.Count == 0) { NativeMessageBox.Info("İzlenen dosya yok.\nBir sonuca sağ tıklayıp 'Bütünlük izlemesine al' deyin."); return; }
+        if (BaselineStore.Count == 0) { NativeMessageBox.Info(Strings.BaselineEmptyInfo); return; }
         using var cts = new CancellationTokenSource();
         string old = _summary.Text;
         List<DriftResult> res;
         try
         {
             res = await BaselineStore.VerifyAsync(
-                (d, t) => { try { BeginInvoke(() => _summary.Text = $"🛡 Bütünlük denetimi… {d}/{t}"); } catch { } }, cts.Token);
+                (d, t) => { try { BeginInvoke(() => _summary.Text = string.Format(Strings.IntegrityCheckingFormat, d, t)); } catch { } }, cts.Token);
         }
         catch (OperationCanceledException) { return; }
-        catch (Exception ex) { NativeMessageBox.Error("Bütünlük denetimi hatası: " + ex.Message); return; }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.IntegrityErrorPrefix + ex.Message); return; }
         finally { try { _summary.Text = old; } catch { } }
 
         int alarms = res.Count(r => r.IsAlarm);
         int changed = res.Count(r => r.Kind != DriftKind.Unchanged);
         var sb = new StringBuilder();
-        sb.AppendLine($"{res.Count} izlenen dosya denetlendi — {alarms} ALARM, {changed} değişiklik.\n");
-        if (changed == 0) sb.AppendLine("Hepsi değişmedi ✓");
+        sb.AppendLine(string.Format(Strings.IntegrityResultFormat, res.Count, alarms, changed));
+        if (changed == 0) sb.AppendLine(Strings.IntegrityAllUnchanged);
         else foreach (var r in res.Where(r => r.Kind != DriftKind.Unchanged).OrderByDescending(r => r.IsAlarm).Take(40))
             sb.AppendLine($"{(r.IsAlarm ? "🔴" : "•")} {Path.GetFileName(r.Path)} — {r.Detail}");
         if (alarms > 0) NativeMessageBox.Error(sb.ToString()); else NativeMessageBox.Info(sb.ToString());
@@ -476,8 +476,8 @@ internal sealed class ScanQueueControl : UserControl
     void ScanRunning()
     {
         var (paths, unreadable) = RunningProcesses.ImagePaths();
-        if (paths.Count == 0) { NativeMessageBox.Info("Okunabilir çalışan süreç imajı bulunamadı."); return; }
-        if (!NativeMessageBox.Confirm($"Şu an çalışan {paths.Count} süreç imajı taranacak ({unreadable} okunamadı/atlandı).\nÇoğu Microsoft imzalı olduğundan atlanır; yalnızca bilinmeyenler VT'ye gider.\n\nDevam edilsin mi?"))
+        if (paths.Count == 0) { NativeMessageBox.Info(Strings.NoRunnableProcessInfo); return; }
+        if (!NativeMessageBox.Confirm(string.Format(Strings.ScanRunningConfirmFormat, paths.Count, unreadable)))
             return;
         StartScan(paths.ToArray(), recurse: false);
     }
@@ -487,25 +487,25 @@ internal sealed class ScanQueueControl : UserControl
         var i = SelectedItem();
         if (i == null) return;
         var data = NeighborsService.Build(i.FilePath, AppServices.Cache);
-        if (data == null) { NativeMessageBox.Info("Bu dosyanın klasörü bulunamadı."); return; }
+        if (data == null) { NativeMessageBox.Info(Strings.FolderNotFoundInfo); return; }
         using var dlg = new NeighborsDialog(data, paths => StartScan(paths, recurse: false));
         dlg.ShowDialog(FindForm());
     }
 
     async Task VerifyHashAsync()
     {
-        using var fd = new OpenFileDialog { Title = "Beklenen hash ile doğrulanacak dosya" };
+        using var fd = new OpenFileDialog { Title = Strings.VerifyHashFileTitle };
         if (fd.ShowDialog() != DialogResult.OK) return;
-        string? exp = Dialogs.InputBox("Beklenen hash (MD5/SHA-1/SHA-256):", "Hash doğrula");
+        string? exp = Dialogs.InputBox(Strings.VerifyHashPrompt, Strings.VerifyHashTitle);
         if (string.IsNullOrWhiteSpace(exp)) return;
         try
         {
             var r = await HashService.VerifyExpectedAsync(fd.FileName, exp);
-            if (r.Algorithm == "?") { NativeMessageBox.Warn("Beklenen hash 32 (MD5), 40 (SHA-1) veya 64 (SHA-256) hex karakter olmalı."); return; }
-            if (r.Matched) NativeMessageBox.Info($"✓ EŞLEŞTİ ({r.Algorithm})\n\n{r.Actual}\n\n{fd.FileName}");
-            else NativeMessageBox.Error($"✗ EŞLEŞMEDİ ({r.Algorithm})\n\nBeklenen: {r.Expected}\nGerçek:   {r.Actual}\n\nDosya değiştirilmiş veya yanlış hash.");
+            if (r.Algorithm == "?") { NativeMessageBox.Warn(Strings.VerifyHashFormatWarn); return; }
+            if (r.Matched) NativeMessageBox.Info(string.Format(Strings.VerifyHashMatchedFormat, r.Algorithm, r.Actual, fd.FileName));
+            else NativeMessageBox.Error(string.Format(Strings.VerifyHashMismatchFormat, r.Algorithm, r.Expected, r.Actual));
         }
-        catch (Exception ex) { NativeMessageBox.Error("Doğrulama hatası: " + ex.Message); }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.VerifyHashErrorPrefix + ex.Message); }
     }
 
     void OnAllKeysExhausted(DateTime resumeUtc)
