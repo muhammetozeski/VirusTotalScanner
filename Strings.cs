@@ -402,6 +402,40 @@ internal static class Strings
     public static string BtagClassFormat = "🧬 Sınıf: {0}";
     public static string BtagBehavior = "🧬 Davranış";
 
+    // ---- jargon glossary: engine category column ----
+    public static string JcatMalicious = "Zararlı buldu";
+    public static string JcatSuspicious = "Şüpheli buldu (kesin değil)";
+    public static string JcatHarmless = "Zararsız (temiz) buldu";
+    public static string JcatUndetected = "Hiçbir şey bulamadı (temiz)";
+    public static string JcatTimeout = "Zaman aşımı — tarayamadı";
+    public static string JcatConfirmedTimeout = "Kesin zaman aşımı — tarayamadı";
+    public static string JcatTypeUnsupported = "Bu dosya türünü taramıyor";
+    public static string JcatFailure = "Tarama başarısız oldu";
+    public static string JcatNotSupported = "Desteklenmiyor";
+
+    // ---- jargon glossary: detection-name morphemes ----
+    public static string JmNotAVirus = "virüs değil (genelde araç/reklam)";
+    public static string JmHeur = "sezgisel/tahmini imza (kesin değil)";
+    public static string JmGeneric = "genel imza (kesin değil)";
+    public static string JmTrojan = "truva atı";
+    public static string JmBackdoor = "arka kapı";
+    public static string JmWorm = "solucan (kendini yayar)";
+    public static string JmRansom = "fidye yazılımı";
+    public static string JmDownloader = "başka zararlı indirir";
+    public static string JmDropper = "başka zararlı bırakır";
+    public static string JmSpyware = "casus yazılım";
+    public static string JmKeylog = "tuş kaydedici";
+    public static string JmRootkit = "gizlenen zararlı (rootkit)";
+    public static string JmAdware = "reklam yazılımı";
+    public static string JmRiskware = "riskli ama meşru olabilir";
+    public static string JmPua = "istenmeyen program (zararlı olmayabilir)";
+    public static string JmUnwanted = "istenmeyen program";
+    public static string JmExploit = "açık sömüren (exploit)";
+    public static string JmMsil = ".NET programı";
+    public static string JmWin32 = "Windows 32-bit";
+    public static string JmWin64 = "Windows 64-bit";
+    public static string JmScript = "betik (script)";
+
     // ---- report signal text (detail pane / CLI) ----
     public static string StaleTextFormat = "🕗 {0}/{1} tespit aylarca eski imzalardan — yeniden denetlemek iyi olur";
     public static string CommunityRulesPrefixFormat = "🛡 Topluluk kuralları ({0}): ";

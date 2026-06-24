@@ -7,45 +7,46 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class JargonGlossary
 {
-    static readonly Dictionary<string, string> Categories = new(StringComparer.OrdinalIgnoreCase)
+    // Properties (not cached fields) so a runtime language switch is reflected in the decoded text.
+    static Dictionary<string, string> Categories => new(StringComparer.OrdinalIgnoreCase)
     {
-        ["malicious"] = "Zararlı buldu",
-        ["suspicious"] = "Şüpheli buldu (kesin değil)",
-        ["harmless"] = "Zararsız (temiz) buldu",
-        ["undetected"] = "Hiçbir şey bulamadı (temiz)",
-        ["timeout"] = "Zaman aşımı — tarayamadı",
-        ["confirmed-timeout"] = "Kesin zaman aşımı — tarayamadı",
-        ["type-unsupported"] = "Bu dosya türünü taramıyor",
-        ["failure"] = "Tarama başarısız oldu",
-        ["not-supported"] = "Desteklenmiyor",
+        ["malicious"] = Strings.JcatMalicious,
+        ["suspicious"] = Strings.JcatSuspicious,
+        ["harmless"] = Strings.JcatHarmless,
+        ["undetected"] = Strings.JcatUndetected,
+        ["timeout"] = Strings.JcatTimeout,
+        ["confirmed-timeout"] = Strings.JcatConfirmedTimeout,
+        ["type-unsupported"] = Strings.JcatTypeUnsupported,
+        ["failure"] = Strings.JcatFailure,
+        ["not-supported"] = Strings.JcatNotSupported,
     };
 
     // Substring -> plain meaning, scanned over a detection name (e.g. "Trojan.GenericKD.123").
-    static readonly (string Needle, string Meaning)[] Morphemes =
+    static (string Needle, string Meaning)[] Morphemes =>
     [
-        ("not-a-virus", "virüs değil (genelde araç/reklam)"),
-        ("heur", "sezgisel/tahmini imza (kesin değil)"),
-        ("generic", "genel imza (kesin değil)"),
-        ("gen", "genel imza (kesin değil)"),
-        ("trojan", "truva atı"),
-        ("backdoor", "arka kapı"),
-        ("worm", "solucan (kendini yayar)"),
-        ("ransom", "fidye yazılımı"),
-        ("downloader", "başka zararlı indirir"),
-        ("dropper", "başka zararlı bırakır"),
-        ("spyware", "casus yazılım"),
-        ("keylog", "tuş kaydedici"),
-        ("rootkit", "gizlenen zararlı (rootkit)"),
-        ("adware", "reklam yazılımı"),
-        ("riskware", "riskli ama meşru olabilir"),
-        ("pua", "istenmeyen program (zararlı olmayabilir)"),
-        ("pup", "istenmeyen program (zararlı olmayabilir)"),
-        ("unwanted", "istenmeyen program"),
-        ("exploit", "açık sömüren (exploit)"),
-        ("msil", ".NET programı"),
-        ("win32", "Windows 32-bit"),
-        ("win64", "Windows 64-bit"),
-        ("script", "betik (script)"),
+        ("not-a-virus", Strings.JmNotAVirus),
+        ("heur", Strings.JmHeur),
+        ("generic", Strings.JmGeneric),
+        ("gen", Strings.JmGeneric),
+        ("trojan", Strings.JmTrojan),
+        ("backdoor", Strings.JmBackdoor),
+        ("worm", Strings.JmWorm),
+        ("ransom", Strings.JmRansom),
+        ("downloader", Strings.JmDownloader),
+        ("dropper", Strings.JmDropper),
+        ("spyware", Strings.JmSpyware),
+        ("keylog", Strings.JmKeylog),
+        ("rootkit", Strings.JmRootkit),
+        ("adware", Strings.JmAdware),
+        ("riskware", Strings.JmRiskware),
+        ("pua", Strings.JmPua),
+        ("pup", Strings.JmPua),
+        ("unwanted", Strings.JmUnwanted),
+        ("exploit", Strings.JmExploit),
+        ("msil", Strings.JmMsil),
+        ("win32", Strings.JmWin32),
+        ("win64", Strings.JmWin64),
+        ("script", Strings.JmScript),
     ];
 
     public static string Category(string? category) =>
