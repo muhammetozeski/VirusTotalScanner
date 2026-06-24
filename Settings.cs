@@ -117,6 +117,10 @@ internal static class Settings
     /// an unknown exe double-clicked from chat/email that never touched the watched folders.</summary>
     public static readonly Setting<bool> WatchProcessLaunches = new(false);
 
+    /// <summary>ISO-8601 UTC of the last download-watch catch-up, so files that landed while the watcher
+    /// was off (app closed / WatchDownloads just toggled on) are verdicted once on next start.</summary>
+    public static readonly Setting<string> LastWatchScanUtc = new("");
+
     /// <summary>Permanently purge quarantined files older than this many days on startup (0 = keep forever).</summary>
     public static readonly Setting<int> QuarantineRetentionDays = new(0);
 

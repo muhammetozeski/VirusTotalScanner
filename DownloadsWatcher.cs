@@ -59,6 +59,25 @@ internal sealed class DownloadsWatcher : IDisposable
         _watchers.Clear();
     }
 
+    /// <summary>Verdict the exec-class files that landed in the watched folders while the watcher was off
+    /// (app closed, or WatchDownloads just toggled on) — bounded to files modified after <paramref
+    /// name="sinceUtc"/> so it's cheap, reusing the full per-file pipeline (HandleAsync).</summary>
+    public async Task CatchUpAsync(IEnumerable<string> folders, DateTime sinceUtc)
+    {
+        foreach (var folder in folders.Where(f => !string.IsNullOrWhiteSpace(f) && Directory.Exists(f)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string[] files;
+            try { files = Directory.GetFiles(folder, "*", SearchOption.TopDirectoryOnly); }
+            catch (Exception ex) { Log($"Catch-up enumerate failed for {folder}: {ex.Message}", LogLevel.Warning); continue; }
+            foreach (var f in files)
+            {
+                if (!ExecExts.Contains(Path.GetExtension(f))) continue;
+                try { if (File.GetLastWriteTimeUtc(f) <= sinceUtc) continue; } catch { continue; }
+                await HandleAsync(f);
+            }
+        }
+    }
+
     async Task HandleAsync(string path)
     {
         if (!ExecExts.Contains(Path.GetExtension(path))) return;

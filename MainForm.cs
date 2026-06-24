@@ -354,6 +354,15 @@ internal sealed partial class MainForm : Form
                 .Split([';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             if (folders.Count == 0) folders = DownloadsWatcher.DefaultFolders();
             _downloadsWatcher.Start(folders);
+
+            // Catch up on files that landed while the watcher was off (closed app / just toggled on).
+            var since = DateTime.TryParse(Settings.LastWatchScanUtc.Value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var s)
+                ? s : DateTime.UtcNow.AddDays(-7);
+            _ = _downloadsWatcher.CatchUpAsync(folders, since).ContinueWith(_ =>
+            {
+                Settings.LastWatchScanUtc.Value = DateTime.UtcNow.ToString("o");
+                SettingsManager.SaveSettings();
+            }, TaskScheduler.Default);
         }
         catch (Exception ex) { Log("Downloads watch init failed: " + ex.Message, LogLevel.Warning); }
     }
