@@ -196,6 +196,14 @@ internal sealed class ScanScheduler
                 return;
             }
 
+            // User allowlist ("I marked this clean"): an explicit per-file override, honored unless the
+            // user forced a full re-scan with BypassTrust.
+            if (!opts.BypassTrust && AllowlistStore.Contains(md5, sha256))
+            {
+                TrustSkip(item, "Kullanıcı temiz dedi", null);
+                return;
+            }
+
             // In-scan dedup: serialize lookups of identical content within one run so duplicate
             // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
             // lookup. The first item caches the report; the rest get the cache hit here.
