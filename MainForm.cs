@@ -51,7 +51,15 @@ internal sealed partial class MainForm : Form
     void OnRemovableInserted(char letter)
     {
         if (!Settings.WatchUsb) return;
-        try { if (new DriveInfo(letter + ":\\").DriveType != DriveType.Removable) return; }
+        try
+        {
+            var di = new DriveInfo(letter + ":\\");
+            // The arrival event means it was hot-plugged: accept removable media AND external fixed
+            // drives (USB HDD/SSD report Fixed, not Removable), but never the system/boot drive.
+            if (di.DriveType is not (DriveType.Removable or DriveType.Fixed)) return;
+            var sysRoot = Path.GetPathRoot(Environment.SystemDirectory);
+            if (sysRoot != null && string.Equals(di.Name, sysRoot, StringComparison.OrdinalIgnoreCase)) return;
+        }
         catch { return; }
 
         _pendingUsbDrive = letter + ":\\";
