@@ -74,6 +74,12 @@ internal static class Settings
     /// <summary>Show VirusTotal community votes in the detail pane.</summary>
     public static readonly Setting<bool> ShowCommunityVotes = new(true);
 
+    /// <summary>Watch download folders and auto-scan new executable-class files as they land.</summary>
+    public static readonly Setting<bool> WatchDownloads = new(false);
+
+    /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
+    public static readonly Setting<string> WatchFolders = new("");
+
     /// <summary>Re-check verdicts for cached files older than this many days (a clean file can be
     /// flagged later as engines catch up). The sweep is keyless (GUI), so it costs no quota.</summary>
     public static readonly Setting<int> RecheckPeriodDays = new(14);

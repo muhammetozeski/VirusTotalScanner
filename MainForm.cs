@@ -37,6 +37,7 @@ internal sealed partial class MainForm : Form
     readonly LogViewerControl _logs = new();
     readonly SettingsControl _settings = new();
     readonly NotifyIcon _tray = new();
+    readonly DownloadsWatcher _downloadsWatcher = new(AppServices.Cache);
     readonly StatusStrip _status = new();
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
@@ -71,6 +72,8 @@ internal sealed partial class MainForm : Form
 
         _scan.NeedApiKey += () => _tabs.SelectedIndex = 3;
         _scan.ThreatFound += OnThreatFound;
+        _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item));
+        StartDownloadsWatchIfEnabled();
 
         AppServices.Vault.Changed += () => SafeUi(UpdateStatusBar);
         AppServices.Vault.CountersUpdated += () => SafeUi(UpdateStatusBar);
@@ -158,6 +161,19 @@ internal sealed partial class MainForm : Form
         }
     }
 
+    void StartDownloadsWatchIfEnabled()
+    {
+        try
+        {
+            if (!Settings.WatchDownloads) { _downloadsWatcher.Stop(); return; }
+            var folders = Settings.WatchFolders.Value
+                .Split([';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            if (folders.Count == 0) folders = DownloadsWatcher.DefaultFolders();
+            _downloadsWatcher.Start(folders);
+        }
+        catch (Exception ex) { Log("Downloads watch init failed: " + ex.Message, LogLevel.Warning); }
+    }
+
     // ---- threat notification ----
 
     void OnThreatFound(ScanItem item)
@@ -185,6 +201,7 @@ internal sealed partial class MainForm : Form
             _tray.ShowBalloonTip(2000);
             return;
         }
+        _downloadsWatcher.Dispose();
         AppServices.Shutdown();
         _tray.Visible = false;
     }

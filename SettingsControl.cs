@@ -312,7 +312,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 385, out var body);
+        var card = Card("Genel", 415, out var body);
 
         var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
@@ -350,6 +350,13 @@ internal sealed class SettingsControl : UserControl
         notify.CheckedChanged += (_, _) => { Settings.NotifyOnThreat.Value = notify.Checked; SettingsManager.SaveSettings(); };
         var votes = new CheckBox { Text = "Topluluk oylarını göster", AutoSize = true, Checked = Settings.ShowCommunityVotes };
         votes.CheckedChanged += (_, _) => { Settings.ShowCommunityVotes.Value = votes.Checked; SettingsManager.SaveSettings(); };
+        var watch = new CheckBox { Text = "İndirilenleri izle — yeni dosyaları otomatik tara (İndirilenler + Masaüstü)", AutoSize = true, Checked = Settings.WatchDownloads };
+        watch.CheckedChanged += (_, _) =>
+        {
+            Settings.WatchDownloads.Value = watch.Checked;
+            SettingsManager.SaveSettings();
+            NativeMessageBox.Info("İndirilenleri izleme " + (watch.Checked ? "açıldı" : "kapatıldı") + ". Uygulamayı yeniden başlatınca tam uygulanır.");
+        };
         var logging = new CheckBox { Text = "Loglama açık", AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
@@ -370,6 +377,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(tray);
         body.Controls.Add(notify);
         body.Controls.Add(votes);
+        body.Controls.Add(watch);
         body.Controls.Add(logging);
         return card;
     }
