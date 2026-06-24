@@ -35,6 +35,7 @@ internal sealed partial class MainForm : Form
     readonly ScanQueueControl _scan = new();
     readonly QuotaDashboardControl _quota = new();
     readonly LogViewerControl _logs = new();
+    readonly ScanHistoryControl _history = new();
     readonly SettingsControl _settings = new();
     readonly NotifyIcon _tray = new();
     readonly DownloadsWatcher _downloadsWatcher = new(AppServices.Cache);
@@ -70,8 +71,9 @@ internal sealed partial class MainForm : Form
         Controls.Add(_tabs);
         Controls.Add(_status);
 
-        _scan.NeedApiKey += () => _tabs.SelectedIndex = 3;
+        _scan.NeedApiKey += () => _tabs.SelectedIndex = 4; // Ayarlar tab
         _scan.ThreatFound += OnThreatFound;
+        _history.RescanRequested += paths => { _tabs.SelectedIndex = 0; _scan.StartScan(paths, recurse: false); };
         _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item));
         StartDownloadsWatchIfEnabled();
 
@@ -94,6 +96,7 @@ internal sealed partial class MainForm : Form
         AddTab(Strings.TabScan, _scan);
         AddTab(Strings.TabQuota, _quota);
         AddTab(Strings.TabLogs, _logs);
+        AddTab("🕘  Geçmiş", _history);
         AddTab(Strings.TabSettings, _settings);
     }
 
@@ -296,6 +299,7 @@ internal sealed partial class MainForm : Form
         _scan.ApplyTheme();
         _quota.ApplyTheme();
         _settings.ApplyTheme();
+        _history.ApplyTheme();
         _logs.RefreshState();
         if (IsHandleCreated) ApplyDarkTitleBar();
     }

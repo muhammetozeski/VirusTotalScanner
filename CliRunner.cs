@@ -65,6 +65,7 @@ internal static class CliRunner
         scheduler.ItemFinished += item =>
         {
             if (!opts.Json) PrintItem(item, opts.Quiet);
+            ScanHistoryStore.Record(item, "CLI");
         };
 
         var scanOpts = ScanOptions.FromSettings(opts.Recurse);
