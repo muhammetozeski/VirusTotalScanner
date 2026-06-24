@@ -144,6 +144,44 @@ internal static class Strings
     public static string SweepRemoveFailedPrefix = "Kaldırılamadı: ";
     public static string SweepHint = "Seçilen klasör periyodik olarak (anahtarsız) taranır; sonuç bir HTML rapora yazılır.";
 
+    // ---- settings: general card ----
+    public static string CardGeneral = "Genel";
+    public static string ThemeLabel = "Tema:";
+    public static string ThemeFollow = "Sistemi izle";
+    public static string ThemeDark = "Koyu";
+    public static string ThemeLight = "Açık";
+    public static string TrayMinimizeLabel = "Kapatınca sistem tepsisine küçült";
+    public static string NotifyThreatLabel = "Tehdit bulununca bildirim göster";
+    public static string ShowVotesLabel = "Topluluk oylarını göster";
+    public static string WatchDownloadsLabel = "İndirilenleri izle — yeni dosyaları otomatik tara (İndirilenler + Masaüstü)";
+    public static string WatchToggleFormat = "İndirilenleri izleme {0}. Uygulamayı yeniden başlatınca tam uygulanır.";
+    public static string WatchOn = "açıldı";
+    public static string WatchOff = "kapatıldı";
+    public static string LoggingLabel = "Loglama açık";
+    public static string StartupLabel = "Windows ile başlat (arka planda, tepside)";
+    public static string ResumeAskLabel = "Açılışta yarım kalan taramayı sor";
+    public static string AutoResumeLabel = "Açılışta yarım kalan taramayı SORMADAN devam et";
+    public static string BtnLedgerExport = "📤 Ledger dışa aktar";
+    public static string LedgerWrittenFormat = "{0} kayıt yazıldı.";
+    public static string BtnLedgerImport = "📥 Ledger içe aktar";
+    public static string LedgerImportedFormat = "{0} yeni kayıt eklendi, {1} çakışma.\nBütünlük: {2}";
+    public static string LedgerIntegrityOk = "OK ✓";
+    public static string LedgerIntegrityBad = "UYUŞMUYOR ⚠";
+
+    // ---- settings: confirm gates card ----
+    public static string CardConfirmGates = "Onay Soruları (bir daha sorma)";
+    public static string ConfirmGatesHint = "'Bir daha sorma' dediğin onaylar burada görünür; istersen tekrar sormaya açabilirsin.";
+    public static string BtnAskAgain = "Tekrar sor";
+    public static string GateSuppressedFormat = "  —  KAPALI (yanıt: {0})";
+    public static string GateYes = "Evet";
+    public static string GateNo = "Hayır";
+    public static string GateAsking = "  —  soruluyor";
+
+    // ---- settings: about card ----
+    public static string CardAbout = "Hakkında";
+    public static string AboutGetKeyLink = "VirusTotal API anahtarı al (virustotal.com)";
+    public static string AboutConfigFilePrefix = "Ayar dosyası: ";
+
     // ---- API key dialog ----
     public static string DlgApiKeyAddTitle = "API anahtarı ekle";
     public static string DlgApiKeyEditTitle = "API anahtarını düzenle";

@@ -310,7 +310,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 450, out var body);
+        var card = Card(Strings.CardGeneral, 450, out var body);
 
         var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
@@ -331,9 +331,9 @@ internal sealed class SettingsControl : UserControl
         langRow.Controls.Add(langCombo);
 
         var themeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        themeRow.Controls.Add(ThemeManager.MakeLabel("Tema:"));
+        themeRow.Controls.Add(ThemeManager.MakeLabel(Strings.ThemeLabel));
         var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
-        combo.Items.AddRange(["Sistemi izle", "Koyu", "Açık"]);
+        combo.Items.AddRange([Strings.ThemeFollow, Strings.ThemeDark, Strings.ThemeLight]);
         combo.SelectedIndex = Settings.FollowWindowsTheme ? 0 : (string.Equals(Settings.Theme.Value, "Light", StringComparison.OrdinalIgnoreCase) ? 2 : 1);
         combo.SelectedIndexChanged += (_, _) =>
         {
@@ -342,29 +342,29 @@ internal sealed class SettingsControl : UserControl
         };
         themeRow.Controls.Add(combo);
 
-        var tray = new CheckBox { Text = "Kapatınca sistem tepsisine küçült", AutoSize = true, Checked = Settings.MinimizeToTray };
+        var tray = new CheckBox { Text = Strings.TrayMinimizeLabel, AutoSize = true, Checked = Settings.MinimizeToTray };
         tray.CheckedChanged += (_, _) => { Settings.MinimizeToTray.Value = tray.Checked; SettingsManager.SaveSettings(); };
-        var notify = new CheckBox { Text = "Tehdit bulununca bildirim göster", AutoSize = true, Checked = Settings.NotifyOnThreat };
+        var notify = new CheckBox { Text = Strings.NotifyThreatLabel, AutoSize = true, Checked = Settings.NotifyOnThreat };
         notify.CheckedChanged += (_, _) => { Settings.NotifyOnThreat.Value = notify.Checked; SettingsManager.SaveSettings(); };
-        var votes = new CheckBox { Text = "Topluluk oylarını göster", AutoSize = true, Checked = Settings.ShowCommunityVotes };
+        var votes = new CheckBox { Text = Strings.ShowVotesLabel, AutoSize = true, Checked = Settings.ShowCommunityVotes };
         votes.CheckedChanged += (_, _) => { Settings.ShowCommunityVotes.Value = votes.Checked; SettingsManager.SaveSettings(); };
-        var watch = new CheckBox { Text = "İndirilenleri izle — yeni dosyaları otomatik tara (İndirilenler + Masaüstü)", AutoSize = true, Checked = Settings.WatchDownloads };
+        var watch = new CheckBox { Text = Strings.WatchDownloadsLabel, AutoSize = true, Checked = Settings.WatchDownloads };
         watch.CheckedChanged += (_, _) =>
         {
             Settings.WatchDownloads.Value = watch.Checked;
             SettingsManager.SaveSettings();
-            NativeMessageBox.Info("İndirilenleri izleme " + (watch.Checked ? "açıldı" : "kapatıldı") + ". Uygulamayı yeniden başlatınca tam uygulanır.");
+            NativeMessageBox.Info(string.Format(Strings.WatchToggleFormat, watch.Checked ? Strings.WatchOn : Strings.WatchOff));
         };
-        var logging = new CheckBox { Text = "Loglama açık", AutoSize = true, Checked = LoggerHost.IsEnabled };
+        var logging = new CheckBox { Text = Strings.LoggingLabel, AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
-        var startup = new CheckBox { Text = "Windows ile başlat (arka planda, tepside)", AutoSize = true, Checked = StartupManager.IsEnabled() };
+        var startup = new CheckBox { Text = Strings.StartupLabel, AutoSize = true, Checked = StartupManager.IsEnabled() };
         startup.CheckedChanged += (_, _) => StartupManager.SetEnabled(startup.Checked);
 
-        var resume = new CheckBox { Text = "Açılışta yarım kalan taramayı sor", AutoSize = true, Checked = Settings.ResumeInterruptedScans };
+        var resume = new CheckBox { Text = Strings.ResumeAskLabel, AutoSize = true, Checked = Settings.ResumeInterruptedScans };
         resume.CheckedChanged += (_, _) => { Settings.ResumeInterruptedScans.Value = resume.Checked; SettingsManager.SaveSettings(); };
 
-        var autoResume = new CheckBox { Text = "Açılışta yarım kalan taramayı SORMADAN devam et", AutoSize = true, Checked = Settings.AutoResumeScans };
+        var autoResume = new CheckBox { Text = Strings.AutoResumeLabel, AutoSize = true, Checked = Settings.AutoResumeScans };
         autoResume.CheckedChanged += (_, _) => { Settings.AutoResumeScans.Value = autoResume.Checked; SettingsManager.SaveSettings(); };
 
         body.Controls.Add(langRow);
@@ -373,17 +373,17 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(resume);
         body.Controls.Add(autoResume);
         var ledgerRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        ledgerRow.Controls.Add(ThemeManager.MakeButton("📤 Ledger dışa aktar", (_, _) =>
+        ledgerRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnLedgerExport, (_, _) =>
         {
             using var dlg = new SaveFileDialog { Filter = "Ledger|*.json", FileName = "team-ledger.json" };
-            if (dlg.ShowDialog() == DialogResult.OK) NativeMessageBox.Info($"{LedgerService.Export(AppServices.Cache, dlg.FileName)} kayıt yazıldı.");
+            if (dlg.ShowDialog() == DialogResult.OK) NativeMessageBox.Info(string.Format(Strings.LedgerWrittenFormat, LedgerService.Export(AppServices.Cache, dlg.FileName)));
         }));
-        ledgerRow.Controls.Add(ThemeManager.MakeButton("📥 Ledger içe aktar", (_, _) =>
+        ledgerRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnLedgerImport, (_, _) =>
         {
             using var dlg = new OpenFileDialog { Filter = "Ledger|*.json" };
             if (dlg.ShowDialog() != DialogResult.OK) return;
             var (add, conf, ok) = LedgerService.Import(AppServices.Cache, dlg.FileName);
-            NativeMessageBox.Info($"{add} yeni kayıt eklendi, {conf} çakışma.\nBütünlük: {(ok ? "OK ✓" : "UYUŞMUYOR ⚠")}");
+            NativeMessageBox.Info(string.Format(Strings.LedgerImportedFormat, add, conf, ok ? Strings.LedgerIntegrityOk : Strings.LedgerIntegrityBad));
         }));
 
         body.Controls.Add(tray);
@@ -398,16 +398,16 @@ internal sealed class SettingsControl : UserControl
     Panel BuildConfirmGatesCard()
     {
         var gates = ConfirmGateManager.All.ToList();
-        var card = Card("Onay Soruları (bir daha sorma)", 70 + gates.Count * 30, out var body);
-        body.Controls.Add(ThemeManager.MakeLabel("'Bir daha sorma' dediğin onaylar burada görünür; istersen tekrar sormaya açabilirsin.", subtle: true));
+        var card = Card(Strings.CardConfirmGates, 70 + gates.Count * 30, out var body);
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.ConfirmGatesHint, subtle: true));
         foreach (var gate in gates)
         {
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
             var lbl = ThemeManager.MakeLabel("");
-            var btn = ThemeManager.MakeButton("Tekrar sor", null);
+            var btn = ThemeManager.MakeButton(Strings.BtnAskAgain, null);
             void Refresh()
             {
-                lbl.Text = gate.Title + (gate.Suppressed ? $"  —  KAPALI (yanıt: {(gate.RememberedAnswer ? "Evet" : "Hayır")})" : "  —  soruluyor");
+                lbl.Text = gate.Title + (gate.Suppressed ? string.Format(Strings.GateSuppressedFormat, gate.RememberedAnswer ? Strings.GateYes : Strings.GateNo) : Strings.GateAsking);
                 btn.Enabled = gate.Suppressed;
             }
             btn.Click += (_, _) => { gate.ResetSuppression(); Refresh(); };
@@ -421,12 +421,12 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildAboutCard()
     {
-        var card = Card("Hakkında", 110, out var body);
+        var card = Card(Strings.CardAbout, 110, out var body);
         body.Controls.Add(ThemeManager.MakeLabel($"{AppConstants.AppTitle} v{AppConstants.Version}", subtle: true));
-        var link = new LinkLabel { Text = "VirusTotal API anahtarı al (virustotal.com)", AutoSize = true };
+        var link = new LinkLabel { Text = Strings.AboutGetKeyLink, AutoSize = true };
         link.LinkClicked += (_, _) => OpenUrlInBrowser("https://www.virustotal.com/gui/my-apikey");
         body.Controls.Add(link);
-        body.Controls.Add(ThemeManager.MakeLabel("Ayar dosyası: " + ConfigPathResolver.ConfigPath, subtle: true));
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.AboutConfigFilePrefix + ConfigPathResolver.ConfigPath, subtle: true));
         return card;
     }
 
