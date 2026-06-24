@@ -36,6 +36,7 @@ internal sealed class ScanQueueControl : UserControl
     int _sortCol = -1;          // active header-sort column (-1 = arrival order)
     bool _sortAsc = true;
     string[] _colHeaders = [];  // base header texts (without the ▲/▼ glyph)
+    readonly HashSet<ScanItem> _viewSet = new(); // O(1) membership for _view (mirrors it on every rebuild)
     Bucket _bucket = Bucket.All;
 
     // ---- "have I scanned this before?" recall bar ----
@@ -257,6 +258,7 @@ internal sealed class ScanQueueControl : UserControl
         _view.RaiseListChangedEvents = true;
         _view.ResetBindings();
         if (!ReferenceEquals(_grid.DataSource, _view)) _grid.DataSource = _view;
+        _viewSet.Clear(); _viewSet.UnionWith(_view);
         PaintSortGlyph();
         Reselect(keep);
     }
@@ -300,6 +302,7 @@ internal sealed class ScanQueueControl : UserControl
             _view.RaiseListChangedEvents = true;
             _view.ResetBindings();
             if (!ReferenceEquals(_grid.DataSource, _view)) _grid.DataSource = _view;
+            _viewSet.Clear(); _viewSet.UnionWith(_view);
             _lastFilterQuery = q; _lastFilterBucket = _bucket;
         }
         Reselect(keep);
@@ -344,8 +347,10 @@ internal sealed class ScanQueueControl : UserControl
     /// without a full rebuild (so scroll position / selection survive during a running scan).</summary>
     void OnFilterItemFinished(ScanItem item)
     {
-        UpdateChipCounts();
-        if (FilterActive && _view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item) && !_view.Contains(item))
+        // No UpdateChipCounts() here — the 250ms repaint tick refreshes the chips; calling it per finished
+        // item was an O(n)-per-completion → O(n^2)-across-a-scan rescan on the UI thread. Membership is
+        // O(1) via _viewSet instead of a linear _view.Contains.
+        if (FilterActive && _view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item) && _viewSet.Add(item))
             _view.Add(item);
     }
 
