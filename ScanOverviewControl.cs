@@ -30,14 +30,19 @@ internal sealed class ScanOverviewControl : UserControl
     /// <summary>A count tile was clicked — the host opens History pre-filtered to that category
     /// ("threat" / "suspicious" / "clean").</summary>
     public event Action<string>? GoToHistoryFiltered;
+    /// <summary>The user turned on download-watching from the coverage card — the host (re)starts the watcher.</summary>
+    public event Action? WatchDownloadsToggled;
+
+    readonly FlowLayoutPanel _coverageRows = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0) };
 
     public ScanOverviewControl()
     {
         Dock = DockStyle.Fill;
         AllowDrop = true;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(8) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(8) };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // status banner
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // coverage card
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // attention
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166)); // drop-zone
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));  // count tiles
@@ -48,10 +53,11 @@ internal sealed class ScanOverviewControl : UserControl
         BuildStatusBanner();
 
         root.Controls.Add(_statusBanner, 0, 0);
-        root.Controls.Add(_attention, 0, 1);
-        root.Controls.Add(_drop, 0, 2);
-        root.Controls.Add(BuildTiles(), 0, 3);
-        root.Controls.Add(BuildRecent(), 0, 4);
+        root.Controls.Add(BuildCoverageCard(), 0, 1);
+        root.Controls.Add(_attention, 0, 2);
+        root.Controls.Add(_drop, 0, 3);
+        root.Controls.Add(BuildTiles(), 0, 4);
+        root.Controls.Add(BuildRecent(), 0, 5);
         Controls.Add(root);
 
         DragEnter += (_, e) => { if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true) e.Effect = DragDropEffects.Copy; };
@@ -110,6 +116,46 @@ internal sealed class ScanOverviewControl : UserControl
         host.Controls.Add(inner);
         host.Resize += (_, _) => inner.Location = new Point((host.Width - inner.Width) / 2, (host.Height - inner.Height) / 2);
         return host;
+    }
+
+    Control BuildCoverageCard()
+    {
+        var card = ThemeManager.MakeCard();
+        card.Dock = DockStyle.Top;
+        card.AutoSize = true;
+        card.Margin = new Padding(8, 8, 8, 2);
+        var title = ThemeManager.MakeTitle("🛡 Korumam ne kadar açık?", 10.5f);
+        title.Dock = DockStyle.Top;
+        card.Controls.Add(_coverageRows);
+        card.Controls.Add(title);
+        RefreshCoverage();
+        return card;
+    }
+
+    /// <summary>Reads the passive-protection toggles directly so a user can see — and one-tap enable —
+    /// what is actually guarding the machine going forward (download watch ships OFF, sweep is opt-in).</summary>
+    void RefreshCoverage()
+    {
+        _coverageRows.Controls.Clear();
+        _coverageRows.Controls.Add(CoverageRow("İndirilenler izleniyor", Settings.WatchDownloads,
+            enable: () => { Settings.WatchDownloads.Value = true; SettingsManager.SaveSettings(); WatchDownloadsToggled?.Invoke(); Refresh2(); }, settings: null));
+        _coverageRows.Controls.Add(CoverageRow("USB otomatik tarama", Settings.WatchUsb,
+            enable: () => { Settings.WatchUsb.Value = true; SettingsManager.SaveSettings(); Refresh2(); }, settings: null));
+        _coverageRows.Controls.Add(CoverageRow("Zamanlı tarama", SweepScheduler.IsInstalled(), enable: null, settings: () => GoToTab?.Invoke(5)));
+        _coverageRows.Controls.Add(CoverageRow("Sağ-tık menüsü", Settings.ContextMenuInstalled, enable: null, settings: () => GoToTab?.Invoke(5)));
+    }
+
+    Control CoverageRow(string label, bool on, Action? enable, Action? settings)
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
+        row.Controls.Add(new Label { Text = on ? "✓" : "✗", AutoSize = true, ForeColor = on ? Theme.Current.Success : Theme.Current.Warning, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Margin = new Padding(2, 3, 6, 0) });
+        row.Controls.Add(new Label { Text = label, AutoSize = true, ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, Margin = new Padding(0, 4, 8, 0) });
+        if (!on)
+        {
+            if (enable != null) row.Controls.Add(ThemeManager.MakeButton("Aç", (_, _) => enable()));
+            else if (settings != null) row.Controls.Add(ThemeManager.MakeButton("Ayarlar →", (_, _) => settings()));
+        }
+        return row;
     }
 
     Control BuildTiles()
@@ -196,6 +242,7 @@ internal sealed class ScanOverviewControl : UserControl
 
         UpdateAttention(tehdit);
         UpdateStatusBanner();
+        RefreshCoverage();
     }
 
     Control RecentRow(HistoryEntry e)
