@@ -192,6 +192,8 @@ internal sealed class VtApiClient
                 report.Family = fam.Family;
                 report.FamilyCount = fam.Count;
             }
+
+            report.SignatureHits = report.Detections.Count(e => string.Equals(e.Method, "blacklist", StringComparison.OrdinalIgnoreCase));
         }
 
         return report;

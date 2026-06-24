@@ -90,6 +90,7 @@ internal sealed class HashCache
             FamilyCount = report.FamilyCount,
             Tags = report.Tags,
             ThreatLabel = report.ThreatLabel,
+            SignatureHits = report.SignatureHits,
         };
         _entries[md5] = new HashCacheEntry
         {

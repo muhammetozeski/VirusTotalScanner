@@ -205,6 +205,7 @@ internal sealed class ScanDetailControl : UserControl
             (report.Reputation != 0 ? $"\nİtibar: {report.Reputation}" : "") +
             (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
+            (report.ConfidenceText != null ? $"\n{report.ConfidenceText}" : "") +
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +
             (report.CapabilitySummary != null ? $"\n{report.CapabilitySummary}" : "") +
             (Settings.ShowCommunityVotes && report.VotesText != null ? $"\n{report.VotesText}" : "") +

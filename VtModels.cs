@@ -149,6 +149,20 @@ internal sealed class VtFileReport
     public List<string> Tags { get; set; } = [];
     public string? ThreatLabel { get; set; }
 
+    /// <summary>How many detections are signature-based (engine method == "blacklist") vs heuristic/ML.
+    /// Stored so it survives in the summary cache. A heuristic-only detection set is a strong FP tell.</summary>
+    public int SignatureHits { get; set; }
+
+    [JsonIgnore] public int HeuristicOnlyHits => Math.Max(0, DetectionCount - SignatureHits);
+    [JsonIgnore] public bool HeuristicOnly => DetectionCount > 0 && SignatureHits == 0;
+
+    /// <summary>"Real match vs a guess" — the detection-confidence line for the detail pane / CLI.</summary>
+    [JsonIgnore]
+    public string? ConfidenceText =>
+        DetectionCount == 0 ? null
+        : HeuristicOnly ? "🤖 Tüm tespitler sezgisel/ML (imza eşleşmesi yok → olası yanlış pozitif)"
+        : $"🎯 {SignatureHits} imza eşleşmesi (gerçek tespit) • {HeuristicOnlyHits} sezgisel/ML";
+
     [JsonIgnore]
     public string? CapabilitySummary => BehaviorTags.Summarize(Tags, ThreatLabel);
 
