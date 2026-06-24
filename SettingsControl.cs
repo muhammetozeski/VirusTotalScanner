@@ -250,30 +250,30 @@ internal sealed class SettingsControl : UserControl
 
     static string SweepStatusText() =>
         SweepScheduler.IsInstalled()
-            ? "Durum: kurulu" + (string.IsNullOrEmpty(Settings.SweepFolder.Value) ? "" : " — " + Settings.SweepFolder.Value)
-            : "Durum: kurulu değil";
+            ? Strings.SweepStatusInstalled + (string.IsNullOrEmpty(Settings.SweepFolder.Value) ? "" : " — " + Settings.SweepFolder.Value)
+            : Strings.SweepStatusNotInstalled;
 
     Panel BuildSweepCard()
     {
-        var card = Card("Zamanlanmış Tarama (Windows görevi)", 250, out var body);
+        var card = Card(Strings.CardSweep, 250, out var body);
 
         var status = ThemeManager.MakeLabel(SweepStatusText(), subtle: true);
         var folderBox = new TextBox { Dock = DockStyle.Top, Text = Settings.SweepFolder };
-        var pick = ThemeManager.MakeButton("Klasör seç…", (_, _) =>
+        var pick = ThemeManager.MakeButton(Strings.BtnPickFolder, (_, _) =>
         {
-            using var dlg = new FolderBrowserDialog { Description = "Periyodik taranacak klasör" };
+            using var dlg = new FolderBrowserDialog { Description = Strings.SweepFolderDescription };
             if (dlg.ShowDialog() == DialogResult.OK) folderBox.Text = dlg.SelectedPath;
         });
 
         var intervalRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        intervalRow.Controls.Add(ThemeManager.MakeLabel("Sıklık:"));
+        intervalRow.Controls.Add(ThemeManager.MakeLabel(Strings.SweepIntervalLabel));
         var interval = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-        interval.Items.AddRange(["Günlük (03:00)", "Her 6 saat", "Her 12 saat", "Haftalık (Pazar 03:00)"]);
+        interval.Items.AddRange([Strings.SweepDaily, Strings.Sweep6h, Strings.Sweep12h, Strings.SweepWeekly]);
         interval.SelectedIndex = 0;
         intervalRow.Controls.Add(interval);
 
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        buttons.Controls.Add(ThemeManager.MakeButton("Kur / Güncelle", (_, _) =>
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnInstallUpdate, (_, _) =>
         {
             string[] sched = interval.SelectedIndex switch
             {
@@ -283,23 +283,23 @@ internal sealed class SettingsControl : UserControl
                 _ => ["/SC", "DAILY", "/ST", "03:00"],
             };
             if (SweepScheduler.Install(folderBox.Text.Trim(), sched, out var err))
-                NativeMessageBox.Info("Zamanlanmış tarama kuruldu.\nRapor: " + SweepScheduler.ReportPath);
-            else NativeMessageBox.Error("Kurulamadı: " + err);
+                NativeMessageBox.Info(string.Format(Strings.SweepInstalledFormat, SweepScheduler.ReportPath));
+            else NativeMessageBox.Error(Strings.SweepInstallFailedPrefix + err);
             status.Text = SweepStatusText();
         }, accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("Şimdi çalıştır", (_, _) =>
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRunNow, (_, _) =>
         {
-            if (SweepScheduler.RunNow(out var err)) NativeMessageBox.Info("Tarama görevi başlatıldı (arka planda).");
-            else NativeMessageBox.Error("Çalıştırılamadı: " + err);
+            if (SweepScheduler.RunNow(out var err)) NativeMessageBox.Info(Strings.SweepStartedInfo);
+            else NativeMessageBox.Error(Strings.SweepRunFailedPrefix + err);
         }));
-        buttons.Controls.Add(ThemeManager.MakeButton("Kaldır", (_, _) =>
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRemove, (_, _) =>
         {
-            if (SweepScheduler.Uninstall(out var err)) NativeMessageBox.Info("Zamanlanmış tarama kaldırıldı.");
-            else NativeMessageBox.Error("Kaldırılamadı: " + err);
+            if (SweepScheduler.Uninstall(out var err)) NativeMessageBox.Info(Strings.SweepRemovedInfo);
+            else NativeMessageBox.Error(Strings.SweepRemoveFailedPrefix + err);
             status.Text = SweepStatusText();
         }));
 
-        body.Controls.Add(ThemeManager.MakeLabel("Seçilen klasör periyodik olarak (anahtarsız) taranır; sonuç bir HTML rapora yazılır.", subtle: true));
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.SweepHint, subtle: true));
         body.Controls.Add(intervalRow);
         body.Controls.Add(folderBox);
         body.Controls.Add(pick);

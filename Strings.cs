@@ -123,6 +123,27 @@ internal static class Strings
     public static string ScanSafeExtsLabel = "Güvenli uzantılar (; ile ayır):";
     public static string BtnSaveExts = "Uzantıları kaydet";
 
+    // ---- settings: scheduled sweep card ----
+    public static string SweepStatusInstalled = "Durum: kurulu";
+    public static string SweepStatusNotInstalled = "Durum: kurulu değil";
+    public static string CardSweep = "Zamanlanmış Tarama (Windows görevi)";
+    public static string BtnPickFolder = "Klasör seç…";
+    public static string SweepFolderDescription = "Periyodik taranacak klasör";
+    public static string SweepIntervalLabel = "Sıklık:";
+    public static string SweepDaily = "Günlük (03:00)";
+    public static string Sweep6h = "Her 6 saat";
+    public static string Sweep12h = "Her 12 saat";
+    public static string SweepWeekly = "Haftalık (Pazar 03:00)";
+    public static string BtnInstallUpdate = "Kur / Güncelle";
+    public static string SweepInstalledFormat = "Zamanlanmış tarama kuruldu.\nRapor: {0}";
+    public static string SweepInstallFailedPrefix = "Kurulamadı: ";
+    public static string BtnRunNow = "Şimdi çalıştır";
+    public static string SweepStartedInfo = "Tarama görevi başlatıldı (arka planda).";
+    public static string SweepRunFailedPrefix = "Çalıştırılamadı: ";
+    public static string SweepRemovedInfo = "Zamanlanmış tarama kaldırıldı.";
+    public static string SweepRemoveFailedPrefix = "Kaldırılamadı: ";
+    public static string SweepHint = "Seçilen klasör periyodik olarak (anahtarsız) taranır; sonuç bir HTML rapora yazılır.";
+
     // ---- API key dialog ----
     public static string DlgApiKeyAddTitle = "API anahtarı ekle";
     public static string DlgApiKeyEditTitle = "API anahtarını düzenle";
