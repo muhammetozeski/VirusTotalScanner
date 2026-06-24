@@ -33,8 +33,8 @@ internal sealed class HashCache
 
     readonly ConcurrentDictionary<string, HashCacheEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
     readonly object _saveLock = new();
-    DateTime _lastSaveUtc = DateTime.MinValue;
-    bool _dirty;
+    DateTime _lastSaveUtc = DateTime.MinValue; // only touched under _saveLock
+    volatile bool _dirty;                       // set true by worker threads; cleared under _saveLock
 
     public void Load()
     {
@@ -134,24 +134,34 @@ internal sealed class HashCache
 
     public void MaybeSave()
     {
-        if (!_dirty) return;
-        if (DateTime.UtcNow - _lastSaveUtc < TimeSpan.FromSeconds(5)) return;
-        Flush();
+        if (!_dirty) return; // fast-path hint; the real throttle decision is made under the lock
+        lock (_saveLock)
+        {
+            if (!_dirty || DateTime.UtcNow - _lastSaveUtc < TimeSpan.FromSeconds(5)) return;
+            WriteUnderLock();
+        }
     }
 
     public void Flush()
     {
-        if (!_dirty) return;
         lock (_saveLock)
         {
-            try
-            {
-                Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-                File.WriteAllText(ConfigPathResolver.HashCachePath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
-                _lastSaveUtc = DateTime.UtcNow;
-                _dirty = false;
-            }
-            catch (Exception ex) { Log("Hash cache save failed: " + ex.Message, LogLevel.Warning); }
+            if (!_dirty) return;
+            WriteUnderLock();
         }
+    }
+
+    /// <summary>Serializes the cache to disk. Caller must hold <see cref="_saveLock"/> so the
+    /// throttle/dirty read-modify-write stays atomic across concurrent scan-worker Puts.</summary>
+    void WriteUnderLock()
+    {
+        try
+        {
+            Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
+            File.WriteAllText(ConfigPathResolver.HashCachePath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
+            _lastSaveUtc = DateTime.UtcNow;
+            _dirty = false;
+        }
+        catch (Exception ex) { Log("Hash cache save failed: " + ex.Message, LogLevel.Warning); }
     }
 }
