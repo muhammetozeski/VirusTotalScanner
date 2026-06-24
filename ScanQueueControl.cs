@@ -842,7 +842,20 @@ internal sealed class ScanQueueControl : UserControl
     void OnProgress(OverallProgress p)
     {
         _overall.Value = Math.Clamp((int)p.Percent, 0, 100);
-        _summary.Text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed);
+        string text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed);
+        if (p.Done < p.Total && p.FilesPerSec > 0)
+        {
+            string eta = p.Remaining is { } rem ? $"  •  Kalan ~{ShortDuration(rem)}" : "";
+            text += $"{eta}  •  {p.FilesPerSec:0.#} dosya/sn  •  Geçen {ShortDuration(p.Elapsed)}";
+        }
+        _summary.Text = text;
+    }
+
+    static string ShortDuration(TimeSpan t)
+    {
+        if (t.TotalHours >= 1) return $"{(int)t.TotalHours} sa {t.Minutes} dk";
+        if (t.TotalMinutes >= 1) return $"{t.Minutes} dk {t.Seconds} sn";
+        return $"{Math.Max(0, (int)t.TotalSeconds)} sn";
     }
 
     void OnItemFinished(ScanItem item)

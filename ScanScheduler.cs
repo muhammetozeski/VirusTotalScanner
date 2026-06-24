@@ -42,6 +42,11 @@ internal sealed class ScanScheduler
     // aggregate counters
     int _total, _done, _malicious, _suspicious, _clean, _failed, _skipped, _signedSkipped;
 
+    // live throughput / ETA
+    readonly System.Diagnostics.Stopwatch _stopwatch = new();
+    readonly Queue<long> _recent = new(); // ElapsedMs at each of the last ~30 completions
+    readonly object _rateLock = new();
+
     public ScanScheduler(KeyRotator rotator, VtApiClient api, HashCache cache)
     {
         _rotator = rotator;
@@ -61,6 +66,8 @@ internal sealed class ScanScheduler
         var ct = _cts.Token;
         IsRunning = true;
         ResetCounters();
+        _stopwatch.Restart();
+        lock (_rateLock) _recent.Clear();
         UiPost(() => Items.Clear());
         try { Started?.Invoke(); } catch (Exception ex) { Log("Started handler failed: " + ex.Message, LogLevel.Warning); }
 
@@ -337,7 +344,28 @@ internal sealed class ScanScheduler
         Log($"VT skipped (trusted): {item.FileName} — {reason}", LogLevel.Info);
     }
 
-    void DoneOne() { Interlocked.Increment(ref _done); ReportProgress(); }
+    void DoneOne()
+    {
+        Interlocked.Increment(ref _done);
+        lock (_rateLock) { _recent.Enqueue(_stopwatch.ElapsedMilliseconds); while (_recent.Count > 30) _recent.Dequeue(); }
+        ReportProgress();
+    }
+
+    /// <summary>Rolling files/sec over the recent window + a remaining-time estimate, so trusted-skip
+    /// and cache hits (near-instant) at the start don't skew the rate against slow VT uploads.</summary>
+    (double Rate, TimeSpan? Remaining) ComputeRate(int total, int done)
+    {
+        lock (_rateLock)
+        {
+            if (_recent.Count < 2) return (0, null);
+            long span = _recent.Last() - _recent.First();
+            if (span <= 0) return (0, null);
+            double rate = (_recent.Count - 1) / (span / 1000.0);
+            int left = Math.Max(0, total - done);
+            TimeSpan? rem = rate > 0 ? TimeSpan.FromSeconds(left / rate) : null;
+            return (rate, rem);
+        }
+    }
     void Bump(ref int counter) { Interlocked.Increment(ref counter); }
 
     void ResetCounters() { _total = _done = _malicious = _suspicious = _clean = _failed = _skipped = _signedSkipped = 0; }
@@ -355,6 +383,10 @@ internal sealed class ScanScheduler
             Skipped = _skipped,
             SignedSkipped = _signedSkipped,
         };
+        var (rate, rem) = ComputeRate(_total, _done);
+        p.Elapsed = _stopwatch.Elapsed;
+        p.FilesPerSec = rate;
+        p.Remaining = rem;
         UiPost(() => { try { ProgressChanged?.Invoke(p); } catch (Exception ex) { Log("ProgressChanged handler failed: " + ex.Message, LogLevel.Warning); } });
     }
 }

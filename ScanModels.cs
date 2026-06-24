@@ -111,6 +111,9 @@ internal sealed class OverallProgress
     public int Failed { get; set; }
     public int Skipped { get; set; }
     public int SignedSkipped { get; set; }
+    public TimeSpan Elapsed { get; set; }
+    public double FilesPerSec { get; set; }
+    public TimeSpan? Remaining { get; set; }
     public double Percent => Total > 0 ? (double)Done / Total * 100 : 0;
 }
 
