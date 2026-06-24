@@ -36,6 +36,8 @@ internal static class ScanHistoryStore
     const int MaxEntries = 5000;
     static readonly object Lock = new();
     static List<HistoryEntry>? _entries;
+    static volatile bool _dirty;                 // unsaved Records pending; flushed on a throttle / scan-finish / exit
+    static DateTime _lastSaveUtc = DateTime.MinValue;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
 
     public static event Action? Changed;
@@ -80,7 +82,8 @@ internal static class ScanHistoryStore
         {
             Entries.Add(e);
             if (Entries.Count > MaxEntries) Entries.RemoveRange(0, Entries.Count - MaxEntries);
-            Save();
+            _dirty = true;
+            MaybeSave(); // throttle: a 2000-file sweep mustn't re-serialize the whole log per item (O(n^2))
         }
         Changed?.Invoke();
     }
@@ -98,6 +101,20 @@ internal static class ScanHistoryStore
         Changed?.Invoke();
     }
 
+    /// <summary>Force any throttled, still-pending Record to disk — call on scan-finish and app exit so
+    /// the last few seconds of a sweep aren't lost if the process is killed.</summary>
+    public static void Flush()
+    {
+        lock (Lock) { if (_dirty) Save(); }
+    }
+
+    static void MaybeSave() // caller holds Lock
+    {
+        if (!_dirty) return;
+        if (DateTime.UtcNow - _lastSaveUtc < TimeSpan.FromSeconds(5)) return;
+        Save();
+    }
+
     static List<HistoryEntry> Load()
     {
         try
@@ -109,12 +126,14 @@ internal static class ScanHistoryStore
         return [];
     }
 
-    static void Save()
+    static void Save() // caller holds Lock
     {
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.DataFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
+            _lastSaveUtc = DateTime.UtcNow;
+            _dirty = false;
         }
         catch (Exception ex) { Log("History save failed: " + ex.Message, LogLevel.Warning); }
     }

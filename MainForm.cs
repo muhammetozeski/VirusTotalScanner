@@ -139,6 +139,7 @@ internal sealed partial class MainForm : Form
         AppServices.Scheduler.ProgressChanged += p => SafeUi(() => TaskbarProgress.Set(p.Done, p.Total));
         AppServices.Scheduler.Finished += () => SafeUi(() =>
         {
+            ScanHistoryStore.Flush(); // commit the sweep's throttled history rows now that it's done
             var items = AppServices.Scheduler.Items;
             bool threats = items.Any(i => i.Report?.IsMalicious == true);
             if (threats) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
@@ -320,6 +321,7 @@ internal sealed partial class MainForm : Form
             return;
         }
         _downloadsWatcher.Dispose();
+        ScanHistoryStore.Flush(); // don't lose the last throttled history rows on exit
         AppServices.Shutdown();
         _tray.Visible = false;
     }
