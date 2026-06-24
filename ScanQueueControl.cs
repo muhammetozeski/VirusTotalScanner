@@ -34,6 +34,12 @@ internal sealed class ScanQueueControl : UserControl
     readonly Panel _recallBar = new() { Dock = DockStyle.Top, Height = 30, Visible = false, Padding = new Padding(10, 4, 4, 4) };
     readonly Label _recallLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
 
+    // ---- quarantine undo bar ----
+    readonly Panel _undoBar = new() { Dock = DockStyle.Top, Height = 32, Visible = false, Padding = new Padding(10, 4, 4, 4) };
+    readonly Label _undoLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+    readonly System.Windows.Forms.Timer _undoTimer = new() { Interval = 12000 };
+    QuarantineEntry? _undoEntry;
+
     /// <summary>Raised when a scan is requested but no API key is configured.</summary>
     public event Action? NeedApiKey;
     /// <summary>Raised when a threat is found (for tray notifications).</summary>
@@ -79,6 +85,7 @@ internal sealed class ScanQueueControl : UserControl
         ConfigureGrid();
         split.Panel1.Controls.Add(_grid);
         split.Panel1.Controls.Add(BuildRecallBar());
+        split.Panel1.Controls.Add(BuildUndoBar());
         split.Panel2.Controls.Add(_detail);
         // Set min sizes / splitter only once the container has a real width (avoids the
         // "SplitterDistance must be between Panel1MinSize and Width - Panel2MinSize" crash).
@@ -333,6 +340,46 @@ internal sealed class ScanQueueControl : UserControl
         _recallBar.Controls.Add(close);
         close.BringToFront();
         return _recallBar;
+    }
+
+    Panel BuildUndoBar()
+    {
+        var undo = ThemeManager.MakeButton("↩  Geri al", (_, _) => DoUndoQuarantine());
+        undo.Dock = DockStyle.Right;
+        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand };
+        close.FlatAppearance.BorderSize = 0;
+        close.Click += (_, _) => HideUndo();
+        _undoBar.Controls.Add(_undoLabel);
+        _undoBar.Controls.Add(undo);
+        _undoBar.Controls.Add(close);
+        close.BringToFront();
+        undo.BringToFront();
+        _undoTimer.Tick += (_, _) => HideUndo();
+        return _undoBar;
+    }
+
+    void ShowQuarantineUndo(string fileName, QuarantineEntry entry)
+    {
+        _undoEntry = entry;
+        _undoBar.BackColor = RecallBlend(Theme.Current.Success, Theme.Current.Panel, 0.22f);
+        _undoLabel.ForeColor = Theme.Current.Text;
+        _undoLabel.Text = $"✓  '{fileName}' karantinaya alındı (.VIRUS).";
+        _undoBar.Visible = true;
+        _undoTimer.Stop();
+        _undoTimer.Start();
+    }
+
+    void HideUndo() { _undoTimer.Stop(); _undoBar.Visible = false; _undoEntry = null; }
+
+    void DoUndoQuarantine()
+    {
+        var entry = _undoEntry;
+        HideUndo();
+        if (entry == null) return;
+        if (QuarantineVault.Restore(entry, out var err))
+            _summary.Text = $"↩ '{Path.GetFileName(entry.OriginalPath)}' geri yüklendi.";
+        else
+            NativeMessageBox.Error(string.Format(Strings.VaultRestoreFailedFormat, err));
     }
 
     void UpdateRecallBar(ScanItem? item)
@@ -596,7 +643,12 @@ internal sealed class ScanQueueControl : UserControl
             else errors.Add(Path.GetFileName(i.FilePath) + ": " + err);
 
         if (items.Count == 1 && ok == 1)
-            NativeMessageBox.Info(Strings.QuarantineDoneInfo);
+        {
+            // Non-blocking undo banner instead of a dead-end modal, live for ~12s.
+            var entry = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, items[0].FilePath, StringComparison.OrdinalIgnoreCase));
+            if (entry != null) ShowQuarantineUndo(items[0].FileName, entry);
+            else NativeMessageBox.Info(Strings.QuarantineDoneInfo);
+        }
         else
             NativeMessageBox.Info($"{ok}/{items.Count} dosya karantinaya alındı." +
                 (errors.Count > 0 ? Strings.ErrorsHeader + string.Join("\n", errors.Take(10)) : ""));
