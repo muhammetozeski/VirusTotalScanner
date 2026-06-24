@@ -344,11 +344,45 @@ internal sealed class ScanDetailControl : UserControl
         _behaviourPanel.Controls.Add(new Label { Text = "🧪 Bu dosya çalışırsa PC'ne ne yapar:", AutoSize = true, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Margin = new Padding(0, 2, 0, 4) });
         foreach (var line in d.Lines)
         {
-            var lbl = new Label { Text = line.Icon + "  " + line.Text, AutoSize = true, Margin = new Padding(10, 1, 0, 1) };
+            bool hasDetails = line.Details is { Count: > 0 };
+            var lbl = new Label { Text = line.Icon + "  " + line.Text + (hasDetails ? "   ▸" : ""), AutoSize = true, Margin = new Padding(10, 1, 0, 1) };
             if (line.Alarm) { lbl.ForeColor = Theme.Current.Danger; lbl.Font = new Font("Segoe UI", 9f, FontStyle.Bold); }
             _behaviourPanel.Controls.Add(lbl);
+
+            if (hasDetails)
+            {
+                bool isNet = line.Icon == "🌐";
+                var details = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Visible = false, Margin = new Padding(28, 0, 0, 4) };
+                foreach (var item in line.Details!) details.Controls.Add(BuildIocRow(item, isNet));
+                _behaviourPanel.Controls.Add(details);
+                lbl.Cursor = Cursors.Hand;
+                string baseText = line.Icon + "  " + line.Text;
+                lbl.Click += (_, _) => { details.Visible = !details.Visible; lbl.Text = baseText + (details.Visible ? "   ▾" : "   ▸"); };
+            }
         }
         _behaviourPanel.Visible = true;
+    }
+
+    Control BuildIocRow(string item, bool isNetwork)
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 1) };
+        row.Controls.Add(new Label { Text = item, AutoSize = true, Tag = "subtle", Margin = new Padding(0, 4, 8, 0) });
+        var copy = new Button { Text = Strings.BtnCopy, AutoSize = true, Margin = new Padding(0) };
+        copy.Click += (_, _) => { try { Clipboard.SetText(item); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } };
+        ThemeManager.StyleButton(copy);
+        row.Controls.Add(copy);
+        if (isNetwork)
+        {
+            int sp = item.IndexOf(' ');
+            string host = (sp >= 0 ? item[(sp + 1)..] : item).Trim();
+            if (host.Length > 0)
+            {
+                var search = new LinkLabel { Text = "ara ↗", AutoSize = true, Margin = new Padding(8, 4, 0, 0) };
+                search.LinkClicked += (_, _) => OpenUrlInBrowser("https://www.virustotal.com/gui/search/" + Uri.EscapeDataString(host));
+                row.Controls.Add(search);
+            }
+        }
+        return row;
     }
 
     void BuildActionStrip(RecommendationService.Reco reco)

@@ -4,7 +4,7 @@ namespace VirusTotalScanner;
 
 /// <summary>One plain-Turkish "so what" line distilled from sandbox behaviour. <see cref="Alarm"/> marks
 /// the genuinely scary ones (e.g. persistence) so the UI can colour them.</summary>
-internal sealed record DigestLine(string Icon, string Text, bool Alarm);
+internal sealed record DigestLine(string Icon, string Text, bool Alarm, IReadOnlyList<string>? Details = null);
 
 internal sealed class BehaviourDigest
 {
@@ -26,18 +26,18 @@ internal static class BehaviourDigestBuilder
     {
         var d = new BehaviourDigest();
         if (b.Network.Count > 0)
-            d.Lines.Add(new("🌐", $"{b.Network.Count} ağ adresine/sunucuya bağlanıyor", false));
+            d.Lines.Add(new("🌐", $"{b.Network.Count} ağ adresine/sunucuya bağlanıyor", false, b.Network.Take(8).ToList()));
         if (b.FilesWritten.Count > 0)
-            d.Lines.Add(new("📄", $"{b.FilesWritten.Count} dosya yazıyor/bırakıyor", false));
+            d.Lines.Add(new("📄", $"{b.FilesWritten.Count} dosya yazıyor/bırakıyor", false, b.FilesWritten.Take(8).ToList()));
 
-        bool persist = b.Registry.Any(r => PersistMarkers.Any(m => (r ?? "").ToLowerInvariant().Contains(m)));
-        if (persist)
-            d.Lines.Add(new("⛔", "Otomatik başlatma/kalıcılık anahtarı yazıyor — yeniden başlatmada hayatta kalır", true));
+        var persistKeys = b.Registry.Where(r => PersistMarkers.Any(m => (r ?? "").ToLowerInvariant().Contains(m))).ToList();
+        if (persistKeys.Count > 0)
+            d.Lines.Add(new("⛔", "Otomatik başlatma/kalıcılık anahtarı yazıyor — yeniden başlatmada hayatta kalır", true, persistKeys.Take(8).ToList()));
         else if (b.Registry.Count > 0)
-            d.Lines.Add(new("🔧", $"{b.Registry.Count} kayıt defteri anahtarı değiştiriyor", false));
+            d.Lines.Add(new("🔧", $"{b.Registry.Count} kayıt defteri anahtarı değiştiriyor", false, b.Registry.Take(8).ToList()));
 
         if (b.Processes.Count > 0)
-            d.Lines.Add(new("⚙", $"{b.Processes.Count} başka süreç başlatıyor", false));
+            d.Lines.Add(new("⚙", $"{b.Processes.Count} başka süreç başlatıyor", false, b.Processes.Take(8).ToList()));
 
         // Decode MITRE technique ids into plain-Turkish statements grouped by tactic, instead of a bare count.
         foreach (var (tactic, meanings) in MitreGlossary.Decode(b.Mitre))
