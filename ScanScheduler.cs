@@ -92,14 +92,14 @@ internal sealed class ScanScheduler
 
             _total = files.Count;
             var items = files.Select(f => new ScanItem(f)).ToList();
-            UiPost(() => { foreach (var it in items) Items.Add(it); });
+            UiPost(() => BulkAdd(items));
 
             // Ledger: show each size-skipped file as a row so the user sees what was excluded and why.
             if (oversize.Count > 0)
             {
                 int capMb = (int)(opts.MaxFileSizeBytes / (1024 * 1024));
                 var skipped = oversize.Select(f => new ScanItem(f) { Status = ScanStatus.Skipped, SkipReason = $"çok büyük (>{capMb} MB)" }).ToList();
-                UiPost(() => { foreach (var it in skipped) Items.Add(it); });
+                UiPost(() => BulkAdd(skipped));
                 for (int n = 0; n < oversize.Count; n++) Bump(ref _skipped);
                 Log($"{oversize.Count} file(s) skipped by the {capMb} MB size cap.", LogLevel.Info);
             }
@@ -357,6 +357,20 @@ internal sealed class ScanScheduler
         UiPost(() => { item.SkipReason = reason; item.Publisher = publisher; item.Status = ScanStatus.TrustedSkipped; });
         Bump(ref _signedSkipped);
         Log($"VT skipped (trusted): {item.FileName} — {reason}", LogLevel.Info);
+    }
+
+    /// <summary>Add many items to the grid-bound list in chunks, suppressing per-item ListChanged so the
+    /// DataGridView repaints once per chunk instead of once per row — adding tens of thousands of files
+    /// no longer freezes the window for seconds at scan start. Runs on the UI thread (caller marshals).</summary>
+    void BulkAdd(List<ScanItem> toAdd)
+    {
+        const int chunk = 500;
+        for (int i = 0; i < toAdd.Count; i += chunk)
+        {
+            Items.RaiseListChangedEvents = false;
+            try { for (int j = i, end = Math.Min(i + chunk, toAdd.Count); j < end; j++) Items.Add(toAdd[j]); }
+            finally { Items.RaiseListChangedEvents = true; Items.ResetBindings(); }
+        }
     }
 
     void DoneOne()
