@@ -8,7 +8,7 @@ namespace VirusTotalScanner;
 /// </summary>
 internal sealed class ScanDetailControl : UserControl
 {
-    readonly Label _banner = new();
+    readonly VerdictHeroPanel _hero = new();
     readonly Label _meta = new();
     readonly Label _stats = new();
     readonly Panel _ratioBar = new();
@@ -28,20 +28,13 @@ internal sealed class ScanDetailControl : UserControl
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7, BackColor = Color.Transparent };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // banner
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104)); // verdict hero card
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // meta
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // hashes
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // stats
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // ratio
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // toggle + link
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // grid
-
-        _banner.Dock = DockStyle.Fill;
-        _banner.Height = 48;
-        _banner.TextAlign = ContentAlignment.MiddleCenter;
-        _banner.Font = new Font("Segoe UI", 14f, FontStyle.Bold);
-        _banner.Margin = new Padding(0, 0, 0, 8);
-        _banner.ForeColor = Color.White;
 
         _meta.AutoSize = true; _meta.MaximumSize = new Size(2000, 0);
         _stats.AutoSize = true; _stats.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
@@ -146,7 +139,7 @@ internal sealed class ScanDetailControl : UserControl
         _empty.TextAlign = ContentAlignment.MiddleCenter;
         _empty.Tag = "subtle";
 
-        root.Controls.Add(_banner, 0, 0);
+        root.Controls.Add(_hero, 0, 0);
         root.Controls.Add(_meta, 0, 1);
         root.Controls.Add(hashPanel, 0, 2);
         root.Controls.Add(_stats, 0, 3);
@@ -257,8 +250,8 @@ internal sealed class ScanDetailControl : UserControl
 
         if (trustedSkip)
         {
-            _banner.Text = Strings.BannerSigned;
-            _banner.BackColor = Theme.Current.Accent;
+            _hero.Set(Strings.StatusSignedShort, "VirusTotal taraması atlandı",
+                RecommendationService.Build(item!).Headline, "✓", Theme.Current.Accent);
             _meta.Text =
                 $"{Strings.DetailLblFile}{item!.FileName}\n" +
                 $"{Strings.DetailLblStatus}{item.SkipReason ?? Strings.StatusSignedShort}" +
@@ -276,13 +269,14 @@ internal sealed class ScanDetailControl : UserControl
         }
 
         string verdict = report!.Verdict;
-        _banner.Text = string.Format(Strings.BannerVerdictFormat, verdict, report.DetectionCount, report.TotalEngines);
-        _banner.BackColor = Theme.VerdictColor(verdict);
 
         // Provenance line: where this verdict came from.
         string provenance = item!.FromCache ? Strings.ProvenanceCache : Strings.ProvenanceScan;
 
         var reco = RecommendationService.Build(item);
+        string heroGlyph = report.IsMalicious ? "✕" : report.DetectionCount > 0 ? "!" : report.TotalEngines == 0 ? "?" : "✓";
+        _hero.Set(verdict, string.Format(Strings.BannerVerdictFormat, verdict, report.DetectionCount, report.TotalEngines),
+            reco.Headline, heroGlyph, Theme.VerdictColor(verdict));
         _meta.Text =
             $"👉 {reco.Emoji} {reco.Headline}\n{reco.Rationale}\n\n" +
             $"{Strings.DetailLblName}{report.MeaningfulName ?? item.FileName}\n" +
