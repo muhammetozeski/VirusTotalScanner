@@ -338,43 +338,6 @@ internal static class CliRunner
 
     static void PrintHelp()
     {
-        Console.WriteLine($"""
-        {AppConstants.AppTitle} v{AppConstants.Version}
-
-        Kullanım:
-          VirusTotalScanner.exe [seçenekler] <dosya|klasör> [<dosya|klasör> ...]
-
-        Çift tıklayınca grafik arayüz açılır. Terminalden çalıştırınca komut satırı modunda çalışır.
-
-        Seçenekler:
-          -s, --scan          Tarama işareti (sağ tuş menüsü kullanır)
-          -r, --recurse       Klasörleri alt klasörlerle birlikte tara
-              --no-trust      İmza güvenini yok say (imzalı dosyaları da VT'ye gönder)
-          -k, --keyless       Anahtarsız sorgula (GUI/WebView2 üzerinden, kotasız, yavaş)
-              --expand-archives  Arşivleri (zip/nupkg/jar…) aç, üyelerini ayrı ayrı tara
-              --running       Çalışan tüm süreçlerin imajlarını tara ("şu an virüslü müyüm?")
-          -n, --nogui, --cli  Grafik arayüz açmadan terminalde çalış
-          -g, --gui           Terminalden bile olsa grafik arayüzü aç
-          -j, --json          Sonuçları JSON olarak yaz (stdout)
-              --report <yol>  Rapor dosyası yaz (.html/.csv/.json/.txt — uzantıdan biçim seçilir)
-              --fail-on <N>   N+ tespit olan dosyada çıkış kodu 1 (CI kapısı)
-              --diff <json>   Önceki --report json ile karşılaştır (sha256); delta yaz
-              --fail-on-new / --fail-on-regression  yeni/kötüleşen verdiktte çıkış 1
-          -q, --quiet         Yalın çıktı (yalnızca verdict satırları)
-              --install       Sağ tuş menüsüne ekle
-              --uninstall     Sağ tuş menüsünden kaldır
-              --repair        Sağ tuş menüsü kaydını (exe yolu) onar
-              --addkey <KEY>  API anahtarı ekle (şifreli saklanır)
-              --listkeys      Tanımlı anahtarları ve kotaları listele
-              --removekey <id|all>  Anahtar(ları) sil
-              --lookup <hash>  Bir MD5/SHA-1/SHA-256 hash'ini sorgula
-              --expect <hash>  Dosyayı beklenen hash ile doğrula (eşleşmezse çıkış kodu 4)
-          -h, --help          Bu yardım
-          -v, --version       Sürüm
-
-        Çıkış kodları: 0 temiz, 1 tehdit bulundu, 2 kullanım/IO hatası, 3 anahtar yok, 4 hash eşleşmedi.
-
-        Not: Bu bir GUI uygulamasıdır; betikte beklemek için 'Start-Process -Wait' kullanın.
-        """);
+        Console.WriteLine(string.Format(Strings.HelpTextFormat, AppConstants.AppTitle, AppConstants.Version));
     }
 }

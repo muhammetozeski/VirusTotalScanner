@@ -177,6 +177,40 @@ internal static class Strings
     public static string GateNo = "Hayır";
     public static string GateAsking = "  —  soruluyor";
 
+    // ---- CLI: --help usage text ----
+    public static string HelpTextFormat =
+        "{0} v{1}\n\n" +
+        "Kullanım:\n" +
+        "  VirusTotalScanner.exe [seçenekler] <dosya|klasör> [<dosya|klasör> ...]\n\n" +
+        "Çift tıklayınca grafik arayüz açılır. Terminalden çalıştırınca komut satırı modunda çalışır.\n\n" +
+        "Seçenekler:\n" +
+        "  -s, --scan          Tarama işareti (sağ tuş menüsü kullanır)\n" +
+        "  -r, --recurse       Klasörleri alt klasörlerle birlikte tara\n" +
+        "      --no-trust      İmza güvenini yok say (imzalı dosyaları da VT'ye gönder)\n" +
+        "  -k, --keyless       Anahtarsız sorgula (GUI/WebView2 üzerinden, kotasız, yavaş)\n" +
+        "      --expand-archives  Arşivleri (zip/nupkg/jar…) aç, üyelerini ayrı ayrı tara\n" +
+        "      --running       Çalışan tüm süreçlerin imajlarını tara (\"şu an virüslü müyüm?\")\n" +
+        "  -n, --nogui, --cli  Grafik arayüz açmadan terminalde çalış\n" +
+        "  -g, --gui           Terminalden bile olsa grafik arayüzü aç\n" +
+        "  -j, --json          Sonuçları JSON olarak yaz (stdout)\n" +
+        "      --report <yol>  Rapor dosyası yaz (.html/.csv/.json/.txt — uzantıdan biçim seçilir)\n" +
+        "      --fail-on <N>   N+ tespit olan dosyada çıkış kodu 1 (CI kapısı)\n" +
+        "      --diff <json>   Önceki --report json ile karşılaştır (sha256); delta yaz\n" +
+        "      --fail-on-new / --fail-on-regression  yeni/kötüleşen verdiktte çıkış 1\n" +
+        "  -q, --quiet         Yalın çıktı (yalnızca verdict satırları)\n" +
+        "      --install       Sağ tuş menüsüne ekle\n" +
+        "      --uninstall     Sağ tuş menüsünden kaldır\n" +
+        "      --repair        Sağ tuş menüsü kaydını (exe yolu) onar\n" +
+        "      --addkey <KEY>  API anahtarı ekle (şifreli saklanır)\n" +
+        "      --listkeys      Tanımlı anahtarları ve kotaları listele\n" +
+        "      --removekey <id|all>  Anahtar(ları) sil\n" +
+        "      --lookup <hash>  Bir MD5/SHA-1/SHA-256 hash'ini sorgula\n" +
+        "      --expect <hash>  Dosyayı beklenen hash ile doğrula (eşleşmezse çıkış kodu 4)\n" +
+        "  -h, --help          Bu yardım\n" +
+        "  -v, --version       Sürüm\n\n" +
+        "Çıkış kodları: 0 temiz, 1 tehdit bulundu, 2 kullanım/IO hatası, 3 anahtar yok, 4 hash eşleşmedi.\n\n" +
+        "Not: Bu bir GUI uygulamasıdır; betikte beklemek için 'Start-Process -Wait' kullanın.";
+
     // ---- CLI: menu / ledger / scan-flow messages ----
     public static string CliMenuInstalled = "Sağ tuş menüsü kuruldu.";
     public static string CliMenuRemoved = "Sağ tuş menüsü kaldırıldı.";
