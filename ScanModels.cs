@@ -128,7 +128,8 @@ internal sealed class ScanOptions
     /// <summary>Expand ZIP-family archives and scan their members instead of the archive file.</summary>
     public bool ExpandArchives { get; set; }
     public bool UseCache { get; set; } = true;
-    public int CacheDays { get; set; } = 7;
+    public int CacheDays { get; set; } = 7;        // retention for clean verdicts
+    public int ThreatCacheDays { get; set; } = 365; // retention for malicious verdicts
 
     /// <summary>Skip VT for trusted-signed / known-good files (the keyless quota saver).</summary>
     public bool SkipTrusted { get; set; } = true;
@@ -144,6 +145,7 @@ internal sealed class ScanOptions
         MaxFileSizeBytes = Math.Max(0, (long)Settings.MaxFileSizeMB.Value) * 1024 * 1024,
         UseCache = Settings.UseLocalHashCache,
         CacheDays = Math.Max(0, Settings.HashCacheDays.Value),
+        ThreatCacheDays = Math.Max(0, Settings.ThreatCacheDays.Value),
         SkipTrusted = Settings.TrustSkipSigned,
     };
 }

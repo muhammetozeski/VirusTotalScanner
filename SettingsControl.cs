@@ -214,7 +214,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildScanCard()
     {
-        var card = Card(Strings.CardScan, 355, out var body);
+        var card = Card(Strings.CardScan, 390, out var body);
 
         var concurrency = LabeledNumeric(Strings.ScanConcurrencyLabel, Settings.MaxConcurrentScans, 1, 16,
             v => { Settings.MaxConcurrentScans.Value = v; SettingsManager.SaveSettings(); });
@@ -226,8 +226,10 @@ internal sealed class SettingsControl : UserControl
             v => { Settings.MaxConcurrentUploads.Value = v; SettingsManager.SaveSettings(); });
         var cache = new CheckBox { Text = Strings.ScanUseCacheLabel, AutoSize = true, Checked = Settings.UseLocalHashCache };
         cache.CheckedChanged += (_, _) => { Settings.UseLocalHashCache.Value = cache.Checked; SettingsManager.SaveSettings(); };
-        var cacheDays = LabeledNumeric(Strings.ScanCacheDaysLabel, Settings.HashCacheDays, 0, 365,
+        var cacheDays = LabeledNumeric("Temiz önbellek geçerlilik (gün):", Settings.HashCacheDays, 0, 3650,
             v => { Settings.HashCacheDays.Value = v; SettingsManager.SaveSettings(); });
+        var threatCacheDays = LabeledNumeric("Tehdit önbellek geçerlilik (gün):", Settings.ThreatCacheDays, 0, 3650,
+            v => { Settings.ThreatCacheDays.Value = v; SettingsManager.SaveSettings(); });
         var skipSafe = new CheckBox { Text = Strings.ScanSkipSafeLabel, AutoSize = true, Checked = Settings.SkipSafeExtensionsOnScan };
         skipSafe.CheckedChanged += (_, _) => { Settings.SkipSafeExtensionsOnScan.Value = skipSafe.Checked; SettingsManager.SaveSettings(); };
 
@@ -239,6 +241,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(lbl);
         body.Controls.Add(save);
         body.Controls.Add(skipSafe);
+        body.Controls.Add(threatCacheDays);
         body.Controls.Add(cacheDays);
         body.Controls.Add(cache);
         body.Controls.Add(recheckDays);

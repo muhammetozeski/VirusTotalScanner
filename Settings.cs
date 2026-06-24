@@ -33,8 +33,11 @@ internal static class Settings
     /// <summary>Use the local hash cache to avoid re-querying VirusTotal for known files.</summary>
     public static readonly Setting<bool> UseLocalHashCache = new(true);
 
-    /// <summary>How many days a cached clean verdict stays valid.</summary>
+    /// <summary>How many days a cached clean verdict stays valid (clean can go stale).</summary>
     public static readonly Setting<int> HashCacheDays = new(7);
+
+    /// <summary>How many days a cached malicious verdict stays valid (rarely reverses → keep long).</summary>
+    public static readonly Setting<int> ThreatCacheDays = new(365);
 
     /// <summary>Skip files larger than this many MB before hashing (0 = no cap). VT's own upload
     /// ceiling is ~650 MB, so very large files cannot be analyzed anyway.</summary>

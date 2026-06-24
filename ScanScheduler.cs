@@ -180,7 +180,7 @@ internal sealed class ScanScheduler
             // --no-trust (BypassTrust) forces a fresh scan: ignore the local cache too.
             if (opts.UseCache && !opts.BypassTrust)
             {
-                var cached = _cache.TryGet(md5, opts.CacheDays);
+                var cached = _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays);
                 if (cached != null)
                 {
                     UiPost(() => { item.Report = cached; item.FromCache = true; });
@@ -204,7 +204,7 @@ internal sealed class ScanScheduler
             VtFileReport? report;
             try
             {
-                var dup = (opts.UseCache && !opts.BypassTrust) ? _cache.TryGet(md5, opts.CacheDays) : null;
+                var dup = (opts.UseCache && !opts.BypassTrust) ? _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays) : null;
                 if (dup != null) { UiPost(() => item.FromCache = true); report = dup; }
                 else report = await DoLookupAsync(item, md5, sha256, opts, ct);
             }

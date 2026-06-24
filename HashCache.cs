@@ -59,6 +59,17 @@ internal sealed class HashCache
         return e.Report;
     }
 
+    /// <summary>As <see cref="TryGet(string,int)"/> but with a separate, longer retention for malicious
+    /// verdicts: a clean result can go stale (a file later flagged) so it expires sooner, but a
+    /// known-malicious verdict almost never reverses and shouldn't burn quota re-confirming itself.</summary>
+    public VtFileReport? TryGet(string md5, int cleanDays, int threatDays)
+    {
+        if (!_entries.TryGetValue(md5, out var e) || e.Report == null) return null;
+        int ttl = e.Report.IsMalicious ? threatDays : cleanDays;
+        if (ttl > 0 && DateTime.UtcNow - e.CachedUtc > TimeSpan.FromDays(ttl)) return null;
+        return e.Report;
+    }
+
     public void Put(string md5, VtFileReport report, string? sourcePath = null)
     {
         // Preserve a previously-recorded path when this Put has none (e.g. a hash-only re-check).
