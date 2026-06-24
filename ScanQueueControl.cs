@@ -134,6 +134,7 @@ internal sealed class ScanQueueControl : UserControl
         var miNeighbors = (ToolStripMenuItem)menu.Items.Add("📂  Klasör komşuları", null, (_, _) => ShowNeighbors());
         var miFindCopies = (ToolStripMenuItem)menu.Items.Add("🔁  Diğer kopyaları bul (disk)", null, (_, _) => _ = FindCopiesAsync());
         var miPin = (ToolStripMenuItem)menu.Items.Add("📌  Bütünlük izlemesine al", null, (_, _) => _ = PinBaselineAsync());
+        var miPersist = (ToolStripMenuItem)menu.Items.Add("🪝  Autostart kancalarını bul", null, (_, _) => HuntPersistence());
         menu.Items.Add(new ToolStripSeparator());
         var miRescan = (ToolStripMenuItem)menu.Items.Add("🔄  Yeniden tara", null, (_, _) => RescanSelected());
         var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add("🛡  Güveni yok say, VT ile tara", null, (_, _) => RescanIgnoringTrust());
@@ -152,6 +153,7 @@ internal sealed class ScanQueueControl : UserControl
             miNeighbors.Enabled = exists;
             miFindCopies.Enabled = i.Report != null && !string.IsNullOrEmpty(i.Sha256);
             miPin.Enabled = exists;
+            miPersist.Enabled = i != null;
             miRescan.Enabled = exists;
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;
@@ -428,6 +430,19 @@ internal sealed class ScanQueueControl : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
         finally { try { _summary.Text = oldSummary; } catch { } }
+    }
+
+    void HuntPersistence()
+    {
+        var i = SelectedItem();
+        if (i == null) return;
+        var hooks = PersistenceHunter.Find(i.FilePath);
+        if (hooks.Count == 0) { NativeMessageBox.Info($"'{i.FileName}' için autostart kancası bulunamadı (Run/Startup/Görevler temiz)."); return; }
+        var sb = new StringBuilder();
+        sb.AppendLine($"'{i.FileName}' için {hooks.Count} autostart kancası bulundu:\n");
+        foreach (var h in hooks.Take(25)) sb.AppendLine($"[{h.Location}] {h.Name}\n   {h.Command}\n");
+        sb.AppendLine("Not: bunlar yalnızca listelenir; kaldırma manuel yapılmalı (regedit / Görev Zamanlayıcı).");
+        NativeMessageBox.Warn(sb.ToString());
     }
 
     async Task PinBaselineAsync()
