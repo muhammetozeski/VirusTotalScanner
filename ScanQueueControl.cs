@@ -602,7 +602,19 @@ internal sealed class ScanQueueControl : UserControl
     }
 
     static string VerdictLine(ScanItem i) =>
-        i.Report is { } r ? $"{r.Verdict} ({r.DetectionCount}/{r.TotalEngines})  {i.FileName}" : $"{i.StatusText}  {i.FileName}";
+        BucketSymbol(i) + (i.Report is { } r ? $"{r.Verdict} ({r.DetectionCount}/{r.TotalEngines})  {i.FileName}" : $"{i.StatusText}  {i.FileName}");
+
+    /// <summary>Color-independent verdict mark mirroring the row-tint buckets below — so the threat/clean
+    /// distinction survives colorblindness, a monochrome/high-contrast theme, or a screen reader.</summary>
+    static string BucketSymbol(ScanItem item) => item.Status switch
+    {
+        ScanStatus.TrustedSkipped => "✓ ",
+        ScanStatus.Failed => "✕ ",
+        ScanStatus.Skipped => "~ ",
+        ScanStatus.Completed when item.Report is { TotalEngines: > 0 } r =>
+            r.IsMalicious ? "⛔ " : r.DetectionCount > 0 ? "⚠ " : "✓ ",
+        _ => "",
+    };
 
     // Tint each row by its verdict so the list scans at a glance (red threat, yellow suspicious, …).
     void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -620,6 +632,11 @@ internal sealed class ScanQueueControl : UserControl
             _ => null,
         };
         if (c.HasValue) e.CellStyle!.ForeColor = c.Value;
+
+        // Same signal in TEXT: prefix the status cell with the bucket mark (idempotent across re-formats).
+        if (_grid.Columns[e.ColumnIndex].DataPropertyName == nameof(ScanItem.StatusText)
+            && BucketSymbol(item) is { Length: > 0 } sym && e.Value is string sv && !sv.StartsWith(sym, StringComparison.Ordinal))
+            e.Value = sym + sv;
     }
 
     void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
