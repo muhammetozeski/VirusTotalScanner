@@ -735,6 +735,7 @@ internal sealed class ScanQueueControl : UserControl
         if (ReferenceEquals(item, SelectedItem())) _detail.Show(item);
         if (item.Report?.IsMalicious == true) ThreatFound?.Invoke(item);
         OnFilterItemFinished(item);
+        ScanHistoryStore.Record(item, "Tarama");
     }
 
     void UpdateRunningState(bool running)
