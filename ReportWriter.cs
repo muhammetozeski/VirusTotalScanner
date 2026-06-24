@@ -122,8 +122,16 @@ internal static class ReportWriter
           tr:hover{background:#262626}
           a{color:#5ad}
           .small{color:#888;font-size:12px}
+          @media print{
+            body{background:#fff;color:#111;margin:12px}
+            th,td{border-bottom:1px solid #ccc}th{color:#333}
+            tr:hover{background:transparent}a{color:#06c}.sum,.small{color:#444}
+            .threat{color:#c0202a}.clean{color:#1a7d1a}.susp{color:#9a6b00}.signed{color:#0b6}.other{color:#555}
+            tr{page-break-inside:avoid}h2{page-break-before:auto}.noprint{display:none}
+          }
         </style></head><body>
         """);
+        sb.AppendLine("<div class=\"noprint\" style=\"margin-bottom:10px\"><a href=\"#\" onclick=\"window.print();return false\">🖨 Yazdır / PDF</a></div>");
         sb.AppendLine($"<h1>{H(AppConstants.AppTitle)} — scan report</h1>");
         sb.AppendLine($"<div class=\"sum\">Files: {total} &nbsp; Threats: <b class=\"threat\">{threats}</b> &nbsp; Trusted-skipped: {trusted} &nbsp; Failed: {failed}</div>");
         sb.AppendLine("<table><thead><tr><th>Verdict</th><th>Detections</th><th>File</th><th>Consensus / detail</th></tr></thead><tbody>");
@@ -216,8 +224,17 @@ internal static class ReportWriter
           .threat{color:#ff6b6b;font-weight:700}.clean{color:#6bd06b}.susp{color:#e0c060}
           tr:hover{background:#262626}a{color:#5ad}.small{color:#888;font-size:12px}
           .bar{display:inline-block;height:10px;background:#ff6b6b;border-radius:2px}
+          @media print{
+            body{background:#fff;color:#111;margin:12px}
+            h2{color:#333;page-break-before:auto}th,td{border-bottom:1px solid #ccc}th{color:#333}
+            tr:hover{background:transparent}a{color:#06c}.sum,.small{color:#444}
+            .threat{color:#c0202a}.clean{color:#1a7d1a}.susp{color:#9a6b00}
+            .bar{background:#c0202a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+            tr{page-break-inside:avoid}.noprint{display:none}
+          }
         </style></head><body>
         """);
+        sb.AppendLine("<div class=\"noprint\" style=\"margin-bottom:10px\"><a href=\"#\" onclick=\"window.print();return false\">🖨 Yazdır / PDF</a></div>");
         sb.AppendLine($"<h1>{H(AppConstants.AppTitle)} — güvenlik raporu</h1>");
         sb.AppendLine($"<div class=\"sum\">Aralık: <b>{H(rangeLabel)}</b> &nbsp;•&nbsp; Tarandı: {list.Count} &nbsp;•&nbsp; Tehdit: <b class=\"threat\">{threats}</b> &nbsp;•&nbsp; Temiz: <b class=\"clean\">{clean}</b></div>");
 
