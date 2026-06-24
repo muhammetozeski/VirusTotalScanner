@@ -32,6 +32,7 @@ internal sealed class SettingsControl : UserControl
         _flow.Controls.Add(BuildKeysCard());
         _flow.Controls.Add(BuildContextMenuCard());
         _flow.Controls.Add(BuildTrustCard());
+        _flow.Controls.Add(BuildAllowlistCard());
         _flow.Controls.Add(BuildVerdictCard());
         _flow.Controls.Add(BuildScanCard());
         _flow.Controls.Add(BuildSweepCard());
@@ -97,6 +98,40 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(_menuStatus);
         return card;
     }
+
+    readonly DataGridView _allowGrid = new();
+
+    Panel BuildAllowlistCard()
+    {
+        var card = Card("Beyaz liste (temiz olarak işaretledikleriniz)", 240, out var body);
+
+        _allowGrid.Dock = DockStyle.Top;
+        _allowGrid.Height = 150;
+        _allowGrid.AutoGenerateColumns = false;
+        _allowGrid.ReadOnly = true;
+        _allowGrid.AllowUserToAddRows = false;
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(AllowlistEntry.FileName), Width = 170 });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Gerekçe", DataPropertyName = nameof(AllowlistEntry.Reason), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Hash", DataPropertyName = nameof(AllowlistEntry.Hash), Width = 110 });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eklendi", DataPropertyName = nameof(AllowlistEntry.AddedLocal), Width = 130 });
+        ThemeManager.StyleGrid(_allowGrid);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
+        buttons.Controls.Add(ThemeManager.MakeButton("Listeden çıkar", (_, _) =>
+        {
+            if (_allowGrid.CurrentRow?.DataBoundItem is AllowlistEntry e) AllowlistStore.Remove(e.Hash);
+        }));
+        var hint = ThemeManager.MakeLabel("'Temiz olarak işaretle' dediğiniz dosyalar burada listelenir; çıkarırsanız bir sonraki taramada yeniden denetlenir.", subtle: true);
+
+        body.Controls.Add(hint);
+        body.Controls.Add(buttons);
+        body.Controls.Add(_allowGrid);
+        AllowlistStore.Changed += () => SafeUi(RefreshAllowlist);
+        RefreshAllowlist();
+        return card;
+    }
+
+    void RefreshAllowlist() => _allowGrid.DataSource = AllowlistStore.All().ToList();
 
     Panel BuildTrustCard()
     {
