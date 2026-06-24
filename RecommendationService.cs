@@ -18,36 +18,36 @@ internal static class RecommendationService
     public static Reco Build(ScanItem item)
     {
         if (item.Status == ScanStatus.TrustedSkipped)
-            return new Reco(Level.Keep, "Güvenli tutulabilir",
-                $"İmzalı{(item.Publisher != null ? " (" + item.Publisher + ")" : "")} — yayıncı doğrulandı, VT atlandı.");
+            return new Reco(Level.Keep, Strings.RecoHeadlineKeep,
+                string.Format(Strings.RecoTrustedFormat, item.Publisher != null ? " (" + item.Publisher + ")" : ""));
 
         var r = item.Report;
         bool downloaded = ZoneIdentifier.Read(item.FilePath)?.FromInternet == true;
-        string dl = downloaded ? " ve internetten indirildi" : "";
+        string dl = downloaded ? Strings.RecoDownloadedSuffix : "";
 
         if (r == null || r.TotalEngines == 0)
-            return new Reco(Level.Caution, "Dikkatli ol — henüz çalıştırma",
-                $"VirusTotal'de bulunamadı (bilinmiyor){dl}. Bilinmeyen dosyalar daha yüksek risklidir.");
+            return new Reco(Level.Caution, Strings.RecoHeadlineCautionDontRun,
+                string.Format(Strings.RecoUnknownFormat, dl));
 
         if (r.IsMalicious)
         {
             string what = !string.IsNullOrEmpty(r.ThreatLabel) ? r.ThreatLabel
-                : !string.IsNullOrEmpty(r.Family) ? r.Family : "zararlı";
-            return new Reco(Level.Remove, "Şimdi kaldır",
-                $"{r.DetectionCount}/{r.TotalEngines} motor '{what}' olarak işaretledi{dl}.");
+                : !string.IsNullOrEmpty(r.Family) ? r.Family : Strings.RecoMalwareWord;
+            return new Reco(Level.Remove, Strings.RecoHeadlineRemove,
+                string.Format(Strings.RecoMaliciousFormat, r.DetectionCount, r.TotalEngines, what, dl));
         }
 
         if (r.DetectionCount > 0)
         {
-            string why = r.MajorClean ? "yalnızca küçük/itibarsız motorlar işaretledi (olası yanlış pozitif)"
-                : r.HeuristicOnly ? "tüm tespitler sezgisel/ML (imza eşleşmesi yok)"
-                : $"{r.DetectionCount} motor işaretledi";
-            return new Reco(Level.Caution, "Dikkatli ol — henüz çalıştırma", $"{why}{dl}.");
+            string why = r.MajorClean ? Strings.RecoMajorClean
+                : r.HeuristicOnly ? Strings.RecoHeuristicOnly
+                : string.Format(Strings.RecoSomeFlaggedFormat, r.DetectionCount);
+            return new Reco(Level.Caution, Strings.RecoHeadlineCautionDontRun, string.Format(Strings.RecoCautionRationaleFormat, why, dl));
         }
 
         bool rareNew = r.FirstSeenUtc is { } first && (DateTime.UtcNow - first).TotalDays < 2;
         if (rareNew)
-            return new Reco(Level.Caution, "Dikkatli ol", $"0 tespit ama çok yeni/nadir bir dosya{dl}.");
-        return new Reco(Level.Keep, "Güvenli tutulabilir", $"0/{r.TotalEngines} tespit.");
+            return new Reco(Level.Caution, Strings.RecoHeadlineCaution, string.Format(Strings.RecoRareNewFormat, dl));
+        return new Reco(Level.Keep, Strings.RecoHeadlineKeep, string.Format(Strings.RecoCleanFormat, r.TotalEngines));
     }
 }

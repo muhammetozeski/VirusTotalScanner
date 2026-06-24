@@ -240,6 +240,23 @@ internal static class Strings
     public static string ColProgress = "İlerleme";
     public static string StatusReady = "Hazır.";
 
+    // ---- recommendation (Keep / Caution / Remove) ----
+    public static string RecoHeadlineKeep = "Güvenli tutulabilir";
+    public static string RecoHeadlineCautionDontRun = "Dikkatli ol — henüz çalıştırma";
+    public static string RecoHeadlineCaution = "Dikkatli ol";
+    public static string RecoHeadlineRemove = "Şimdi kaldır";
+    public static string RecoTrustedFormat = "İmzalı{0} — yayıncı doğrulandı, VT atlandı.";
+    public static string RecoDownloadedSuffix = " ve internetten indirildi";
+    public static string RecoUnknownFormat = "VirusTotal'de bulunamadı (bilinmiyor){0}. Bilinmeyen dosyalar daha yüksek risklidir.";
+    public static string RecoMalwareWord = "zararlı";
+    public static string RecoMaliciousFormat = "{0}/{1} motor '{2}' olarak işaretledi{3}.";
+    public static string RecoMajorClean = "yalnızca küçük/itibarsız motorlar işaretledi (olası yanlış pozitif)";
+    public static string RecoHeuristicOnly = "tüm tespitler sezgisel/ML (imza eşleşmesi yok)";
+    public static string RecoSomeFlaggedFormat = "{0} motor işaretledi";
+    public static string RecoCautionRationaleFormat = "{0}{1}.";
+    public static string RecoRareNewFormat = "0 tespit ama çok yeni/nadir bir dosya{0}.";
+    public static string RecoCleanFormat = "0/{0} tespit.";
+
     // ---- detail pane: comments + behaviour ----
     public static string CommentsNeedKeyless = "Topluluk yorumları için anahtarsız (GUI) mod gerekli.";
     public static string CommentsFetching = "💬  Getiriliyor…";
