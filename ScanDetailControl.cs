@@ -115,6 +115,17 @@ internal sealed class ScanDetailControl : UserControl
                 Section("🗝 Kayıt defteri", b.Registry);
                 Section("⚙ Süreçler", b.Processes);
                 Section("🎯 MITRE ATT&CK", b.Mitre);
+
+                // Persist + correlate network IOCs across files (shared C2 = same campaign).
+                var iocs = b.Network.Select(x => { int sp = x.IndexOf(' '); return sp >= 0 ? x[(sp + 1)..].Trim() : x; }).ToList();
+                IocStore.Record(sha, _item?.FilePath, _item?.Report?.IsMalicious == true, iocs);
+                var conns = IocStore.Connections(sha, iocs);
+                if (conns.Count > 0)
+                {
+                    sb.AppendLine($"🔗 Bağlantılı tehditler: {conns.Count} dosya ortak IOC paylaşıyor" + (conns.Any(c => c.Malicious) ? " (bazıları ZARARLI!)" : "") + ":");
+                    foreach (var c in conns.Take(8)) sb.AppendLine($"   {(c.Malicious ? "🔴" : "•")} {Path.GetFileName(c.Path ?? c.Sha256)} — ortak: {string.Join(", ", c.Shared.Take(3))}");
+                }
+
                 NativeMessageBox.Info(sb.ToString());
             }
             catch (Exception ex) { NativeMessageBox.Error("Davranış alınamadı: " + ex.Message); }
