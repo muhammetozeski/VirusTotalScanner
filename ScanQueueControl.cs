@@ -886,6 +886,20 @@ internal sealed class ScanQueueControl : UserControl
         _detail.Show(SelectedItem());
     }
 
+    /// <summary>Select and reveal a specific item (e.g. jumped to from a threat toast).</summary>
+    public void FocusItem(ScanItem item)
+    {
+        foreach (DataGridViewRow row in _grid.Rows)
+            if (ReferenceEquals(row.DataBoundItem, item))
+            {
+                _grid.ClearSelection();
+                _grid.CurrentCell = row.Cells[0];
+                row.Selected = true;
+                break;
+            }
+        _detail.Show(item);
+    }
+
     ScanItem? SelectedItem() => _grid.CurrentRow?.DataBoundItem as ScanItem;
 
     /// <summary>All currently-selected items (multi-select), for batch actions.</summary>

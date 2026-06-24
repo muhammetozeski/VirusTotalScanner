@@ -85,6 +85,7 @@ internal sealed partial class MainForm : Form
     bool _reallyExit;
     readonly bool _startHidden;
     string? _pendingUsbDrive; // set when a removable drive is inserted; scanned if the toast is clicked
+    ScanItem? _lastThreat;    // last threat toast's item; jumped to if that toast is clicked
 
     public MainForm(bool startHidden = false)
     {
@@ -196,14 +197,18 @@ internal sealed partial class MainForm : Form
 
     void OnBalloonClicked(object? sender, EventArgs e)
     {
+        RestoreFromTray();
         if (_pendingUsbDrive is { } drive)
         {
             _pendingUsbDrive = null;
-            RestoreFromTray();
             _tabs.SelectedIndex = 1; // Tarama
             _scan.StartScan([drive], recurse: true);
         }
-        else RestoreFromTray();
+        else if (_lastThreat is { } threat)
+        {
+            _tabs.SelectedIndex = 1; // jump to the threat so the user can act (quarantine, open VT…)
+            _scan.FocusItem(threat);
+        }
     }
 
     void TryLoadIcon()
@@ -260,6 +265,7 @@ internal sealed partial class MainForm : Form
     void OnThreatFound(ScanItem item)
     {
         _pendingUsbDrive = null; // a threat toast click should restore the window, not scan a stale drive
+        _lastThreat = item;
         if (!Settings.NotifyOnThreat) return;
         SafeUi(() =>
         {
