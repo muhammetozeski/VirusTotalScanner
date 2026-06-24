@@ -102,7 +102,9 @@ internal sealed class ScanHistoryControl : UserControl
 
     void OpenReverdict(object? s, EventArgs e)
     {
-        using var dlg = new HistoryReverdictDialog();
+        // Banner now opens the zero-quota dossier (reads the persisted flips); a live re-check that spends
+        // quota is an explicit button inside it, instead of being the banner's only, unavoidable action.
+        using var dlg = new EscalationDossierDialog();
         dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
         dlg.ShowDialog(FindForm());
     }
