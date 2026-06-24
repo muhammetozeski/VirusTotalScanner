@@ -47,5 +47,36 @@ Bu dosyaya, çözmesi zor olan sorunları ve çözümlerini kaydediyorum ki bir 
 
 ## Still pending: i18n migration
 - Most UI strings are still Turkish in code (against the English-everywhere principle). The
-  localization task will sweep them to English keys + a reflection-written XML (EN + TR). Until
-  then, new strings stay Turkish for a consistent UI; they all migrate together.
+  localization SYSTEM is built (Strings + LocManager + lang.en.xml + switcher), the main screen is
+  migrated; the rest is queued ("finish string migration"). New strings stay Turkish for a
+  consistent UI until that sweep; they all migrate together.
+
+## Continuous-loop discipline (the big one)
+- `ScheduleWakeup` ENDS the turn and resumes after a delay → it inherently creates a gap (min 60s,
+  it suggested 1200–1800s). NEVER use it to drive a "keep working" loop — that is what produced
+  the hated 25-minute dead gaps. Keep working continuously in one turn; do not deliberately stop or
+  "wrap up an iteration". The only sanctioned pause-and-resume is a recurring CRON (fires only when
+  the REPL is idle, i.e. when you actually stopped) — "if still working ignore, if stopped continue".
+- A 5-minute recurring cron (`*/5 * * * *`) is the safety net for this loop. State lives on DISK
+  (commits, Brainstorm queue, PROGRESS.md) so a cold cron-resume reads where things stand.
+
+## Invisible reCAPTCHA false-trigger (keyless GUI)
+- VT's GUI page uses INVISIBLE reCAPTCHA, so it loads recaptcha / api2/anchor / bframe resources and
+  a 0-sized anchor iframe on EVERY clean lookup. Treating those as "a challenge is shown" pops the
+  hidden browser to the foreground with no captcha. Only act on a real block: a 429/403 on the
+  `/ui/files/<hash>` data call, or a DOM check for a VISIBLE bframe (getBoundingClientRect > 100px).
+
+## In-scan content dedup pattern
+- A per-run `ConcurrentDictionary<md5, SemaphoreSlim>` gate around the lookup makes duplicate files
+  in one scan share a single VT/GUI lookup: first item looks up + caches, the rest wait on the gate
+  then hit the cache. Extract the lookup chain into a method (`DoLookupAsync`) so the gate wraps a
+  clean call, not a 40-line block.
+
+## principle 43 "AsyncWait" = built-in Task.WaitAsync
+- There is no `AsyncWait` method; .NET 6+ ships `Task.WaitAsync(ct)` / `WaitAsync(TimeSpan)` which
+  IS the principle-43 guarantee (cancellation/timeout wins on time even if the inner task ignores
+  its token). Use `op.WaitAsync(ct)`, don't hand-roll it.
+
+## Local tool: copy-finding by size
+- `es file: size:<bytes>` (Everything CLI) lists same-size FILES across all drives in ms; hash only
+  those and keep exact sha256 matches. `file:` excludes folders (Everything indexes folder "size" too).
