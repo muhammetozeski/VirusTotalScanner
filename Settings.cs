@@ -108,6 +108,10 @@ internal static class Settings
     /// <summary>User-defined verdict categories (JSON list of {MinDetections, Name, ColorHex}).</summary>
     public static readonly Setting<string> VerdictCategoriesJson = new("");
 
+    /// <summary>Detections from engines whose signature DB is older than this many days are flagged
+    /// as possibly-stale (a re-check hint). 0 disables the signal.</summary>
+    public static readonly Setting<int> StaleSignatureDays = new(60);
+
     /// <summary>Engine names considered "major" / high-reputation (; separated). Detections are
     /// split into major vs minor so a few obscure-engine hits read clearly as a likely false positive.</summary>
     public static readonly Setting<string> MajorEnginesList =

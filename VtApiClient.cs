@@ -174,6 +174,7 @@ internal sealed class VtApiClient
                     Category = kv.Value.Category,
                     Result = kv.Value.Result,
                     Method = kv.Value.Method,
+                    EngineUpdate = kv.Value.EngineUpdate,
                 });
             }
             // Detections first, then alphabetical — handy for the GUI table.
@@ -194,6 +195,13 @@ internal sealed class VtApiClient
             }
 
             report.SignatureHits = report.Detections.Count(e => string.Equals(e.Method, "blacklist", StringComparison.OrdinalIgnoreCase));
+
+            int staleDays = Settings.StaleSignatureDays.Value;
+            if (staleDays > 0)
+            {
+                var cutoff = DateTime.UtcNow.AddDays(-staleDays);
+                report.StaleDetections = report.Detections.Count(e => e.UpdatedUtc is { } u && u < cutoff);
+            }
 
             foreach (var s in a.SigmaResults ?? []) if (!string.IsNullOrWhiteSpace(s.RuleTitle)) report.CommunityRules.Add($"Sigma: {s.RuleTitle}" + (string.IsNullOrWhiteSpace(s.RuleLevel) ? "" : $" [{s.RuleLevel}]"));
             foreach (var i in a.IdsResults ?? []) if (!string.IsNullOrWhiteSpace(i.RuleMsg)) report.CommunityRules.Add($"IDS: {i.RuleMsg}");

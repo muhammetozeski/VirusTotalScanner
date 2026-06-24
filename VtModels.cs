@@ -233,6 +233,14 @@ internal sealed class VtFileReport
     /// Stored so it survives in the summary cache. A heuristic-only detection set is a strong FP tell.</summary>
     public int SignatureHits { get; set; }
 
+    /// <summary>Detections coming from engines whose signature DB is older than the configured
+    /// threshold — a weak/possibly-stale signal worth re-checking. Stored in the summary cache.</summary>
+    public int StaleDetections { get; set; }
+
+    [JsonIgnore]
+    public string? StaleText => StaleDetections == 0 || DetectionCount == 0 ? null
+        : $"🕗 {StaleDetections}/{DetectionCount} tespit aylarca eski imzalardan — yeniden denetlemek iyi olur";
+
     /// <summary>Crowdsourced rule hits (Sigma / IDS / YARA) that name WHY a file is flagged, formatted
     /// for display. Already in the report JSON; stored so it survives in the summary cache.</summary>
     public List<string> CommunityRules { get; set; } = [];
@@ -323,7 +331,15 @@ internal sealed class VtEngineResult
     public string? Category { get; set; }
     public string? Result { get; set; }
     public string? Method { get; set; }
+    public string? EngineUpdate { get; set; } // yyyymmdd, the engine's signature-DB date
+
     [JsonIgnore] public bool IsDetection => Category is "malicious" or "suspicious";
+
+    [JsonIgnore]
+    public DateTime? UpdatedUtc =>
+        DateTime.TryParseExact(EngineUpdate, "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var d)
+            ? d : null;
 }
 
 internal sealed class VtAnalysisInfo

@@ -91,6 +91,7 @@ internal sealed class HashCache
             Tags = report.Tags,
             ThreatLabel = report.ThreatLabel,
             SignatureHits = report.SignatureHits,
+            StaleDetections = report.StaleDetections,
             CommunityRules = report.CommunityRules,
         };
         _entries[md5] = new HashCacheEntry

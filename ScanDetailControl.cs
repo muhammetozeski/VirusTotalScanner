@@ -270,6 +270,7 @@ internal sealed class ScanDetailControl : UserControl
             (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.ConfidenceText != null ? $"\n{report.ConfidenceText}" : "") +
+            (report.StaleText != null ? $"\n{report.StaleText}" : "") +
             (report.CommunityRulesText != null ? $"\n{report.CommunityRulesText}" : "") +
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +
             (report.CapabilitySummary != null ? $"\n{report.CapabilitySummary}" : "") +
