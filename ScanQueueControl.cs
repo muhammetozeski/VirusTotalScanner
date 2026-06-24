@@ -378,6 +378,18 @@ internal sealed class ScanQueueControl : UserControl
         copyMenu.DropDownItems.Add(Strings.MenuCopyVerdictLine, null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(VerdictLine(i)); });
         menu.Items.Add(copyMenu);
 
+        var shareMenu = new ToolStripMenuItem("📤  Paylaş");
+        shareMenu.DropDownItems.Add("🖼  Kart resmi (panoya)", null, (_, _) =>
+        {
+            var i = SelectedItem();
+            if (i == null) return;
+            try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = "📋 Kart resmi panoya kopyalandı."; }
+            catch (Exception ex) { NativeMessageBox.Error("Kopyalanamadı: " + ex.Message); }
+        });
+        shareMenu.DropDownItems.Add("📝  Özet metin (panoya)", null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(ShareCard.Text(i)); });
+        shareMenu.DropDownItems.Add("💾  Kart resmi kaydet…", null, (_, _) => SaveShareCard());
+        menu.Items.Add(shareMenu);
+
         var miReveal = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRevealFile, null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
         var miNeighbors = (ToolStripMenuItem)menu.Items.Add(Strings.MenuNeighbors, null, (_, _) => ShowNeighbors());
         var miFindCopies = (ToolStripMenuItem)menu.Items.Add(Strings.MenuFindCopies, null, (_, _) => _ = FindCopiesAsync());
@@ -871,6 +883,16 @@ internal sealed class ScanQueueControl : UserControl
         return list;
     }
     static void CopySafe(string? s) { if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } } }
+
+    void SaveShareCard()
+    {
+        var i = SelectedItem();
+        if (i == null) return;
+        using var dlg = new SaveFileDialog { Filter = "PNG|*.png", FileName = Path.GetFileNameWithoutExtension(i.FileName) + "-vt.png" };
+        if (dlg.ShowDialog() != DialogResult.OK) return;
+        try { using var bmp = ShareCard.Render(i); bmp.Save(dlg.FileName, System.Drawing.Imaging.ImageFormat.Png); }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.SaveErrorPrefix + ex.Message); }
+    }
     void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
 
     public void ApplyTheme()
