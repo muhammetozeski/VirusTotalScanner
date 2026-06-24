@@ -10,7 +10,8 @@ internal sealed class TrustResult
     public string Reason { get; init; } = "";
     public bool IsMicrosoft { get; init; }
 
-    public static readonly TrustResult NotSigned = new() { Trusted = false, Reason = "imzasız" };
+    // A property (not a cached field) so a runtime language switch is reflected, not frozen at type init.
+    public static TrustResult NotSigned => new() { Trusted = false, Reason = Strings.TrustUnsigned };
 }
 
 /// <summary>
@@ -150,7 +151,7 @@ internal static class TrustService
         Trusted = true,
         Publisher = signer.cn,
         IsMicrosoft = signer.ms,
-        Reason = "İmzalı" + (signer.cn != null ? " · " + signer.cn : ""),
+        Reason = Strings.StatusSignedShort + (signer.cn != null ? " · " + signer.cn : ""),
     };
 
     static (int hr, (string? cn, bool ms) signer) VerifyEmbedded(string path)
@@ -308,13 +309,13 @@ internal static class TrustService
 
     static string ReasonFor(int hr) => (uint)hr switch
     {
-        0x800B0100 => "imzasız",
-        0x800B0101 => "sertifika süresi dolmuş",
-        0x800B010C => "sertifika iptal edilmiş",
-        0x800B0111 => "güvenilmeyen yayıncı",
-        0x800B010A => "güven zinciri kurulamadı",
-        0x800B0004 => "imza geçersiz",
-        _ => $"güvenilmiyor (0x{(uint)hr:X8})",
+        0x800B0100 => Strings.TrustUnsigned,
+        0x800B0101 => Strings.TrustCertExpired,
+        0x800B010C => Strings.TrustCertRevoked,
+        0x800B0111 => Strings.TrustUntrustedPublisher,
+        0x800B010A => Strings.TrustChainFailed,
+        0x800B0004 => Strings.TrustSigInvalid,
+        _ => string.Format(Strings.TrustUntrustedFormat, (uint)hr),
     };
 
     public static bool ShouldSkip(TrustResult t, bool microsoftOnly, string allowListCsv)

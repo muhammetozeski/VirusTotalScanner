@@ -13,6 +13,9 @@ internal static class Settings
     /// <summary>UI theme: "Dark" or "Light".</summary>
     public static readonly Setting<string> Theme = new("Dark");
 
+    /// <summary>UI language code ("tr" or "en"). Loaded into <see cref="Strings"/> at startup.</summary>
+    public static readonly Setting<string> Language = new("tr");
+
     /// <summary>Follow the Windows app theme instead of the fixed Theme value.</summary>
     public static readonly Setting<bool> FollowWindowsTheme = new(true);
 
@@ -23,11 +26,22 @@ internal static class Settings
     /// <summary>Max files scanned concurrently (true throttle is the 4/min key limit).</summary>
     public static readonly Setting<int> MaxConcurrentScans = new(2);
 
+    /// <summary>Max files uploaded to VirusTotal in parallel (uploads are bandwidth-heavy, so
+    /// this is throttled separately from lookups).</summary>
+    public static readonly Setting<int> MaxConcurrentUploads = new(2);
+
     /// <summary>Use the local hash cache to avoid re-querying VirusTotal for known files.</summary>
     public static readonly Setting<bool> UseLocalHashCache = new(true);
 
-    /// <summary>How many days a cached clean verdict stays valid.</summary>
+    /// <summary>How many days a cached clean verdict stays valid (clean can go stale).</summary>
     public static readonly Setting<int> HashCacheDays = new(7);
+
+    /// <summary>How many days a cached malicious verdict stays valid (rarely reverses → keep long).</summary>
+    public static readonly Setting<int> ThreatCacheDays = new(365);
+
+    /// <summary>Skip files larger than this many MB before hashing (0 = no cap). VT's own upload
+    /// ceiling is ~650 MB, so very large files cannot be analyzed anyway.</summary>
+    public static readonly Setting<int> MaxFileSizeMB = new(0);
 
     /// <summary>Whether the Explorer context-menu entries have been installed.</summary>
     public static readonly Setting<bool> ContextMenuInstalled = new(false);
@@ -60,6 +74,73 @@ internal static class Settings
     /// <summary>Show a Windows toast/notification when a threat is found.</summary>
     public static readonly Setting<bool> NotifyOnThreat = new(true);
 
+    /// <summary>Only notify for threats with at least this many engine detections (1 = any threat).</summary>
+    public static readonly Setting<int> NotifyMinDetections = new(1);
+
+    /// <summary>Show one summary toast (clean/suspect/threat tally) when a scan finishes.</summary>
+    public static readonly Setting<bool> NotifyScanSummary = new(false);
+
+    /// <summary>Auto-quarantine high-confidence threats caught by a BACKGROUND source (download watcher,
+    /// USB auto-scan) without waiting for the user to click — only when enabled below.</summary>
+    public static readonly Setting<bool> AutoQuarantineWatchers = new(false);
+
+    /// <summary>Detection count at/above which a background threat is auto-quarantined (0 = off). Set high
+    /// (e.g. 10) so only obvious malware is touched; the .VIRUS vault + an undo toast cover false positives.</summary>
+    public static readonly Setting<int> AutoQuarantineThreshold = new(10);
+
+    /// <summary>ISO-8601 UTC of the most recent scheduled-sweep result already surfaced to the user, so a
+    /// sweep's findings are announced once on next launch and not repeated.</summary>
+    public static readonly Setting<string> LastSeenSweepUtc = new("");
+
+    /// <summary>Quiet-hours window (local hour 0–23) during which non-urgent toasts are held back and
+    /// replayed grouped afterward. Start==End disables the window.</summary>
+    public static readonly Setting<int> QuietHoursStart = new(0);
+    public static readonly Setting<int> QuietHoursEnd = new(0);
+
+    /// <summary>Hold back non-urgent toasts while a fullscreen app (game/presentation) is foreground.</summary>
+    public static readonly Setting<bool> MuteInFullscreen = new(true);
+
+    /// <summary>Show VirusTotal community votes in the detail pane.</summary>
+    public static readonly Setting<bool> ShowCommunityVotes = new(true);
+
+    /// <summary>Watch download folders and auto-scan new executable-class files as they land.</summary>
+    public static readonly Setting<bool> WatchDownloads = new(false);
+
+    /// <summary>Offer to scan a removable drive (USB stick, SD card) when it is plugged in.</summary>
+    public static readonly Setting<bool> WatchUsb = new(true);
+
+    /// <summary>Scan a plugged-in removable drive immediately (background) without waiting for the user to
+    /// click the toast — high-detection finds are auto-quarantined via the background threat path.</summary>
+    public static readonly Setting<bool> AutoScanUsb = new(false);
+
+    /// <summary>Real-time guard: check every newly-launched executable at start (WMI; needs admin). Catches
+    /// an unknown exe double-clicked from chat/email that never touched the watched folders.</summary>
+    public static readonly Setting<bool> WatchProcessLaunches = new(false);
+
+    /// <summary>ISO-8601 UTC of the last download-watch catch-up, so files that landed while the watcher
+    /// was off (app closed / WatchDownloads just toggled on) are verdicted once on next start.</summary>
+    public static readonly Setting<string> LastWatchScanUtc = new("");
+
+    /// <summary>Permanently purge quarantined files older than this many days on startup (0 = keep forever).</summary>
+    public static readonly Setting<int> QuarantineRetentionDays = new(0);
+
+    /// <summary>Re-run the watch-list re-verdict, due-cache re-check and baseline drift check every N hours
+    /// while the app sits in the tray (keyless, zero quota). 0 = only on startup.</summary>
+    public static readonly Setting<int> PeriodicRecheckHours = new(12);
+
+    /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
+    public static readonly Setting<string> WatchFolders = new("");
+
+    /// <summary>Order a scan by a cheap local suspicion score so the scariest files get a verdict first.</summary>
+    public static readonly Setting<bool> RiskWeightedOrdering = new(true);
+
+    /// <summary>Re-check verdicts for cached files older than this many days (a clean file can be
+    /// flagged later as engines catch up). The sweep is keyless (GUI), so it costs no quota.</summary>
+    public static readonly Setting<int> RecheckPeriodDays = new(14);
+
+    /// <summary>Folder configured for the scheduled sweep (Windows Scheduled Task).</summary>
+    public static readonly Setting<string> SweepFolder = new("");
+
     /// <summary>Skip safe-extension files during scans to save quota.</summary>
     public static readonly Setting<bool> SkipSafeExtensionsOnScan = new(false);
 
@@ -80,4 +161,18 @@ internal static class Settings
 
     /// <summary>User-defined verdict categories (JSON list of {MinDetections, Name, ColorHex}).</summary>
     public static readonly Setting<string> VerdictCategoriesJson = new("");
+
+    /// <summary>Detections from engines whose signature DB is older than this many days are flagged
+    /// as possibly-stale (a re-check hint). 0 disables the signal.</summary>
+    public static readonly Setting<int> StaleSignatureDays = new(60);
+
+    /// <summary>Mark a row as a likely false positive ("imzayla yumuşatıldı") when a fully-signed file gets
+    /// only 1-2 purely heuristic detections and no negative reputation. Off by default; a hint + quick
+    /// mark-clean shortcut only — it never lowers the verdict band or hides a real threat.</summary>
+    public static readonly Setting<bool> SignatureSoftenLowDetections = new(false);
+
+    /// <summary>Engine names considered "major" / high-reputation (; separated). Detections are
+    /// split into major vs minor so a few obscure-engine hits read clearly as a likely false positive.</summary>
+    public static readonly Setting<string> MajorEnginesList =
+        new("Microsoft;Kaspersky;ESET-NOD32;BitDefender;GData;Avast;AVG;Sophos;Malwarebytes;McAfee;McAfeeD;Symantec;TrendMicro;Google;DrWeb;Emsisoft;F-Secure;Fortinet;Ikarus");
 }

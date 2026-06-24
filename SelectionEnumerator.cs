@@ -6,7 +6,8 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class SelectionEnumerator
 {
-    public static List<string> Expand(IEnumerable<string> paths, ISet<string> safeExtensions, bool recurse, bool applySafeFilter)
+    public static List<string> Expand(IEnumerable<string> paths, ISet<string> safeExtensions, bool recurse,
+        bool applySafeFilter, long maxSizeBytes = 0, List<string>? oversizeLedger = null)
     {
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -50,6 +51,19 @@ internal static class SelectionEnumerator
         void AddFile(string file)
         {
             if (applySafeFilter && IsSafe(file, safeExtensions)) return;
+            if (maxSizeBytes > 0)
+            {
+                try
+                {
+                    if (new FileInfo(file).Length > maxSizeBytes)
+                    {
+                        oversizeLedger?.Add(file);
+                        Log($"Skipped (over size cap): {file}", LogLevel.Info);
+                        return;
+                    }
+                }
+                catch (Exception ex) { Log($"Size check failed for '{file}': {ex.Message}", LogLevel.Warning); }
+            }
             string full;
             try { full = Path.GetFullPath(file); } catch { full = file; }
             if (seen.Add(full)) result.Add(full);

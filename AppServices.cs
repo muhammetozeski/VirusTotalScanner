@@ -19,7 +19,10 @@ internal static class AppServices
         if (_initialized) return;
         _initialized = true;
 
+        LocManager.Init();
         VerdictCategories.Load();
+        MajorEngines.Load();
+        ProductSignerRegistry.Load();
         ConfirmGateManager.Load();
         Vault.Load();
         Cache.Load();

@@ -6,6 +6,9 @@ internal interface ISetting
     string Key { get; }
     string KeyHumanReadable { get; }
     object Value { get; }
+    object DefaultValue { get; }
+    bool IsDefault { get; }
+    void ResetToDefault();
 }
 
 /// <summary>Setup contract used exclusively by <see cref="SettingsManager"/>.</summary>
@@ -46,6 +49,9 @@ internal class Setting<T>(T defaultValue) : ISetting, ISettingSetup
     public readonly T DefaultValue = defaultValue;
 
     object ISetting.Value => Value!;
+    object ISetting.DefaultValue => DefaultValue!;
+    bool ISetting.IsDefault => EqualityComparer<T>.Default.Equals(Value, DefaultValue);
+    void ISetting.ResetToDefault() => Value = DefaultValue;
 
     void ISettingSetup.InitializeKey(string key)
     {

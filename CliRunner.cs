@@ -16,62 +16,253 @@ internal static class CliRunner
         if (opts.ShowHelp) { PrintHelp(); return 0; }
         if (opts.ShowVersion) { Console.WriteLine($"{AppConstants.AppTitle} v{AppConstants.Version}"); return 0; }
 
-        if (opts.InstallMenu) return MenuCmd(ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e1), e1, "Sağ tuş menüsü kuruldu.");
-        if (opts.UninstallMenu) return MenuCmd(ContextMenuInstaller.Uninstall(out var e2), e2, "Sağ tuş menüsü kaldırıldı.");
-        if (opts.RepairMenu) return MenuCmd(ContextMenuInstaller.Repair(out var e3), e3, "Sağ tuş menüsü onarıldı.");
+        if (opts.InstallMenu) return MenuCmd(ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e1), e1, Strings.CliMenuInstalled);
+        if (opts.UninstallMenu) return MenuCmd(ContextMenuInstaller.Uninstall(out var e2), e2, Strings.CliMenuRemoved);
+        if (opts.RepairMenu) return MenuCmd(ContextMenuInstaller.Repair(out var e3), e3, Strings.CliMenuRepaired);
 
-        if (opts.AddKeyValue != null) { AppServices.Vault.Add("CLI", opts.AddKeyValue); Console.WriteLine("Anahtar eklendi."); return 0; }
+        if (opts.AddKeyValue != null) { AppServices.Vault.Add("CLI", opts.AddKeyValue); Console.WriteLine(Strings.CliKeyAdded); return 0; }
         if (opts.RemoveKeyValue != null) return RemoveKey(opts.RemoveKeyValue);
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
+        if (opts.CommentsHash != null) return await CommentsCmd(opts.CommentsHash);
+        if (opts.BehaviourHash != null) return await BehaviourCmd(opts.BehaviourHash);
+        if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
+        if (opts.VerifyBaseline) return await VerifyBaselineCmd();
+        if (opts.DriftReport != null) return await DriftReportCmd(opts.DriftReport);
+        if (opts.ExportLedger != null) { int n = LedgerService.Export(AppServices.Cache, opts.ExportLedger); Console.WriteLine(string.Format(Strings.CliLedgerExportedFormat, n, opts.ExportLedger)); return 0; }
+        if (opts.ImportLedger != null) { var (add, conf, ok) = LedgerService.Import(AppServices.Cache, opts.ImportLedger); Console.WriteLine(string.Format(Strings.CliLedgerImportedFormat, add, conf, ok ? Strings.CliLedgerOk : Strings.CliLedgerBad)); return 0; }
+        if (opts.LedgerDiff != null) { var (nw, cf) = LedgerService.Diff(AppServices.Cache, opts.LedgerDiff); Console.WriteLine(string.Format(Strings.CliLedgerDiffFormat, nw.Count, cf.Count)); foreach (var x in nw.Take(20)) Console.WriteLine("  " + Strings.CliTagNew + " " + x); foreach (var x in cf.Take(20)) Console.WriteLine("  " + Strings.CliTagConflict + " " + x); return 0; }
+        if (opts.TimelineDays != null) return await TimelineCmd(opts.TimelineDays.Value);
+        if (opts.WatchCheck) return await WatchCheckCmd();
 
-        if (opts.Paths.Count == 0) { PrintHelp(); return 2; }
+        // --running scans the on-disk image of every running process instead of given paths.
+        List<string> scanPaths = opts.Paths;
+        if (opts.Running)
+        {
+            var (rp, unreadable) = RunningProcesses.ImagePaths();
+            scanPaths = rp;
+            if (!opts.Json && !opts.Quiet) Console.WriteLine(string.Format(Strings.CliRunningProcessesFormat, rp.Count, unreadable));
+        }
+        if (scanPaths.Count == 0) { PrintHelp(); return 2; }
 
         bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
 
         if (!AppServices.Rotator.HasUsableKeys && !Settings.TrustSkipSigned && !keyless)
         {
-            Console.Error.WriteLine("HATA: API anahtarı yok, imza-atlama kapalı ve anahtarsız (GUI) mod açık değil.");
+            Console.Error.WriteLine(Strings.CliErrNoMeans);
             return 3;
         }
         if (!AppServices.Rotator.HasUsableKeys && !keyless)
-            Console.Error.WriteLine("(Uyarı: anahtar yok — yalnızca imzalı dosyalar değerlendirilebilir, imzasızlar atlanır.)");
+            Console.Error.WriteLine(Strings.CliWarnNoKey);
         if (keyless && !opts.Json && !opts.Quiet)
-            Console.WriteLine("(Anahtarsız GUI modu açık — sorgular WebView2 üzerinden, kotasız ama yavaş.)");
+            Console.WriteLine(Strings.CliKeylessNote);
 
         var scheduler = AppServices.Scheduler;
         scheduler.UiPost = a => a(); // run inline (no UI thread)
 
         if (!opts.Json && !opts.Quiet)
-            Console.WriteLine($"{AppConstants.AppTitle} — tarama başlıyor…\n");
+            Console.WriteLine(string.Format(Strings.CliScanStartingFormat, AppConstants.AppTitle));
 
         scheduler.ItemFinished += item =>
         {
             if (!opts.Json) PrintItem(item, opts.Quiet);
+            ScanHistoryStore.Record(item, "CLI");
         };
 
         var scanOpts = ScanOptions.FromSettings(opts.Recurse);
         scanOpts.BypassTrust = opts.NoTrust;
-        await scheduler.RunAsync(opts.Paths, scanOpts);
+        scanOpts.ExpandArchives = opts.ExpandArchives;
+        await scheduler.RunAsync(scanPaths, scanOpts);
 
         if (opts.Json) PrintJson(scheduler.Items);
 
+        if (opts.ReportPath != null)
+        {
+            try
+            {
+                ReportWriter.Write(opts.ReportPath, scheduler.Items.ToList());
+                if (!opts.Quiet && !opts.Json) Console.WriteLine(string.Format(Strings.CliReportWrittenFormat, opts.ReportPath));
+            }
+            catch (Exception ex) { Console.Error.WriteLine(Strings.ReportWriteErrorPrefix + ex.Message); }
+        }
+
+        if (opts.SweepResultPath != null)
+        {
+            try { SweepResultStore.Write(opts.SweepResultPath, scheduler.Items); }
+            catch (Exception ex) { Console.Error.WriteLine("Sweep result write error: " + ex.Message); }
+        }
+
+        // Verdict-delta gate: compare against a prior --report json baseline (keyed by sha256).
+        bool diffFail = false;
+        if (opts.DiffBaseline != null)
+        {
+            var delta = DiffService.Compare(scheduler.Items.ToList(), opts.DiffBaseline);
+            if (delta == null) Console.Error.WriteLine(Strings.CliDiffBaselineErrPrefix + opts.DiffBaseline);
+            else
+            {
+                if (!opts.Json)
+                {
+                    Console.WriteLine(string.Format(Strings.CliDeltaFormat, delta.New, delta.Regressed, delta.Unchanged));
+                    foreach (var f in delta.NewFiles.Take(20)) Console.WriteLine("  " + Strings.CliTagNew + " " + f);
+                    foreach (var f in delta.RegressedFiles.Take(20)) Console.WriteLine("  " + Strings.CliTagRegressed + " " + f);
+                }
+                if ((opts.FailOnNew && delta.New > 0) || (opts.FailOnRegression && delta.Regressed > 0)) diffFail = true;
+            }
+        }
+
         AppServices.Shutdown();
 
-        bool threat = scheduler.Items.Any(i => i.Report?.IsMalicious == true);
+        // Gate: --fail-on N flips the exit code on any file with >= N detections; otherwise the
+        // verdict categories decide what counts as a threat. --diff gates add new/regression fails.
+        bool threat = opts.FailOn >= 0
+            ? scheduler.Items.Any(i => (i.Report?.DetectionCount ?? 0) >= opts.FailOn)
+            : scheduler.Items.Any(i => i.Report?.IsMalicious == true);
+        threat = threat || diffFail;
         if (!opts.Json && !opts.Quiet)
         {
             int mal = scheduler.Items.Count(i => i.Report?.IsMalicious == true);
             int total = scheduler.Items.Count;
-            Console.WriteLine($"\nBitti. {total} dosya tarandı, {mal} tehdit bulundu.");
+            Console.WriteLine(string.Format(Strings.CliDoneFormat, total, mal));
         }
         return threat ? 1 : 0;
+    }
+
+    static async Task<int> DriftReportCmd(string path)
+    {
+        var due = RecheckService.DueForRecheck(AppServices.Cache, 0); // re-check every cached entry
+        if (due.Count == 0) { Console.WriteLine(Strings.CliNoRecheckRecords); return 0; }
+        Console.WriteLine(string.Format(Strings.CliRecheckingFormat, due.Count));
+        var changes = await RecheckService.RunAsync(AppServices.Cache, due, null, default);
+
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+        var sb = new System.Text.StringBuilder();
+        if (ext == ".csv")
+        {
+            sb.AppendLine("SHA256,OldVerdict,OldDetections,NewVerdict,NewDetections,GotWorse,ReportUrl");
+            foreach (var c in changes)
+                sb.AppendLine($"{c.Sha256},{c.OldVerdict},{c.OldDetections},{c.NewVerdict},{c.NewDetections},{c.GotWorse},{c.Url}");
+        }
+        else
+        {
+            sb.AppendLine(string.Format(Strings.CliDriftHeaderFormat, changes.Count, due.Count));
+            foreach (var c in changes)
+                sb.AppendLine($"{(c.GotWorse ? Strings.RecheckWorse : Strings.RecheckBetter)}: {c.OldVerdict}({c.OldDetections}) → {c.NewVerdict}({c.NewDetections})  {c.Url}");
+        }
+        try { File.WriteAllText(path, sb.ToString(), new System.Text.UTF8Encoding(false)); }
+        catch (Exception ex) { Console.Error.WriteLine(Strings.ReportWriteErrorPrefix + ex.Message); return 2; }
+
+        Console.WriteLine(string.Format(Strings.CliDriftWrittenFormat, changes.Count, path));
+        return changes.Any(c => c.GotWorse) ? 1 : 0;
+    }
+
+    static async Task<int> BehaviourCmd(string hash)
+    {
+        if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable))
+        { Console.Error.WriteLine(Strings.CliErrBehaviourKeyless); return 3; }
+        var b = await GuiScrapeService.FetchBehaviourAsync(hash);
+        if (!b.Any) { Console.WriteLine(Strings.BehaviourNone); return 0; }
+        static void Section(string title, List<string> items)
+        {
+            if (items.Count == 0) return;
+            Console.WriteLine(title + ":");
+            foreach (var x in items.Take(15)) Console.WriteLine("   " + x);
+        }
+        Section(Strings.CliSecNetwork, b.Network);
+        Section(Strings.CliSecFiles, b.FilesWritten);
+        Section(Strings.CliSecRegistry, b.Registry);
+        Section(Strings.CliSecProcesses, b.Processes);
+        Section("MITRE ATT&CK", b.Mitre);
+        return 0;
+    }
+
+    static async Task<int> CommentsCmd(string hash)
+    {
+        if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable))
+        { Console.Error.WriteLine(Strings.CliErrCommentsKeyless); return 3; }
+        var comments = await GuiScrapeService.FetchCommentsAsync(hash);
+        if (comments.Count == 0) { Console.WriteLine(Strings.CliNoComments); return 0; }
+        foreach (var c in comments.Take(20))
+        {
+            Console.WriteLine($"[{c.Date:yyyy-MM-dd}] {c.Text?.Replace("\n", " ").Trim()}");
+            if (c.Tags.Count > 0) Console.WriteLine("   #" + string.Join(" #", c.Tags));
+        }
+        return 0;
+    }
+
+    static async Task<int> VerifyBaselineCmd()
+    {
+        if (BaselineStore.Count == 0) { Console.WriteLine(Strings.CliNoWatchedFiles); return 0; }
+        var res = await BaselineStore.VerifyAsync(null, default);
+        foreach (var r in res.Where(r => r.Kind != DriftKind.Unchanged))
+            Console.WriteLine($"{(r.IsAlarm ? Strings.CliTagAlarm : Strings.CliTagChanged)} {r.Path} — {r.Detail}");
+        int alarms = res.Count(r => r.IsAlarm);
+        Console.WriteLine(string.Format(Strings.CliBaselineResultFormat, res.Count, alarms));
+        return alarms > 0 ? 1 : 0;
+    }
+
+    static async Task<int> VerifyHashCmd(CliOptions opts)
+    {
+        if (opts.Paths.Count != 1 || !File.Exists(opts.Paths[0]))
+        {
+            Console.Error.WriteLine(Strings.CliErrExpectOneFile);
+            return 2;
+        }
+        try
+        {
+            var r = await HashService.VerifyExpectedAsync(opts.Paths[0], opts.ExpectedHash!);
+            if (r.Algorithm == "?")
+            {
+                Console.Error.WriteLine(Strings.CliErrHashFormat);
+                return 2;
+            }
+            if (r.Matched)
+            {
+                Console.WriteLine(string.Format(Strings.CliHashMatchedFormat, r.Algorithm, r.Actual, opts.Paths[0]));
+                return 0;
+            }
+            Console.WriteLine(string.Format(Strings.CliHashMismatchFormat, opts.Paths[0]));
+            Console.WriteLine(string.Format(Strings.CliHashExpectedFormat, r.Algorithm, r.Expected));
+            Console.WriteLine(string.Format(Strings.CliHashActualFormat, r.Algorithm, r.Actual));
+            return 4;
+        }
+        catch (Exception ex) { Console.Error.WriteLine(Strings.CliErrPrefix + ex.Message); return 3; }
+    }
+
+    static async Task<int> WatchCheckCmd()
+    {
+        int n = ReverdictWatchStore.Count;
+        if (n == 0) { Console.WriteLine("İzleme listesi boş."); return 0; }
+        Console.WriteLine($"{n} izlenen dosya yeniden denetleniyor (anahtarsız)…");
+        var escalations = await WatchService.CheckAllAsync();
+        if (escalations.Count == 0) { Console.WriteLine("Tespit artışı yok."); return 0; }
+        foreach (var (e, oldD, newD) in escalations)
+            Console.WriteLine($"[ARTIŞ] {e.Name}: {oldD} → {newD}/{e.LastTotal} motor");
+        return 1;
+    }
+
+    static async Task<int> TimelineCmd(int days)
+    {
+        Console.WriteLine($"Son {days} günde gelen çalıştırılabilirler taranıyor (verdikt önbellekten)…");
+        var result = await IncidentTimelineService.BuildAsync(AppServices.Cache, days,
+            (d, t) => { if (d % 250 == 0 || d == t) { try { Console.Error.Write($"\r  {d}/{t}   "); } catch { } } }, default);
+        try { Console.Error.WriteLine(); } catch { }
+
+        int totalFiles = result.Sum(d => d.Count);
+        int totalThreats = result.Sum(d => d.Threats);
+        Console.WriteLine($"{result.Count} gün • {totalFiles} çalıştırılabilir • {totalThreats} tehdit (önbellekten)\n");
+        foreach (var d in result.Take(90))
+        {
+            Console.WriteLine($"{d.DayText}  —  {d.Count} dosya, {d.Threats} tehdit, {d.FromNet} internetten");
+            foreach (var f in d.Files.Where(f => f.Detections > 0).Take(10))
+                Console.WriteLine($"   [{f.Verdict} {f.Detections}] {f.ArrivalLocal:HH:mm}  {f.Name}{(f.Host != null ? "  <- " + f.Host : "")}");
+        }
+        return totalThreats > 0 ? 1 : 0;
     }
 
     static async Task<int> LookupAsync(string hash, bool json)
     {
         bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
-        if (!keyless && !AppServices.Rotator.HasUsableKeys) { Console.Error.WriteLine("HATA: API anahtarı yok (veya --keyless kullanın)."); return 3; }
+        if (!keyless && !AppServices.Rotator.HasUsableKeys) { Console.Error.WriteLine(Strings.CliErrNoKeyOrKeyless); return 3; }
         try
         {
             VtFileReport? report;
@@ -84,25 +275,33 @@ internal static class CliRunner
                 string key = await AppServices.Rotator.AcquireAsync();
                 report = await AppServices.Api.GetFileReportAsync(hash, key);
             }
-            if (report == null) { Console.WriteLine("Bulunamadı (VT'de yok)."); return 0; }
+            if (report == null) { Console.WriteLine(Strings.CliNotFound); return 0; }
             if (json) { PrintJson([new ScanItem(hash) { Report = report, Md5 = report.Md5, Sha256 = report.Sha256 }]); return report.IsMalicious ? 1 : 0; }
             Console.WriteLine($"[{report.Verdict}] ({report.DetectionCount}/{report.TotalEngines})  {report.MeaningfulName ?? hash}");
+            var reco = RecommendationService.Build(new ScanItem(hash) { Report = report });
+            Console.WriteLine($"   👉 {reco.Headline} — {reco.Rationale}");
+            if (report.ConsensusText != null) Console.WriteLine("   " + report.ConsensusText);
+            if (report.ConfidenceText != null) Console.WriteLine("   " + report.ConfidenceText);
+            if (report.StaleText != null) Console.WriteLine("   " + report.StaleText);
+            if (report.CommunityRulesText != null) Console.WriteLine("   " + report.CommunityRulesText);
+            if (report.FamilyLabel != null) Console.WriteLine("   " + report.FamilyLabel);
+            if (report.CapabilitySummary != null) Console.WriteLine("   " + report.CapabilitySummary);
             foreach (var d in report.Detections.Take(15)) Console.WriteLine($"   - {d.EngineName}: {d.Result}");
             Console.WriteLine("   " + report.ReportUrl);
             return report.IsMalicious ? 1 : 0;
         }
-        catch (Exception ex) { Console.Error.WriteLine("HATA: " + ex.Message); return 3; }
+        catch (Exception ex) { Console.Error.WriteLine(Strings.CliErrPrefix + ex.Message); return 3; }
     }
 
     static void ListKeysCmd()
     {
         var keys = AppServices.Vault.Keys;
-        if (keys.Count == 0) { Console.WriteLine("Anahtar yok."); return; }
+        if (keys.Count == 0) { Console.WriteLine(Strings.CliNoKeys); return; }
         var now = DateTime.UtcNow;
         foreach (var k in keys)
             Console.WriteLine($"{k.Id}  {k.Masked}  [{(string.IsNullOrWhiteSpace(k.Label) ? "-" : k.Label)}]  " +
-                $"{(k.Disabled ? "devre dışı" : k.IsExhausted(now) ? "dolu" : "aktif")}  " +
-                $"gün {k.Daily.Used}/{k.Daily.Allowed}  ay {k.Monthly.Used}/{k.Monthly.Allowed}");
+                $"{(k.Disabled ? Strings.CliKeyDisabled : k.IsExhausted(now) ? Strings.CliKeyExhausted : Strings.CliKeyActive)}  " +
+                string.Format(Strings.CliQuotaFormat, k.Daily.Used, k.Daily.Allowed, k.Monthly.Used, k.Monthly.Allowed));
     }
 
     static int RemoveKey(string idOrAll)
@@ -110,18 +309,18 @@ internal static class CliRunner
         if (idOrAll.Equals("all", StringComparison.OrdinalIgnoreCase))
         {
             foreach (var k in AppServices.Vault.Keys.ToList()) AppServices.Vault.Remove(k.Id);
-            Console.WriteLine("Tüm anahtarlar silindi.");
+            Console.WriteLine(Strings.CliAllKeysDeleted);
             return 0;
         }
         AppServices.Vault.Remove(idOrAll);
-        Console.WriteLine("Anahtar silindi (varsa): " + idOrAll);
+        Console.WriteLine(Strings.CliKeyRemovedPrefix + idOrAll);
         return 0;
     }
 
     static int MenuCmd(bool ok, string? err, string okMsg)
     {
         if (ok) { Console.WriteLine(okMsg); return 0; }
-        Console.Error.WriteLine("HATA: " + err);
+        Console.Error.WriteLine(Strings.CliErrPrefix + err);
         return 2;
     }
 
@@ -130,7 +329,7 @@ internal static class CliRunner
         if (item.Status == ScanStatus.TrustedSkipped)
         {
             try { Console.ForegroundColor = ConsoleColor.Cyan; } catch { }
-            Console.WriteLine($"[İMZALI] {item.FileName}  — {item.SkipReason} (VT atlandı)");
+            Console.WriteLine(string.Format(Strings.CliSignedFormat, item.FileName, item.SkipReason));
             try { Console.ResetColor(); } catch { }
             return;
         }
@@ -155,7 +354,7 @@ internal static class CliRunner
         if (!quiet && r != null)
             Console.WriteLine($"      {r.ReportUrl}");
         if (item.Status == ScanStatus.Failed && item.Error != null)
-            Console.WriteLine("      Hata: " + item.Error);
+            Console.WriteLine(Strings.CliItemErrorPrefix + item.Error);
     }
 
     static void PrintJson(IEnumerable<ScanItem> items)
@@ -179,36 +378,6 @@ internal static class CliRunner
 
     static void PrintHelp()
     {
-        Console.WriteLine($"""
-        {AppConstants.AppTitle} v{AppConstants.Version}
-
-        Kullanım:
-          VirusTotalScanner.exe [seçenekler] <dosya|klasör> [<dosya|klasör> ...]
-
-        Çift tıklayınca grafik arayüz açılır. Terminalden çalıştırınca komut satırı modunda çalışır.
-
-        Seçenekler:
-          -s, --scan          Tarama işareti (sağ tuş menüsü kullanır)
-          -r, --recurse       Klasörleri alt klasörlerle birlikte tara
-              --no-trust      İmza güvenini yok say (imzalı dosyaları da VT'ye gönder)
-          -k, --keyless       Anahtarsız sorgula (GUI/WebView2 üzerinden, kotasız, yavaş)
-          -n, --nogui, --cli  Grafik arayüz açmadan terminalde çalış
-          -g, --gui           Terminalden bile olsa grafik arayüzü aç
-          -j, --json          Sonuçları JSON olarak yaz (stdout)
-          -q, --quiet         Yalın çıktı (yalnızca verdict satırları)
-              --install       Sağ tuş menüsüne ekle
-              --uninstall     Sağ tuş menüsünden kaldır
-              --repair        Sağ tuş menüsü kaydını (exe yolu) onar
-              --addkey <KEY>  API anahtarı ekle (şifreli saklanır)
-              --listkeys      Tanımlı anahtarları ve kotaları listele
-              --removekey <id|all>  Anahtar(ları) sil
-              --lookup <hash>  Bir MD5/SHA-1/SHA-256 hash'ini sorgula
-          -h, --help          Bu yardım
-          -v, --version       Sürüm
-
-        Çıkış kodları: 0 temiz, 1 tehdit bulundu, 2 kullanım/IO hatası, 3 anahtar yok.
-
-        Not: Bu bir GUI uygulamasıdır; betikte beklemek için 'Start-Process -Wait' kullanın.
-        """);
+        Console.WriteLine(string.Format(Strings.HelpTextFormat, AppConstants.AppTitle, AppConstants.Version));
     }
 }

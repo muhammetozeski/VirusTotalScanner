@@ -12,6 +12,19 @@ internal static class ThemeManager
         ApplyRecursive(root, p);
     }
 
+    /// <summary>Give a control a plain screen-reader name by stripping leading emoji/symbol glyphs from its
+    /// visible text ("🛡  Karantinaya al" → "Karantinaya al"), so Narrator/NVDA reads the action, not the
+    /// icon. Only stamps when the name is unset or still mirrors the raw text, never clobbering an explicit one.</summary>
+    static void StampAccessibleName(Control c, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        if (!string.IsNullOrEmpty(c.AccessibleName) && c.AccessibleName != c.Text) return;
+        int i = 0;
+        while (i < text.Length && !char.IsLetterOrDigit(text[i])) i++;
+        string name = text[i..].Trim();
+        c.AccessibleName = name.Length > 0 ? name : text.Trim();
+    }
+
     static void ApplyRecursive(Control c, Palette p)
     {
         switch (c)
@@ -21,6 +34,7 @@ internal static class ThemeManager
                 break;
             case Button btn:
                 StyleButton(btn, accent: btn.Tag as string == "accent");
+                StampAccessibleName(btn, btn.Text);
                 break;
             case TextBox tb:
                 tb.BackColor = p.Surface; tb.ForeColor = p.Text; tb.BorderStyle = BorderStyle.FixedSingle;
@@ -33,6 +47,7 @@ internal static class ThemeManager
                 break;
             case CheckBox chk:
                 chk.ForeColor = p.Text; chk.BackColor = Color.Transparent;
+                StampAccessibleName(chk, chk.Text);
                 break;
             case RadioButton rb:
                 rb.ForeColor = p.Text; rb.BackColor = Color.Transparent;

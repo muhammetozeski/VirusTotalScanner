@@ -33,6 +33,14 @@
   <ItemGroup>
     <PackageReference Include="Polly" Version="8.4.2" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3124.44" />
+    <PackageReference Include="System.Management" Version="9.0.0" />
+  </ItemGroup>
+
+  <!-- Ship the English language file next to the exe (Turkish is written at first run). -->
+  <ItemGroup>
+    <Content Include="lang.en.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

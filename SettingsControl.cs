@@ -16,6 +16,7 @@ internal sealed class SettingsControl : UserControl
     }
 
     readonly FlowLayoutPanel _flow = new();
+    readonly TextBox _settingsSearch = new() { Dock = DockStyle.Top, Margin = new Padding(0), PlaceholderText = "🔎  Ayar ara (ad/etiket)…  —  Esc temizler" };
     readonly DataGridView _keysGrid = new();
     readonly Label _menuStatus = new();
 
@@ -29,11 +30,27 @@ internal sealed class SettingsControl : UserControl
         _flow.Padding = new Padding(10);
         Controls.Add(_flow);
 
+        // Live filter over the ~10 cards: type a setting name/label to hide non-matching cards.
+        _settingsSearch.TextChanged += (_, _) =>
+        {
+            string q = _settingsSearch.Text.Trim();
+            _flow.SuspendLayout();
+            foreach (Control card in _flow.Controls)
+                card.Visible = q.Length == 0 || CardText(card).Contains(q, StringComparison.OrdinalIgnoreCase);
+            _flow.ResumeLayout();
+        };
+        _settingsSearch.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) _settingsSearch.Clear(); };
+        Controls.Add(_settingsSearch); // docks above _flow (added last → top edge)
+
         _flow.Controls.Add(BuildKeysCard());
         _flow.Controls.Add(BuildContextMenuCard());
         _flow.Controls.Add(BuildTrustCard());
+        _flow.Controls.Add(BuildAllowlistCard());
+        _flow.Controls.Add(BuildFolderSuppressionCard());
         _flow.Controls.Add(BuildVerdictCard());
+        _flow.Controls.Add(BuildAutoActionCard());
         _flow.Controls.Add(BuildScanCard());
+        _flow.Controls.Add(BuildSweepCard());
         _flow.Controls.Add(BuildGeneralCard());
         _flow.Controls.Add(BuildConfirmGatesCard());
         _flow.Controls.Add(BuildAboutCard());
@@ -46,6 +63,15 @@ internal sealed class SettingsControl : UserControl
         RefreshMenuStatus();
     }
 
+    /// <summary>All visible text within a card (title + every child control's Text), for the live filter.</summary>
+    static string CardText(Control card)
+    {
+        var sb = new System.Text.StringBuilder();
+        void Walk(Control c) { if (!string.IsNullOrEmpty(c.Text)) sb.Append(c.Text).Append(' '); foreach (Control ch in c.Controls) Walk(ch); }
+        Walk(card);
+        return sb.ToString();
+    }
+
     void ResizeCards()
     {
         int w = _flow.ClientSize.Width - 28;
@@ -55,21 +81,21 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildKeysCard()
     {
-        var card = Card("API Anahtarları", 270, out var body);
+        var card = Card(Strings.CardApiKeys, 270, out var body);
 
         _keysGrid.Dock = DockStyle.Top;
         _keysGrid.Height = 150;
         _keysGrid.AutoGenerateColumns = false;
-        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Etiket", DataPropertyName = nameof(KeyRow.Label), Width = 160 });
-        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Anahtar", DataPropertyName = nameof(KeyRow.Anahtar), Width = 160 });
-        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Durum", DataPropertyName = nameof(KeyRow.Durum), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColLabel, DataPropertyName = nameof(KeyRow.Label), Width = 160 });
+        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColKey, DataPropertyName = nameof(KeyRow.Anahtar), Width = 160 });
+        _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(KeyRow.Durum), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         ThemeManager.StyleGrid(_keysGrid);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
-        buttons.Controls.Add(ThemeManager.MakeButton("Ekle…", (_, _) => AddKey(), accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("Düzenle…", (_, _) => EditKey()));
-        buttons.Controls.Add(ThemeManager.MakeButton("Sil", (_, _) => RemoveKey()));
-        var hint = ThemeManager.MakeLabel("Birden çok anahtar ekleyebilirsiniz; biri dolunca diğerine geçilir.", subtle: true);
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAdd, (_, _) => AddKey(), accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnEdit, (_, _) => EditKey()));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => RemoveKey()));
+        var hint = ThemeManager.MakeLabel(Strings.KeysHint, subtle: true);
 
         body.Controls.Add(hint);
         body.Controls.Add(buttons);
@@ -79,17 +105,17 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildContextMenuCard()
     {
-        var card = Card("Sağ Tuş Menüsü", 180, out var body);
+        var card = Card(Strings.CardContextMenu, 180, out var body);
         _menuStatus.AutoSize = true;
         _menuStatus.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
 
-        var excludeSafe = new CheckBox { Text = "Güvenli türlerde (txt, resim, video…) menüde gösterme", AutoSize = true, Checked = Settings.ContextMenuExcludeSafe };
+        var excludeSafe = new CheckBox { Text = Strings.CtxExcludeSafe, AutoSize = true, Checked = Settings.ContextMenuExcludeSafe };
         excludeSafe.CheckedChanged += (_, _) => { Settings.ContextMenuExcludeSafe.Value = excludeSafe.Checked; SettingsManager.SaveSettings(); };
 
         var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        buttons.Controls.Add(ThemeManager.MakeButton("Sağ tuşa ekle (yönetici)", (_, _) => InstallMenu(), accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("Onar", (_, _) => RunMenuOp(() => ContextMenuInstaller.Repair(out var e), "Onarıldı.")));
-        buttons.Controls.Add(ThemeManager.MakeButton("Kaldır", (_, _) => RunMenuOp(() => ContextMenuInstaller.Uninstall(out var e), "Kaldırıldı.")));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnCtxInstall, (_, _) => InstallMenu(), accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRepair, (_, _) => RunMenuOp(() => ContextMenuInstaller.Repair(out var e), Strings.CtxRepaired)));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRemove, (_, _) => RunMenuOp(() => ContextMenuInstaller.Uninstall(out var e), Strings.CtxRemoved)));
 
         body.Controls.Add(excludeSafe);
         body.Controls.Add(buttons);
@@ -97,42 +123,132 @@ internal sealed class SettingsControl : UserControl
         return card;
     }
 
+    readonly DataGridView _allowGrid = new();
+
+    Panel BuildAllowlistCard()
+    {
+        var card = Card("Beyaz liste (temiz olarak işaretledikleriniz)", 280, out var body);
+
+        _allowGrid.Dock = DockStyle.Top;
+        _allowGrid.Height = 150;
+        _allowGrid.AutoGenerateColumns = false;
+        _allowGrid.ReadOnly = true;
+        _allowGrid.AllowUserToAddRows = false;
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(AllowlistEntry.FileName), Width = 170 });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Gerekçe", DataPropertyName = nameof(AllowlistEntry.Reason), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Hash", DataPropertyName = nameof(AllowlistEntry.Hash), Width = 110 });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eklendi", DataPropertyName = nameof(AllowlistEntry.AddedLocal), Width = 120 });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Durum", DataPropertyName = nameof(AllowlistEntry.Health), Width = 120 });
+        ThemeManager.StyleGrid(_allowGrid);
+        _allowGrid.CellFormatting += (_, e) =>
+        {
+            if (_allowGrid.Rows[e.RowIndex].DataBoundItem is AllowlistEntry a && a.IsStale) e.CellStyle!.ForeColor = Theme.Current.Danger;
+        };
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
+        buttons.Controls.Add(ThemeManager.MakeButton("Listeden çıkar", (_, _) =>
+        {
+            if (_allowGrid.CurrentRow?.DataBoundItem is AllowlistEntry e) AllowlistStore.Remove(e.Hash);
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton("Gözden geçir (temiz say)", (_, _) =>
+        {
+            if (_allowGrid.CurrentRow?.DataBoundItem is AllowlistEntry e) AllowlistStore.MarkReviewed(e.Hash);
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton("🩺  Sağlık denetimi", async (_, _) =>
+        {
+            var stale = await AllowlistStore.CheckHealthAsync();
+            NativeMessageBox.Info(stale.Count == 0
+                ? "Beyaz listedeki tüm dosyalar hâlâ temiz."
+                : $"{stale.Count} dosya artık işaretli! Kırmızı satırları gözden geçirin (çıkarın ya da temiz sayın).");
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton("Geçmişten içe aktar", (_, _) =>
+        {
+            int n = AllowlistStore.ImportCleanFromHistory();
+            NativeMessageBox.Info($"{n} temiz dosya geçmişten beyaz listeye eklendi.");
+        }));
+        var hint = ThemeManager.MakeLabel("'Temiz olarak işaretle' dediğiniz dosyalar burada; 'Sağlık denetimi' bunları kotasız yeniden sorgular ve sonradan tehdide dönüşenleri kırmızı işaretler.", subtle: true);
+
+        body.Controls.Add(hint);
+        body.Controls.Add(buttons);
+        body.Controls.Add(_allowGrid);
+        AllowlistStore.Changed += () => SafeUi(RefreshAllowlist);
+        RefreshAllowlist();
+        return card;
+    }
+
+    void RefreshAllowlist() => _allowGrid.DataSource = AllowlistStore.All().ToList();
+
+    readonly DataGridView _folderGrid = new();
+
+    Panel BuildFolderSuppressionCard()
+    {
+        var card = Card("Klasör bazlı sessizleştirme (geliştirme/build klasörleri)", 230, out var body);
+
+        _folderGrid.Dock = DockStyle.Top;
+        _folderGrid.Height = 130;
+        _folderGrid.AutoGenerateColumns = false;
+        _folderGrid.ReadOnly = true;
+        _folderGrid.AllowUserToAddRows = false;
+        _folderGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Klasör", DataPropertyName = nameof(FolderRule.Folder), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _folderGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eklendi", DataPropertyName = nameof(FolderRule.AddedLocal), Width = 130 });
+        ThemeManager.StyleGrid(_folderGrid);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
+        buttons.Controls.Add(ThemeManager.MakeButton("Klasör ekle…", (_, _) =>
+        {
+            using var dlg = new FolderBrowserDialog();
+            if (dlg.ShowDialog() == DialogResult.OK) FolderSuppressionStore.Add(dlg.SelectedPath);
+        }, accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton("Listeden çıkar", (_, _) =>
+        {
+            if (_folderGrid.CurrentRow?.DataBoundItem is FolderRule r) FolderSuppressionStore.Remove(r.Folder);
+        }));
+        var hint = ThemeManager.MakeLabel("Bu klasörlerin altındaki dosyalar taramada atlanır — her derlemede hash'i değişen build çıktısı için (hash listesi bunu kapsayamaz).", subtle: true);
+
+        body.Controls.Add(hint);
+        body.Controls.Add(buttons);
+        body.Controls.Add(_folderGrid);
+        FolderSuppressionStore.Changed += () => SafeUi(RefreshFolders);
+        RefreshFolders();
+        return card;
+    }
+
+    void RefreshFolders() => _folderGrid.DataSource = FolderSuppressionStore.All().ToList();
+
     Panel BuildTrustCard()
     {
-        var card = Card("Güven Kaynakları (kota tasarrufu)", 330, out var body);
+        var card = Card(Strings.CardTrust, 330, out var body);
 
-        var info = ThemeManager.MakeLabel(
-            "Geçerli kod imzası olan dosyalar kota harcamamak için VT'ye gönderilmez.\n" +
-            "Not: imza güveni = yayıncı doğrulandı demektir, \"temiz\" garantisi değildir.", subtle: true);
+        var info = ThemeManager.MakeLabel(Strings.TrustInfo, subtle: true);
 
-        var skipSigned = new CheckBox { Text = "İmzalı dosyaları VT'ye gönderme (anahtarsız, sınırsız)", AutoSize = true, Checked = Settings.TrustSkipSigned };
+        var skipSigned = new CheckBox { Text = Strings.TrustSkipSignedLabel, AutoSize = true, Checked = Settings.TrustSkipSigned };
         skipSigned.CheckedChanged += (_, _) => { Settings.TrustSkipSigned.Value = skipSigned.Checked; SettingsManager.SaveSettings(); };
 
-        var msOnly = new CheckBox { Text = "Yalnızca Microsoft imzalı dosyaları atla (güvenli varsayılan)", AutoSize = true, Checked = Settings.TrustMicrosoftOnly };
+        var msOnly = new CheckBox { Text = Strings.TrustMsOnlyLabel, AutoSize = true, Checked = Settings.TrustMicrosoftOnly };
         msOnly.CheckedChanged += (_, _) => { Settings.TrustMicrosoftOnly.Value = msOnly.Checked; SettingsManager.SaveSettings(); };
 
-        var allowLbl = ThemeManager.MakeLabel("Ek güvenilen yayıncılar (CN, ; ile ayır):");
+        var allowLbl = ThemeManager.MakeLabel(Strings.TrustAllowLabel);
         var allow = new TextBox { Dock = DockStyle.Top, Text = Settings.TrustPublisherAllowList };
         allow.Leave += (_, _) => { Settings.TrustPublisherAllowList.Value = allow.Text.Trim(); SettingsManager.SaveSettings(); };
 
         var dbRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
         var dbBox = new TextBox { Width = 360, Text = Settings.KnownGoodHashDbPath, ReadOnly = true };
-        var pick = ThemeManager.MakeButton("Bilinen-temiz hash listesi seç…", (_, _) =>
+        var pick = ThemeManager.MakeButton(Strings.TrustPickHashList, (_, _) =>
         {
-            using var dlg = new OpenFileDialog { Filter = "Metin/hash listesi|*.txt;*.csv;*.*" };
+            using var dlg = new OpenFileDialog { Filter = Strings.TrustHashFilter };
             if (dlg.ShowDialog() == DialogResult.OK)
             {
                 Settings.KnownGoodHashDbPath.Value = dlg.FileName;
                 SettingsManager.SaveSettings();
                 dbBox.Text = dlg.FileName;
                 KnownGoodDb.Reload();
-                NativeMessageBox.Info($"{KnownGoodDb.Count} hash yüklendi.");
+                NativeMessageBox.Info(string.Format(Strings.TrustHashLoadedFormat, KnownGoodDb.Count));
             }
         });
         dbRow.Controls.Add(dbBox);
         dbRow.Controls.Add(pick);
 
-        var keyless = new CheckBox { Text = "Anahtarsız sorgu: VirusTotal'i GUI üzerinden aç (yavaş, kotasız)", AutoSize = true, Checked = Settings.KeylessGuiLookup };
+        var keyless = new CheckBox { Text = Strings.TrustKeylessLabel, AutoSize = true, Checked = Settings.KeylessGuiLookup };
         keyless.CheckedChanged += (_, _) => { Settings.KeylessGuiLookup.Value = keyless.Checked; SettingsManager.SaveSettings(); };
 
         body.Controls.Add(info);
@@ -150,12 +266,12 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildVerdictCard()
     {
-        var card = Card("Verdict Kategorileri (tespit sayısı → ad + renk)", 250, out var body);
+        var card = Card(Strings.CardVerdictCats, 340, out var body);
 
         _catGrid = new DataGridView { Dock = DockStyle.Top, Height = 130, AutoGenerateColumns = false };
-        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min. tespit", DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
-        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Ad", DataPropertyName = nameof(VerdictCategory.Name), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
-        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Renk", Width = 110, ReadOnly = true });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColMinDetections, DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColName, DataPropertyName = nameof(VerdictCategory.Name), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColColor, Width = 110, ReadOnly = true });
         _catGrid.ReadOnly = false;
         _catGrid.AllowUserToAddRows = false;
         _catGrid.CellFormatting += (_, e) =>
@@ -173,24 +289,36 @@ internal sealed class SettingsControl : UserControl
         RefreshCats();
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
-        buttons.Controls.Add(ThemeManager.MakeButton("Ekle", (_, _) =>
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAddShort, (_, _) =>
         {
             int next = (_catRows!.Count == 0 ? 0 : _catRows.Max(c => c.MinDetections) + 1);
-            _catRows.Add(new VerdictCategory { MinDetections = next, Name = "Yeni", ColorHex = "#888888" });
+            _catRows.Add(new VerdictCategory { MinDetections = next, Name = Strings.CatNewName, ColorHex = "#888888" });
         }, accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("Renk seç…", (_, _) =>
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnPickColor, (_, _) =>
         {
             if (_catGrid.CurrentRow?.DataBoundItem is not VerdictCategory c) return;
             using var dlg = new ColorDialog { Color = c.Color, FullOpen = true };
             if (dlg.ShowDialog() == DialogResult.OK) { c.ColorHex = "#" + dlg.Color.R.ToString("X2") + dlg.Color.G.ToString("X2") + dlg.Color.B.ToString("X2"); _catGrid.Invalidate(); }
         }));
-        buttons.Controls.Add(ThemeManager.MakeButton("Sil", (_, _) => { if (_catGrid.CurrentRow?.DataBoundItem is VerdictCategory c) _catRows!.Remove(c); }));
-        buttons.Controls.Add(ThemeManager.MakeButton("Kaydet", (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info("Kategoriler kaydedildi."); }));
-        buttons.Controls.Add(ThemeManager.MakeButton("Varsayılan", (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (_catGrid.CurrentRow?.DataBoundItem is VerdictCategory c) _catRows!.Remove(c); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSave, (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info(Strings.CatsSaved); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDefault, (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
+
+        var majorBox = new TextBox { Dock = DockStyle.Top, Text = Settings.MajorEnginesList };
+        var majorSave = ThemeManager.MakeButton(Strings.BtnSaveMajorEngines, (_, _) =>
+        {
+            Settings.MajorEnginesList.Value = majorBox.Text.Trim();
+            SettingsManager.SaveSettings();
+            MajorEngines.Load();
+            NativeMessageBox.Info(Strings.MajorEnginesSaved);
+        });
 
         body.Controls.Add(buttons);
         body.Controls.Add(_catGrid);
-        body.Controls.Add(ThemeManager.MakeLabel("Eşikler benzersiz olmalı. Örn: 0→TEMİZ, 2→ŞÜPHELİ, 3→VİRÜS.", subtle: true));
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.CatThresholdHint, subtle: true));
+        body.Controls.Add(majorSave);
+        body.Controls.Add(majorBox);
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.MajorEnginesHint, subtle: true));
         return card;
     }
 
@@ -201,41 +329,168 @@ internal sealed class SettingsControl : UserControl
         if (_catGrid != null) _catGrid.DataSource = _catRows;
     }
 
+    System.ComponentModel.BindingList<AutoActionRule>? _aaRows;
+    DataGridView? _aaGrid;
+
+    Panel BuildAutoActionCard()
+    {
+        var card = Card("Tarama sonrası oto-eylem kuralları", 300, out var body);
+
+        _aaGrid = new DataGridView { Dock = DockStyle.Top, Height = 150, AutoGenerateColumns = false };
+        _aaGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Yalnızca arka plan", DataPropertyName = nameof(AutoActionRule.BackgroundOnly), Width = 105 });
+        _aaGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min tespit", DataPropertyName = nameof(AutoActionRule.MinDetections), Width = 75 });
+        _aaGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "İnternetten", DataPropertyName = nameof(AutoActionRule.RequireFromInternet), Width = 80 });
+        _aaGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min seviye 0-2", DataPropertyName = nameof(AutoActionRule.MinLevel), Width = 95 });
+        _aaGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Klasör ön-eki", DataPropertyName = nameof(AutoActionRule.FolderPrefix), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _aaGrid.Columns.Add(new DataGridViewComboBoxColumn { HeaderText = "Eylem", DataPropertyName = nameof(AutoActionRule.Action), DataSource = Enum.GetValues<AutoActionKind>(), Width = 120 });
+        _aaGrid.AllowUserToAddRows = false;
+        ThemeManager.StyleGrid(_aaGrid);
+        _aaGrid.ReadOnly = false; // re-enable after StyleGrid
+
+        RefreshAutoActions();
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAddShort, (_, _) => _aaRows!.Add(new AutoActionRule()), accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (_aaGrid.CurrentRow?.DataBoundItem is AutoActionRule r) _aaRows!.Remove(r); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSave, (_, _) => { AutoActionStore.Replace(_aaRows!); NativeMessageBox.Info("Oto-eylem kuralları kaydedildi."); }));
+
+        body.Controls.Add(buttons);
+        body.Controls.Add(_aaGrid);
+        body.Controls.Add(ThemeManager.MakeLabel("İlk eşleşen kural uygulanır. Eylemler: ToastOnly (sadece bildir), MarkClean (beyaz listeye al), SuppressFolder (klasörü atla), Quarantine (karantinaya al). Boş liste = yerleşik davranış.", subtle: true));
+        return card;
+    }
+
+    void RefreshAutoActions()
+    {
+        _aaRows = new System.ComponentModel.BindingList<AutoActionRule>([.. AutoActionStore.All()]);
+        if (_aaGrid != null) _aaGrid.DataSource = _aaRows;
+    }
+
     Panel BuildScanCard()
     {
-        var card = Card("Tarama", 250, out var body);
+        var card = Card(Strings.CardScan, 390, out var body);
 
-        var concurrency = LabeledNumeric("Eşzamanlı tarama:", Settings.MaxConcurrentScans, 1, 16,
+        var concurrency = LabeledNumeric(Strings.ScanConcurrencyLabel, Settings.MaxConcurrentScans, 1, 16,
             v => { Settings.MaxConcurrentScans.Value = v; SettingsManager.SaveSettings(); });
-        var cache = new CheckBox { Text = "Yerel hash önbelleği kullan (kota tasarrufu)", AutoSize = true, Checked = Settings.UseLocalHashCache };
+        var maxSize = LabeledNumeric(Strings.ScanMaxSizeLabel, Settings.MaxFileSizeMB, 0, 100000,
+            v => { Settings.MaxFileSizeMB.Value = v; SettingsManager.SaveSettings(); });
+        var recheckDays = LabeledNumeric(Strings.ScanRecheckDaysLabel, Settings.RecheckPeriodDays, 1, 365,
+            v => { Settings.RecheckPeriodDays.Value = v; SettingsManager.SaveSettings(); });
+        var uploads = LabeledNumeric(Strings.ScanUploadsLabel, Settings.MaxConcurrentUploads, 1, 16,
+            v => { Settings.MaxConcurrentUploads.Value = v; SettingsManager.SaveSettings(); });
+        var cache = new CheckBox { Text = Strings.ScanUseCacheLabel, AutoSize = true, Checked = Settings.UseLocalHashCache };
         cache.CheckedChanged += (_, _) => { Settings.UseLocalHashCache.Value = cache.Checked; SettingsManager.SaveSettings(); };
-        var cacheDays = LabeledNumeric("Önbellek geçerlilik (gün):", Settings.HashCacheDays, 0, 365,
+        var cacheDays = LabeledNumeric("Temiz önbellek geçerlilik (gün):", Settings.HashCacheDays, 0, 3650,
             v => { Settings.HashCacheDays.Value = v; SettingsManager.SaveSettings(); });
-        var skipSafe = new CheckBox { Text = "Taramada güvenli türleri atla", AutoSize = true, Checked = Settings.SkipSafeExtensionsOnScan };
+        var threatCacheDays = LabeledNumeric("Tehdit önbellek geçerlilik (gün):", Settings.ThreatCacheDays, 0, 3650,
+            v => { Settings.ThreatCacheDays.Value = v; SettingsManager.SaveSettings(); });
+        var skipSafe = new CheckBox { Text = Strings.ScanSkipSafeLabel, AutoSize = true, Checked = Settings.SkipSafeExtensionsOnScan };
         skipSafe.CheckedChanged += (_, _) => { Settings.SkipSafeExtensionsOnScan.Value = skipSafe.Checked; SettingsManager.SaveSettings(); };
 
-        var lbl = ThemeManager.MakeLabel("Güvenli uzantılar (; ile ayır):");
+        var lbl = ThemeManager.MakeLabel(Strings.ScanSafeExtsLabel);
         var exts = new TextBox { Dock = DockStyle.Top, Text = Settings.SafeExtensions, Height = 24 };
-        var save = ThemeManager.MakeButton("Uzantıları kaydet", (_, _) => { Settings.SafeExtensions.Value = exts.Text.Trim(); SettingsManager.SaveSettings(); });
+        var save = ThemeManager.MakeButton(Strings.BtnSaveExts, (_, _) => { Settings.SafeExtensions.Value = exts.Text.Trim(); SettingsManager.SaveSettings(); });
 
         body.Controls.Add(exts);
         body.Controls.Add(lbl);
         body.Controls.Add(save);
         body.Controls.Add(skipSafe);
+        body.Controls.Add(threatCacheDays);
         body.Controls.Add(cacheDays);
         body.Controls.Add(cache);
+        body.Controls.Add(recheckDays);
+        body.Controls.Add(maxSize);
+        body.Controls.Add(uploads);
         body.Controls.Add(concurrency);
+        return card;
+    }
+
+    static string SweepStatusText() =>
+        SweepScheduler.IsInstalled()
+            ? Strings.SweepStatusInstalled + (string.IsNullOrEmpty(Settings.SweepFolder.Value) ? "" : " — " + Settings.SweepFolder.Value)
+            : Strings.SweepStatusNotInstalled;
+
+    Panel BuildSweepCard()
+    {
+        var card = Card(Strings.CardSweep, 250, out var body);
+
+        var status = ThemeManager.MakeLabel(SweepStatusText(), subtle: true);
+        var folderBox = new TextBox { Dock = DockStyle.Top, Text = Settings.SweepFolder };
+        var pick = ThemeManager.MakeButton(Strings.BtnPickFolder, (_, _) =>
+        {
+            using var dlg = new FolderBrowserDialog { Description = Strings.SweepFolderDescription };
+            if (dlg.ShowDialog() == DialogResult.OK) folderBox.Text = dlg.SelectedPath;
+        });
+
+        var intervalRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
+        intervalRow.Controls.Add(ThemeManager.MakeLabel(Strings.SweepIntervalLabel));
+        var interval = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        interval.Items.AddRange([Strings.SweepDaily, Strings.Sweep6h, Strings.Sweep12h, Strings.SweepWeekly]);
+        interval.SelectedIndex = 0;
+        intervalRow.Controls.Add(interval);
+
+        var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnInstallUpdate, (_, _) =>
+        {
+            string[] sched = interval.SelectedIndex switch
+            {
+                1 => ["/SC", "HOURLY", "/MO", "6"],
+                2 => ["/SC", "HOURLY", "/MO", "12"],
+                3 => ["/SC", "WEEKLY", "/D", "SUN", "/ST", "03:00"],
+                _ => ["/SC", "DAILY", "/ST", "03:00"],
+            };
+            if (SweepScheduler.Install(folderBox.Text.Trim(), sched, out var err))
+                NativeMessageBox.Info(string.Format(Strings.SweepInstalledFormat, SweepScheduler.ReportPath));
+            else NativeMessageBox.Error(Strings.SweepInstallFailedPrefix + err);
+            status.Text = SweepStatusText();
+        }, accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRunNow, (_, _) =>
+        {
+            if (SweepScheduler.RunNow(out var err)) NativeMessageBox.Info(Strings.SweepStartedInfo);
+            else NativeMessageBox.Error(Strings.SweepRunFailedPrefix + err);
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRemove, (_, _) =>
+        {
+            if (SweepScheduler.Uninstall(out var err)) NativeMessageBox.Info(Strings.SweepRemovedInfo);
+            else NativeMessageBox.Error(Strings.SweepRemoveFailedPrefix + err);
+            status.Text = SweepStatusText();
+        }));
+
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.SweepHint, subtle: true));
+        body.Controls.Add(intervalRow);
+        body.Controls.Add(folderBox);
+        body.Controls.Add(pick);
+        body.Controls.Add(buttons);
+        body.Controls.Add(status);
         return card;
     }
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 315, out var body);
+        var card = Card(Strings.CardGeneral, 540, out var body);
+
+        var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
+        langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
+        var langCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+        foreach (var (_, name) in LocManager.Available) langCombo.Items.Add(name);
+        int curLang = Array.FindIndex(LocManager.Available, a => a.Code.Equals(Settings.Language.Value, StringComparison.OrdinalIgnoreCase));
+        langCombo.SelectedIndex = curLang < 0 ? 0 : curLang;
+        langCombo.SelectedIndexChanged += (_, _) =>
+        {
+            string code = LocManager.Available[langCombo.SelectedIndex].Code;
+            if (!string.Equals(code, Settings.Language.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                Settings.Language.Value = code;
+                SettingsManager.SaveSettings();
+                NativeMessageBox.Info(Strings.LanguageRestartNote);
+            }
+        };
+        langRow.Controls.Add(langCombo);
 
         var themeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
-        themeRow.Controls.Add(ThemeManager.MakeLabel("Tema:"));
+        themeRow.Controls.Add(ThemeManager.MakeLabel(Strings.ThemeLabel));
         var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
-        combo.Items.AddRange(["Sistemi izle", "Koyu", "Açık"]);
+        combo.Items.AddRange([Strings.ThemeFollow, Strings.ThemeDark, Strings.ThemeLight]);
         combo.SelectedIndex = Settings.FollowWindowsTheme ? 0 : (string.Equals(Settings.Theme.Value, "Light", StringComparison.OrdinalIgnoreCase) ? 2 : 1);
         combo.SelectedIndexChanged += (_, _) =>
         {
@@ -244,28 +499,112 @@ internal sealed class SettingsControl : UserControl
         };
         themeRow.Controls.Add(combo);
 
-        var tray = new CheckBox { Text = "Kapatınca sistem tepsisine küçült", AutoSize = true, Checked = Settings.MinimizeToTray };
+        var tray = new CheckBox { Text = Strings.TrayMinimizeLabel, AutoSize = true, Checked = Settings.MinimizeToTray };
         tray.CheckedChanged += (_, _) => { Settings.MinimizeToTray.Value = tray.Checked; SettingsManager.SaveSettings(); };
-        var notify = new CheckBox { Text = "Tehdit bulununca bildirim göster", AutoSize = true, Checked = Settings.NotifyOnThreat };
+        var notify = new CheckBox { Text = Strings.NotifyThreatLabel, AutoSize = true, Checked = Settings.NotifyOnThreat };
         notify.CheckedChanged += (_, _) => { Settings.NotifyOnThreat.Value = notify.Checked; SettingsManager.SaveSettings(); };
-        var logging = new CheckBox { Text = "Loglama açık", AutoSize = true, Checked = LoggerHost.IsEnabled };
+        var notifyThreshold = LabeledNumeric("Bildirim eşiği (en az kaç tespit):", Settings.NotifyMinDetections, 1, 70,
+            v => { Settings.NotifyMinDetections.Value = v; SettingsManager.SaveSettings(); });
+        var notifySummary = new CheckBox { Text = "Tarama bitince özet bildirim göster", AutoSize = true, Checked = Settings.NotifyScanSummary };
+        notifySummary.CheckedChanged += (_, _) => { Settings.NotifyScanSummary.Value = notifySummary.Checked; SettingsManager.SaveSettings(); };
+        var votes = new CheckBox { Text = Strings.ShowVotesLabel, AutoSize = true, Checked = Settings.ShowCommunityVotes };
+        votes.CheckedChanged += (_, _) => { Settings.ShowCommunityVotes.Value = votes.Checked; SettingsManager.SaveSettings(); };
+        var watch = new CheckBox { Text = Strings.WatchDownloadsLabel, AutoSize = true, Checked = Settings.WatchDownloads };
+        watch.CheckedChanged += (_, _) =>
+        {
+            Settings.WatchDownloads.Value = watch.Checked;
+            SettingsManager.SaveSettings();
+            NativeMessageBox.Info(string.Format(Strings.WatchToggleFormat, watch.Checked ? Strings.WatchOn : Strings.WatchOff));
+        };
+        var usb = new CheckBox { Text = "USB takıldığında taramayı öner", AutoSize = true, Checked = Settings.WatchUsb };
+        usb.CheckedChanged += (_, _) => { Settings.WatchUsb.Value = usb.Checked; SettingsManager.SaveSettings(); };
+        var autoUsb = new CheckBox { Text = "USB takılınca tıklamadan hemen otomatik tara (arka planda)", AutoSize = true, Checked = Settings.AutoScanUsb };
+        autoUsb.CheckedChanged += (_, _) => { Settings.AutoScanUsb.Value = autoUsb.Checked; SettingsManager.SaveSettings(); };
+        var procGuard = new CheckBox { Text = "Çalıştırılan her exe'yi başlarken denetle (gerçek-zamanlı, yönetici gerekir)", AutoSize = true, Checked = Settings.WatchProcessLaunches };
+        procGuard.CheckedChanged += (_, _) => { Settings.WatchProcessLaunches.Value = procGuard.Checked; SettingsManager.SaveSettings(); if (procGuard.Checked) NativeMessageBox.Info("Bu koruma bir sonraki açılışta etkinleşir (WMI izleme yönetici hakları gerektirir)."); };
+        var sigSoften = new CheckBox { Text = "İmzalı dosyada 1-2 sezgisel tespiti 'imzayla yumuşatıldı' işaretle (muhtemel yanlış pozitif)", AutoSize = true, Checked = Settings.SignatureSoftenLowDetections };
+        sigSoften.CheckedChanged += (_, _) => { Settings.SignatureSoftenLowDetections.Value = sigSoften.Checked; SettingsManager.SaveSettings(); };
+
+        var autoQ = new CheckBox { Text = "Arka plan gözcüleri yüksek-tespitli tehditleri otomatik karantinaya alsın (geri alınabilir)", AutoSize = true, Checked = Settings.AutoQuarantineWatchers };
+        autoQ.CheckedChanged += (_, _) => { Settings.AutoQuarantineWatchers.Value = autoQ.Checked; SettingsManager.SaveSettings(); };
+        var autoQRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        autoQRow.Controls.Add(new Label { Text = "Otomatik karantina eşiği (tespit sayısı):", AutoSize = true, Margin = new Padding(20, 6, 6, 0) });
+        var autoQNum = new NumericUpDown { Minimum = 0, Maximum = 70, Value = Math.Max(0, Math.Min(70, Settings.AutoQuarantineThreshold.Value)), Width = 60 };
+        autoQNum.ValueChanged += (_, _) => { Settings.AutoQuarantineThreshold.Value = (int)autoQNum.Value; SettingsManager.SaveSettings(); };
+        autoQRow.Controls.Add(autoQNum);
+
+        var mute = new CheckBox { Text = "Tam ekran uygulamada (oyun/sunum) bildirimleri sustur", AutoSize = true, Checked = Settings.MuteInFullscreen };
+        mute.CheckedChanged += (_, _) => { Settings.MuteInFullscreen.Value = mute.Checked; SettingsManager.SaveSettings(); };
+        var quietRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        quietRow.Controls.Add(new Label { Text = "Sessiz saatler (başlangıç–bitiş, eşitse kapalı):", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        var qStart = new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursStart.Value)), Width = 55 };
+        qStart.ValueChanged += (_, _) => { Settings.QuietHoursStart.Value = (int)qStart.Value; SettingsManager.SaveSettings(); };
+        var qEnd = new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursEnd.Value)), Width = 55 };
+        qEnd.ValueChanged += (_, _) => { Settings.QuietHoursEnd.Value = (int)qEnd.Value; SettingsManager.SaveSettings(); };
+        quietRow.Controls.Add(qStart);
+        quietRow.Controls.Add(new Label { Text = "–", AutoSize = true, Margin = new Padding(4, 6, 4, 0) });
+        quietRow.Controls.Add(qEnd);
+
+        var retRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        retRow.Controls.Add(new Label { Text = "Karantinayı şu günden eski kayıtlardan otomatik temizle (0=kapalı):", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        var retNum = new NumericUpDown { Minimum = 0, Maximum = 3650, Value = Math.Max(0, Math.Min(3650, Settings.QuarantineRetentionDays.Value)), Width = 70 };
+        retNum.ValueChanged += (_, _) => { Settings.QuarantineRetentionDays.Value = (int)retNum.Value; SettingsManager.SaveSettings(); };
+        retRow.Controls.Add(retNum);
+
+        var perRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        perRow.Controls.Add(new Label { Text = "Tepside her N saatte arka planda yeniden denetle (izleme/önbellek/bütünlük, 0=sadece açılışta):", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        var perNum = new NumericUpDown { Minimum = 0, Maximum = 168, Value = Math.Max(0, Math.Min(168, Settings.PeriodicRecheckHours.Value)), Width = 70 };
+        perNum.ValueChanged += (_, _) => { Settings.PeriodicRecheckHours.Value = (int)perNum.Value; SettingsManager.SaveSettings(); };
+        perRow.Controls.Add(perNum);
+
+        var logging = new CheckBox { Text = Strings.LoggingLabel, AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
-        var startup = new CheckBox { Text = "Windows ile başlat (arka planda, tepside)", AutoSize = true, Checked = StartupManager.IsEnabled() };
+        var startup = new CheckBox { Text = Strings.StartupLabel, AutoSize = true, Checked = StartupManager.IsEnabled() };
         startup.CheckedChanged += (_, _) => StartupManager.SetEnabled(startup.Checked);
 
-        var resume = new CheckBox { Text = "Açılışta yarım kalan taramayı sor", AutoSize = true, Checked = Settings.ResumeInterruptedScans };
+        var resume = new CheckBox { Text = Strings.ResumeAskLabel, AutoSize = true, Checked = Settings.ResumeInterruptedScans };
         resume.CheckedChanged += (_, _) => { Settings.ResumeInterruptedScans.Value = resume.Checked; SettingsManager.SaveSettings(); };
 
-        var autoResume = new CheckBox { Text = "Açılışta yarım kalan taramayı SORMADAN devam et", AutoSize = true, Checked = Settings.AutoResumeScans };
+        var autoResume = new CheckBox { Text = Strings.AutoResumeLabel, AutoSize = true, Checked = Settings.AutoResumeScans };
         autoResume.CheckedChanged += (_, _) => { Settings.AutoResumeScans.Value = autoResume.Checked; SettingsManager.SaveSettings(); };
 
+        body.Controls.Add(langRow);
         body.Controls.Add(themeRow);
         body.Controls.Add(startup);
         body.Controls.Add(resume);
         body.Controls.Add(autoResume);
+        var ledgerRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
+        ledgerRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnLedgerExport, (_, _) =>
+        {
+            using var dlg = new SaveFileDialog { Filter = "Ledger|*.json", FileName = "team-ledger.json" };
+            if (dlg.ShowDialog() == DialogResult.OK) NativeMessageBox.Info(string.Format(Strings.LedgerWrittenFormat, LedgerService.Export(AppServices.Cache, dlg.FileName)));
+        }));
+        ledgerRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnLedgerImport, (_, _) =>
+        {
+            using var dlg = new OpenFileDialog { Filter = "Ledger|*.json" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            var (add, conf, ok) = LedgerService.Import(AppServices.Cache, dlg.FileName);
+            NativeMessageBox.Info(string.Format(Strings.LedgerImportedFormat, add, conf, ok ? Strings.LedgerIntegrityOk : Strings.LedgerIntegrityBad));
+        }));
+
         body.Controls.Add(tray);
         body.Controls.Add(notify);
+        body.Controls.Add(notifyThreshold);
+        body.Controls.Add(notifySummary);
+        body.Controls.Add(votes);
+        body.Controls.Add(watch);
+        body.Controls.Add(usb);
+        body.Controls.Add(autoUsb);
+        body.Controls.Add(procGuard);
+        body.Controls.Add(sigSoften);
+        body.Controls.Add(autoQ);
+        body.Controls.Add(autoQRow);
+        body.Controls.Add(mute);
+        body.Controls.Add(quietRow);
+        body.Controls.Add(retRow);
+        body.Controls.Add(perRow);
+        body.Controls.Add(ledgerRow);
         body.Controls.Add(logging);
         return card;
     }
@@ -273,16 +612,16 @@ internal sealed class SettingsControl : UserControl
     Panel BuildConfirmGatesCard()
     {
         var gates = ConfirmGateManager.All.ToList();
-        var card = Card("Onay Soruları (bir daha sorma)", 70 + gates.Count * 30, out var body);
-        body.Controls.Add(ThemeManager.MakeLabel("'Bir daha sorma' dediğin onaylar burada görünür; istersen tekrar sormaya açabilirsin.", subtle: true));
+        var card = Card(Strings.CardConfirmGates, 70 + gates.Count * 30, out var body);
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.ConfirmGatesHint, subtle: true));
         foreach (var gate in gates)
         {
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
             var lbl = ThemeManager.MakeLabel("");
-            var btn = ThemeManager.MakeButton("Tekrar sor", null);
+            var btn = ThemeManager.MakeButton(Strings.BtnAskAgain, null);
             void Refresh()
             {
-                lbl.Text = gate.Title + (gate.Suppressed ? $"  —  KAPALI (yanıt: {(gate.RememberedAnswer ? "Evet" : "Hayır")})" : "  —  soruluyor");
+                lbl.Text = gate.Title + (gate.Suppressed ? string.Format(Strings.GateSuppressedFormat, gate.RememberedAnswer ? Strings.GateYes : Strings.GateNo) : Strings.GateAsking);
                 btn.Enabled = gate.Suppressed;
             }
             btn.Click += (_, _) => { gate.ResetSuppression(); Refresh(); };
@@ -296,12 +635,35 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildAboutCard()
     {
-        var card = Card("Hakkında", 110, out var body);
+        var card = Card(Strings.CardAbout, 170, out var body);
         body.Controls.Add(ThemeManager.MakeLabel($"{AppConstants.AppTitle} v{AppConstants.Version}", subtle: true));
-        var link = new LinkLabel { Text = "VirusTotal API anahtarı al (virustotal.com)", AutoSize = true };
+        var link = new LinkLabel { Text = Strings.AboutGetKeyLink, AutoSize = true };
         link.LinkClicked += (_, _) => OpenUrlInBrowser("https://www.virustotal.com/gui/my-apikey");
         body.Controls.Add(link);
-        body.Controls.Add(ThemeManager.MakeLabel("Ayar dosyası: " + ConfigPathResolver.ConfigPath, subtle: true));
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.AboutConfigFilePrefix + ConfigPathResolver.ConfigPath, subtle: true));
+
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(0, 6, 0, 0) };
+        actions.Controls.Add(ThemeManager.MakeButton("↺  Tüm ayarları varsayılana döndür", (_, _) =>
+        {
+            if (!NativeMessageBox.Confirm("Tüm ayarlar varsayılan değerlerine döndürülsün mü? (API anahtarları etkilenmez)")) return;
+            SettingsManager.ResetAllToDefaults();
+            NativeMessageBox.Info("Ayarlar varsayılana döndürüldü. Görünmesi için Ayarlar sekmesini yeniden açın.");
+        }));
+        actions.Controls.Add(ThemeManager.MakeButton("Ayarları dışa aktar", (_, _) =>
+        {
+            using var dlg = new SaveFileDialog { Filter = "Ayar dosyası|*.txt|Tümü|*.*", FileName = "vts-ayarlar.txt" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            try { SettingsManager.ExportSettings(dlg.FileName); NativeMessageBox.Info("Ayarlar dışa aktarıldı (API anahtarları hariç, paylaşıma uygun)."); }
+            catch (Exception ex) { NativeMessageBox.Error("Dışa aktarılamadı: " + ex.Message); }
+        }));
+        actions.Controls.Add(ThemeManager.MakeButton("Ayarları içe aktar", (_, _) =>
+        {
+            using var dlg = new OpenFileDialog { Filter = "Ayar dosyası|*.txt|Tümü|*.*" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            try { int n = SettingsManager.ImportSettings(dlg.FileName); NativeMessageBox.Info($"{n} ayar içe aktarıldı. Görünmesi için Ayarlar sekmesini yeniden açın."); }
+            catch (Exception ex) { NativeMessageBox.Error("İçe aktarılamadı: " + ex.Message); }
+        }));
+        body.Controls.Add(actions);
         return card;
     }
 
@@ -342,20 +704,16 @@ internal sealed class SettingsControl : UserControl
             Id = k.Id,
             Label = string.IsNullOrWhiteSpace(k.Label) ? "Key" : k.Label,
             Anahtar = k.Masked,
-            Durum = k.Disabled ? "Devre dışı" : k.IsExhausted(now) ? "Dolu" : "Aktif",
+            Durum = k.Disabled ? Strings.KeyStatusDisabled : k.IsExhausted(now) ? Strings.KeyStatusExhausted : Strings.KeyStatusActive,
         }).ToList();
         _keysGrid.DataSource = rows;
     }
 
     void InstallMenu()
     {
-        if (!NativeMessageBox.Confirm(
-            "VirusTotalScanner kendisini Windows sağ tuş menüsüne (tüm kullanıcılar) ekleyecek.\n" +
-            "Yönetici izni (UAC) istenecek.\n\nDevam edilsin mi?",
-            "İzin"))
+        if (!NativeMessageBox.Confirm(Strings.MenuInstallConfirm, Strings.FirstRunMenuTitle))
             return;
-        RunMenuOp(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e),
-            "Sağ tuş menüsüne eklendi.\nWindows 11'de 'Daha fazla seçenek göster' altında görünür.");
+        RunMenuOp(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e), Strings.MenuInstalledInfo);
     }
 
     /// <summary>Runs an elevation-capable menu op off the UI thread, then refreshes status.</summary>
@@ -368,7 +726,7 @@ internal sealed class SettingsControl : UserControl
             {
                 RefreshMenuStatus();
                 if (ok) NativeMessageBox.Info(okMsg);
-                else NativeMessageBox.Warn("İşlem tamamlanamadı (yönetici izni gerekebilir).");
+                else NativeMessageBox.Warn(Strings.MenuOpFailedWarn);
             });
         });
     }
@@ -376,7 +734,7 @@ internal sealed class SettingsControl : UserControl
     void RefreshMenuStatus()
     {
         var state = ContextMenuInstaller.Verify();
-        _menuStatus.Text = "Durum: " + ContextMenuInstaller.Describe(state);
+        _menuStatus.Text = Strings.MenuStatusPrefix + ContextMenuInstaller.Describe(state);
         _menuStatus.ForeColor = state switch
         {
             MenuState.Ok => Theme.Current.Success,

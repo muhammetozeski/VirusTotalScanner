@@ -28,6 +28,9 @@ internal sealed class ScanItem : INotifyPropertyChanged
 
     public string FilePath { get; }
     public string FileName => Path.GetFileName(FilePath);
+    /// <summary>Optional context shown next to the file name — e.g. the offending member of an archive
+    /// ("› setup.exe") when the threat was found inside a downloaded .zip.</summary>
+    public string? OriginNote { get; set; }
     public long SizeBytes { get; }
     public string SizeText => SizeBytes < 0 ? "?" : FormatBytes(SizeBytes);
 
@@ -62,26 +65,47 @@ internal sealed class ScanItem : INotifyPropertyChanged
     /// <summary>Why VT was skipped (e.g. "İmzalı · Microsoft", "Bilinen temiz (yerel liste)").</summary>
     public string? SkipReason { get; set; }
 
+    /// <summary>Local signature-trust result, captured even when the file is still sent to VT (e.g. a valid
+    /// non-Microsoft signature filtered out by TrustMicrosoftOnly) so 1-2 heuristic hits can be softened.</summary>
+    public TrustResult? Trust { get; set; }
+
+    /// <summary>A likely false positive: the soften setting is on, the file has a fully valid signature
+    /// chain, and there are only 1-2 purely heuristic detections with no negative reputation. A HINT only —
+    /// it never changes the verdict band or the suspicious/threat bucketing.</summary>
+    public bool SignatureSoftened =>
+        Settings.SignatureSoftenLowDetections && Trust is { Trusted: true }
+        && Report is { } r && r.DetectionCount is > 0 and <= 2 && r.HeuristicOnly && r.Reputation >= 0;
+
+    /// <summary>The signature-free sibling of <see cref="SignatureSoftened"/>: a strong community-harmless
+    /// lean (no major-engine hit) on a 1-2 detection file — catches community-vouched unsigned tools that
+    /// the signature path misses. Also a HINT only; never changes the verdict band.</summary>
+    public bool CommunitySoftened =>
+        Settings.SignatureSoftenLowDetections && Settings.ShowCommunityVotes
+        && Report is { } r && r.DetectionCount is > 0 and <= 2 && r.Reputation >= 0 && r.CommunityHarmlessLean;
+
     string? _error;
     public string? Error { get => _error; set => Set(ref _error, value); }
 
-    public string Verdict => Report?.Verdict ?? (Status == ScanStatus.TrustedSkipped ? "İMZALI" : "");
+    public string Verdict => Report?.Verdict ?? (Status == ScanStatus.TrustedSkipped ? Strings.VerdictSigned : "");
 
     public string StatusText => _status switch
     {
-        ScanStatus.Queued => "Sırada",
-        ScanStatus.Hashing => "Hash hesaplanıyor…",
-        ScanStatus.LookingUp => "VirusTotal sorgulanıyor…",
-        ScanStatus.Uploading => Detail ?? "Yükleniyor…",
-        ScanStatus.Polling => Detail ?? "Analiz bekleniyor…",
-        ScanStatus.Completed => Report == null ? "Tamamlandı" :
-            $"{Report.Verdict} ({Report.DetectionCount}/{Report.TotalEngines})" + (FromCache ? " • önbellek" : ""),
-        ScanStatus.Failed => "Hata: " + (Error ?? "bilinmiyor"),
-        ScanStatus.Skipped => "Atlandı (güvenli tür)",
-        ScanStatus.TrustedSkipped => (SkipReason ?? "İmzalı") + " (VT atlandı)",
-        ScanStatus.Cancelled => "İptal edildi",
+        ScanStatus.Queued => Strings.StatusQueued,
+        ScanStatus.Hashing => Strings.StatusHashing,
+        ScanStatus.LookingUp => Strings.StatusLookingUp,
+        ScanStatus.Uploading => Detail ?? Strings.StatusUploading,
+        ScanStatus.Polling => Detail ?? Strings.StatusPolling,
+        ScanStatus.Completed => Report == null ? Strings.StatusCompleted :
+            $"{VerdictEmoji(Report)} {Report.Verdict} ({Report.DetectionCount}/{Report.TotalEngines})" + (FromCache ? Strings.CacheSuffix : ""),
+        ScanStatus.Failed => Strings.StatusFailedPrefix + (Error ?? Strings.StatusUnknown),
+        ScanStatus.Skipped => string.Format(Strings.StatusSkippedFormat, SkipReason ?? Strings.StatusSafeType),
+        ScanStatus.TrustedSkipped => string.Format(Strings.StatusTrustedFormat, SkipReason ?? Strings.StatusSignedShort),
+        ScanStatus.Cancelled => Strings.StatusCancelled,
         _ => _status.ToString(),
     };
+
+    static string VerdictEmoji(VtFileReport r) =>
+        r.TotalEngines == 0 ? "⚪" : r.IsMalicious ? "🔴" : r.DetectionCount > 0 ? "🟡" : "🟢";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -108,6 +132,9 @@ internal sealed class OverallProgress
     public int Failed { get; set; }
     public int Skipped { get; set; }
     public int SignedSkipped { get; set; }
+    public TimeSpan Elapsed { get; set; }
+    public double FilesPerSec { get; set; }
+    public TimeSpan? Remaining { get; set; }
     public double Percent => Total > 0 ? (double)Done / Total * 100 : 0;
 }
 
@@ -116,8 +143,14 @@ internal sealed class ScanOptions
     public bool Recurse { get; set; } = true;
     public bool ApplySafeFilter { get; set; }
     public int MaxConcurrency { get; set; } = 2;
+    public int MaxUploads { get; set; } = 2;
+    /// <summary>Skip files larger than this before hashing (0 = no cap). VT's own ceiling is ~650 MB.</summary>
+    public long MaxFileSizeBytes { get; set; }
+    /// <summary>Expand ZIP-family archives and scan their members instead of the archive file.</summary>
+    public bool ExpandArchives { get; set; }
     public bool UseCache { get; set; } = true;
-    public int CacheDays { get; set; } = 7;
+    public int CacheDays { get; set; } = 7;        // retention for clean verdicts
+    public int ThreatCacheDays { get; set; } = 365; // retention for malicious verdicts
 
     /// <summary>Skip VT for trusted-signed / known-good files (the keyless quota saver).</summary>
     public bool SkipTrusted { get; set; } = true;
@@ -129,8 +162,11 @@ internal sealed class ScanOptions
         Recurse = recurse,
         ApplySafeFilter = Settings.SkipSafeExtensionsOnScan,
         MaxConcurrency = Math.Max(1, Settings.MaxConcurrentScans.Value),
+        MaxUploads = Math.Max(1, Settings.MaxConcurrentUploads.Value),
+        MaxFileSizeBytes = Math.Max(0, (long)Settings.MaxFileSizeMB.Value) * 1024 * 1024,
         UseCache = Settings.UseLocalHashCache,
         CacheDays = Math.Max(0, Settings.HashCacheDays.Value),
+        ThreatCacheDays = Math.Max(0, Settings.ThreatCacheDays.Value),
         SkipTrusted = Settings.TrustSkipSigned,
     };
 }

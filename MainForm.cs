@@ -19,6 +19,71 @@ internal sealed partial class MainForm : Form
     {
         base.OnHandleCreated(e);
         ApplyDarkTitleBar();
+        TaskbarProgress.Init(Handle);
+    }
+
+    // ---- removable-drive (USB) auto-scan ----
+    const int WM_DEVICECHANGE = 0x0219;
+    const int DBT_DEVICEARRIVAL = 0x8000;
+    const int DBT_DEVTYP_VOLUME = 0x0002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct DevBroadcastVolume { public int Size; public int DeviceType; public int Reserved; public int UnitMask; public short Flags; }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg == WM_DEVICECHANGE && (int)m.WParam == DBT_DEVICEARRIVAL && m.LParam != IntPtr.Zero)
+        {
+            try
+            {
+                if (Marshal.ReadInt32(m.LParam, 4) == DBT_DEVTYP_VOLUME) // dbch_devicetype
+                {
+                    var vol = Marshal.PtrToStructure<DevBroadcastVolume>(m.LParam);
+                    for (int i = 0; i < 26; i++)
+                        if ((vol.UnitMask & (1 << i)) != 0) { OnRemovableInserted((char)('A' + i)); break; }
+                }
+            }
+            catch (Exception ex) { Log("Device-change handling failed: " + ex.Message, LogLevel.Warning); }
+        }
+    }
+
+    void OnRemovableInserted(char letter)
+    {
+        if (!Settings.WatchUsb) return;
+        try
+        {
+            var di = new DriveInfo(letter + ":\\");
+            // The arrival event means it was hot-plugged: accept removable media AND external fixed
+            // drives (USB HDD/SSD report Fixed, not Removable), but never the system/boot drive.
+            if (di.DriveType is not (DriveType.Removable or DriveType.Fixed)) return;
+            var sysRoot = Path.GetPathRoot(Environment.SystemDirectory);
+            if (sysRoot != null && string.Equals(di.Name, sysRoot, StringComparison.OrdinalIgnoreCase)) return;
+        }
+        catch { return; }
+
+        string drive = letter + ":\\";
+
+        // Hands-off: scan it right away in the background (auto-quarantines high-detection finds) instead
+        // of waiting for a click that's easy to miss.
+        if (Settings.AutoScanUsb)
+        {
+            _tabs.SelectedIndex = 1; // Tarama
+            _scan.StartScan([drive], recurse: true, background: true);
+            _toastAction = ToastAction.None;
+            _tray.BalloonTipTitle = "USB sürücü taranıyor";
+            _tray.BalloonTipText = $"{letter}: takıldı, otomatik taranıyor…";
+            _tray.BalloonTipIcon = ToolTipIcon.Info;
+            if (!Gated()) _tray.ShowBalloonTip(4000);
+            return;
+        }
+
+        _pendingUsbDrive = drive;
+        _toastAction = ToastAction.ScanUsb;
+        _tray.BalloonTipTitle = "USB sürücü takıldı";
+        _tray.BalloonTipText = $"{letter}: sürücüsünü taramak için bu bildirime tıkla.";
+        _tray.BalloonTipIcon = ToolTipIcon.Info;
+        if (!Gated()) _tray.ShowBalloonTip(6000);
     }
 
     void ApplyDarkTitleBar()
@@ -32,15 +97,39 @@ internal sealed partial class MainForm : Form
     }
 
     readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    readonly ScanOverviewControl _overview = new();
     readonly ScanQueueControl _scan = new();
     readonly QuotaDashboardControl _quota = new();
     readonly LogViewerControl _logs = new();
+    readonly ScanHistoryControl _history = new();
     readonly SettingsControl _settings = new();
     readonly NotifyIcon _tray = new();
+    readonly DownloadsWatcher _downloadsWatcher = new(AppServices.Cache);
+    readonly ProcessStartGuard _processGuard = new(AppServices.Cache);
     readonly StatusStrip _status = new();
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
     readonly bool _startHidden;
+    enum ToastAction { None, ScanUsb, ShowThreat, UndoQuarantine, LoadSweepThreats }
+    ToastAction _toastAction;  // what clicking the CURRENT balloon should do (set right before each toast)
+    string? _pendingUsbDrive;  // the removable drive for a ScanUsb toast
+    ScanItem? _lastThreat;     // the item for a ShowThreat toast
+    QuarantineEntry? _lastQuarantine; // the entry for an UndoQuarantine toast
+    string[] _sweepThreatPaths = []; // the paths for a LoadSweepThreats toast
+    readonly record struct DeferredToast(string Title, string Text, ToolTipIcon Icon, ToastAction Action, ScanItem? Threat);
+    readonly List<DeferredToast> _deferred = []; // held back during quiet hours / fullscreen, replayed with action intact
+    readonly System.Windows.Forms.Timer _toastReplay = new() { Interval = 30000 };
+    readonly System.Windows.Forms.Timer _periodicTimer = new(); // periodic background re-verdict / drift pass
+
+    /// <summary>True (and captures the toast's full state for action-preserving replay) when a toast must be
+    /// held back. Snapshots the already-set tray title/text/icon + action + threat payload.</summary>
+    bool Gated()
+    {
+        if (!NotificationGate.ShouldSuppress()) return false;
+        _deferred.Add(new DeferredToast(_tray.BalloonTipTitle, _tray.BalloonTipText, _tray.BalloonTipIcon, _toastAction, _toastAction == ToastAction.ShowThreat ? _lastThreat : null));
+        _toastReplay.Start();
+        return true;
+    }
 
     public MainForm(bool startHidden = false)
     {
@@ -69,9 +158,32 @@ internal sealed partial class MainForm : Form
         Controls.Add(_tabs);
         Controls.Add(_status);
 
-        _scan.NeedApiKey += () => _tabs.SelectedIndex = 3;
-        _scan.ThreatFound += OnThreatFound;
+        _scan.NeedApiKey += () => _tabs.SelectedIndex = 5; // Ayarlar tab
+        _scan.ThreatFound += item => OnThreatFound(item, _scan.IsBackgroundScan);
+        _history.RescanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: false); };
+        _overview.ScanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: true); };
+        _overview.ScanRunningRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanRunningProcesses(); };
+        _overview.ScanDownloadsRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanDownloadsFolder(); };
+        _overview.RecheckRequested += () => { _tabs.SelectedIndex = 1; _scan.RescanSweep(); };
+        _overview.GoToTab += i => { if (i >= 0 && i < _tabs.TabCount) _tabs.SelectedIndex = i; };
+        _overview.GoToHistoryFiltered += cat => { _tabs.SelectedIndex = 4; _history.ApplyExternalFilter(cat); }; // Geçmiş
+        _overview.WatchDownloadsToggled += () => SafeUi(StartDownloadsWatchIfEnabled);
+        _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
+        _processGuard.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
+        if (Settings.WatchProcessLaunches) _processGuard.Start();
+        StartDownloadsWatchIfEnabled();
 
+        AppServices.Scheduler.Started += () => SafeUi(TaskbarProgress.Indeterminate);
+        AppServices.Scheduler.ProgressChanged += p => SafeUi(() => TaskbarProgress.Set(p.Done, p.Total));
+        AppServices.Scheduler.Finished += () => SafeUi(() =>
+        {
+            ScanHistoryStore.Flush(); // commit the sweep's throttled history rows now that it's done
+            var items = AppServices.Scheduler.Items;
+            bool threats = items.Any(i => i.Report?.IsMalicious == true);
+            if (threats) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
+            if (Settings.NotifyScanSummary && items.Count > 0) ShowScanSummaryToast(items);
+        });
+        System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += (_, ev) => { if (ev.IsAvailable) SafeUi(RetryPendingOutbox); };
         AppServices.Vault.Changed += () => SafeUi(UpdateStatusBar);
         AppServices.Vault.CountersUpdated += () => SafeUi(UpdateStatusBar);
         Theme.Changed += () => SafeUi(ApplyTheme);
@@ -85,13 +197,25 @@ internal sealed partial class MainForm : Form
         UpdateStatusBar();
     }
 
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.K))
+        {
+            _scan.OpenPalette();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
     void BuildTabs()
     {
         _tabs.Appearance = TabAppearance.Normal;
-        AddTab("🛡  Tarama", _scan);
-        AddTab("📊  Kotalar", _quota);
-        AddTab("📜  Loglar", _logs);
-        AddTab("⚙  Ayarlar", _settings);
+        AddTab("🏠  Genel Bakış", _overview);
+        AddTab(Strings.TabScan, _scan);
+        AddTab(Strings.TabQuota, _quota);
+        AddTab(Strings.TabLogs, _logs);
+        AddTab("🕘  Geçmiş", _history);
+        AddTab(Strings.TabSettings, _settings);
     }
 
     void AddTab(string text, Control content)
@@ -116,10 +240,72 @@ internal sealed partial class MainForm : Form
         _tray.Icon = Icon ?? SystemIcons.Application;
         _tray.Visible = true;
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Göster", null, (_, _) => RestoreFromTray());
-        menu.Items.Add("Çıkış", null, (_, _) => { _reallyExit = true; Close(); });
+        menu.Items.Add(Strings.TrayShow, null, (_, _) => RestoreFromTray());
+        menu.Items.Add("📋 Panodaki yolu tara", null, (_, _) => { RestoreFromTray(); _scan.ScanClipboard(); });
+        menu.Items.Add(Strings.TrayExit, null, (_, _) => { _reallyExit = true; Close(); });
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => RestoreFromTray();
+        _tray.BalloonTipClicked += OnBalloonClicked;
+
+        // When the quiet window / fullscreen ends, replay what was held back as one grouped toast.
+        _toastReplay.Tick += (_, _) =>
+        {
+            if (NotificationGate.ShouldSuppress()) return; // still quiet — keep waiting
+            _toastReplay.Stop();
+            if (_deferred.Count == 0) return;
+            var batch = _deferred.ToList();
+            _deferred.Clear();
+            var threats = batch.Where(d => d.Action == ToastAction.ShowThreat && d.Threat != null).ToList();
+
+            if (threats.Count > 1)
+            {
+                // Several threats: one summary toast that still jumps to the most recent on click.
+                _lastThreat = threats[^1].Threat;
+                _toastAction = ToastAction.ShowThreat;
+                _tray.BalloonTipTitle = "Sessiz modda tehdit bulundu";
+                _tray.BalloonTipText = $"{threats.Count} tehdit bulundu — incelemek için tıkla.";
+                _tray.BalloonTipIcon = ToolTipIcon.Warning;
+                _tray.ShowBalloonTip(7000);
+                return;
+            }
+
+            // Otherwise re-raise the single most relevant held toast (a lone threat first) with its action
+            // intact, so clicking still acts — no information-losing bare count.
+            var one = threats.Count == 1 ? threats[0] : batch[^1];
+            _lastThreat = one.Threat;
+            _toastAction = one.Action;
+            _tray.BalloonTipTitle = one.Title;
+            _tray.BalloonTipText = one.Text;
+            _tray.BalloonTipIcon = one.Icon;
+            _tray.ShowBalloonTip(6000);
+        };
+    }
+
+    void OnBalloonClicked(object? sender, EventArgs e)
+    {
+        var action = _toastAction; // act only on what THIS toast was tagged for
+        _toastAction = ToastAction.None;
+        RestoreFromTray();
+        switch (action)
+        {
+            case ToastAction.ScanUsb when _pendingUsbDrive is { } drive:
+                _pendingUsbDrive = null;
+                _tabs.SelectedIndex = 1; // Tarama
+                _scan.StartScan([drive], recurse: true, background: true); // unattended USB sweep → auto-quarantine eligible
+                break;
+            case ToastAction.ShowThreat when _lastThreat is { } threat:
+                _tabs.SelectedIndex = 1; // jump to the threat so the user can act (quarantine, open VT…)
+                _scan.FocusItem(threat);
+                break;
+            case ToastAction.UndoQuarantine when _lastQuarantine is { } qe:
+                if (QuarantineVault.Restore(qe, out _)) NativeMessageBox.Info("Dosya geri yüklendi.");
+                _lastQuarantine = null;
+                break;
+            case ToastAction.LoadSweepThreats when _sweepThreatPaths.Length > 0:
+                _tabs.SelectedIndex = 1; // Tarama
+                _scan.StartScan(_sweepThreatPaths, recurse: false);
+                break;
+        }
     }
 
     void TryLoadIcon()
@@ -144,7 +330,7 @@ internal sealed partial class MainForm : Form
             // Ignore control tokens like "--show"; keep only real existing paths.
             var real = paths.Where(p => !p.StartsWith("--") && (File.Exists(p) || Directory.Exists(p))).ToArray();
             if (real.Length == 0) return;
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(real, recurse: true);
         });
     }
@@ -153,23 +339,127 @@ internal sealed partial class MainForm : Form
     {
         if (e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
         {
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(paths, recurse: true);
         }
     }
 
+    void StartDownloadsWatchIfEnabled()
+    {
+        try
+        {
+            if (!Settings.WatchDownloads) { _downloadsWatcher.Stop(); return; }
+            var folders = Settings.WatchFolders.Value
+                .Split([';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            if (folders.Count == 0) folders = DownloadsWatcher.DefaultFolders();
+            _downloadsWatcher.Start(folders);
+
+            // Catch up on files that landed while the watcher was off (closed app / just toggled on).
+            var since = DateTime.TryParse(Settings.LastWatchScanUtc.Value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var s)
+                ? s : DateTime.UtcNow.AddDays(-7);
+            _ = _downloadsWatcher.CatchUpAsync(folders, since).ContinueWith(_ =>
+            {
+                Settings.LastWatchScanUtc.Value = DateTime.UtcNow.ToString("o");
+                SettingsManager.SaveSettings();
+            }, TaskScheduler.Default);
+        }
+        catch (Exception ex) { Log("Downloads watch init failed: " + ex.Message, LogLevel.Warning); }
+    }
+
     // ---- threat notification ----
 
-    void OnThreatFound(ScanItem item)
+    void ShowScanSummaryToast(System.Collections.Generic.IList<ScanItem> items)
     {
+        int mal = items.Count(i => i.Report?.IsMalicious == true);
+        _toastAction = ToastAction.None;
+        _tray.BalloonTipTitle = mal > 0 ? "Tarama bitti — tehdit bulundu" : "Tarama bitti — temiz";
+        _tray.BalloonTipText = $"{items.Count} dosya tarandı, {mal} tehdit.";
+        _tray.BalloonTipIcon = mal > 0 ? ToolTipIcon.Warning : ToolTipIcon.Info;
+        if (!Gated()) _tray.ShowBalloonTip(5000);
+    }
+
+    void OnThreatFound(ScanItem item, bool background = false)
+    {
+        _pendingUsbDrive = null; // a threat toast click should restore the window, not scan a stale drive
+        _lastThreat = item;
+
+        // User-defined post-scan rules run first (first-match-wins). When none are defined the store is
+        // empty and this is a no-op, so the built-in fixed rule below stays the default behavior.
+        if (AutoActionStore.Count > 0 && item.Report is { } rep)
+        {
+            int level = (int)RecommendationService.Build(item).Level;
+            bool fromNet = false; try { fromNet = ZoneIdentifier.Read(item.FilePath)?.FromInternet ?? false; } catch { }
+            var rule = AutoActionStore.FirstMatch(background, rep.DetectionCount, fromNet, level, item.FilePath);
+            if (rule != null && ApplyAutoAction(rule, item)) return;
+        }
+
+        // A passive background catch (watcher / unattended USB sweep) of obvious malware: quarantine it
+        // immediately with an undo toast, so a live threat isn't left runnable while the user is away.
+        if (background && Settings.AutoQuarantineWatchers && Settings.AutoQuarantineThreshold > 0
+            && item.Report != null && item.Report.DetectionCount >= Settings.AutoQuarantineThreshold
+            && File.Exists(item.FilePath))
+        {
+            SafeUi(() => AutoQuarantine(item));
+            return;
+        }
+
         if (!Settings.NotifyOnThreat) return;
+        if (item.Report != null && item.Report.DetectionCount < Settings.NotifyMinDetections) return; // below the user's severity floor
         SafeUi(() =>
         {
-            _tray.BalloonTipTitle = "Tehdit bulundu!";
+            _toastAction = ToastAction.ShowThreat;
+            _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
+            _tray.BalloonTipText = $"{item.FileName}{OriginSuffix(item)}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
+            _tray.BalloonTipIcon = ToolTipIcon.Warning;
+            if (!Gated()) _tray.ShowBalloonTip(5000); // deferred during quiet hours → replayed with its action intact
+        });
+    }
+
+    static string OriginSuffix(ScanItem item) => string.IsNullOrEmpty(item.OriginNote) ? "" : " " + item.OriginNote;
+
+    /// <summary>Apply one matched auto-action, reusing the existing single-call remediation paths. Returns
+    /// true if the threat was handled here (so the normal toast path is skipped); ToastOnly falls through.</summary>
+    bool ApplyAutoAction(AutoActionRule rule, ScanItem item)
+    {
+        switch (rule.Action)
+        {
+            case AutoActionKind.MarkClean:
+                AllowlistStore.Add(item, "oto-eylem kuralı");
+                Log($"Auto-action: allowlisted {item.FileName} by rule.", LogLevel.Info);
+                return true;
+            case AutoActionKind.SuppressFolder:
+                FolderSuppressionStore.Add(Path.GetDirectoryName(item.FilePath));
+                Log($"Auto-action: suppressed folder of {item.FileName} by rule.", LogLevel.Info);
+                return true;
+            case AutoActionKind.Quarantine:
+                if (!File.Exists(item.FilePath)) return false;
+                SafeUi(() => AutoQuarantine(item));
+                return true;
+            default:
+                return false; // ToastOnly → let the normal notification path run
+        }
+    }
+
+    void AutoQuarantine(ScanItem item)
+    {
+        if (QuarantineVault.Quarantine(item.FilePath, item.Report, item.Sha256, item.Md5, out _))
+        {
+            _lastQuarantine = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, item.FilePath, StringComparison.OrdinalIgnoreCase));
+            _toastAction = ToastAction.UndoQuarantine;
+            _tray.BalloonTipTitle = "Tehdit otomatik karantinaya alındı";
+            _tray.BalloonTipText = $"{item.FileName}{OriginSuffix(item)} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines}) — geri almak için tıkla.";
+            _tray.BalloonTipIcon = ToolTipIcon.Warning;
+            _tray.ShowBalloonTip(8000);
+        }
+        else
+        {
+            // Couldn't move it (locked/permission) — fall back to the normal alert so the user can act.
+            _toastAction = ToastAction.ShowThreat;
+            _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
             _tray.BalloonTipText = $"{item.FileName}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             _tray.ShowBalloonTip(5000);
-        });
+        }
     }
 
     // ---- tray / closing ----
@@ -180,11 +470,18 @@ internal sealed partial class MainForm : Form
         {
             e.Cancel = true;
             Hide();
+            // Hand the (often big, post-scan) working set back to the OS while idling in the tray — pages
+            // fault back in on demand. Skipped during an active scan, where emptying pages backfires.
+            if (!AppServices.Scheduler.IsRunning) NativeFileOps.TrimWorkingSet();
+            _toastAction = ToastAction.None;
             _tray.BalloonTipTitle = AppConstants.AppTitle;
-            _tray.BalloonTipText = "Arka planda çalışıyor. Açmak için simgeye çift tıklayın.";
+            _tray.BalloonTipText = Strings.TrayRunningText;
             _tray.ShowBalloonTip(2000);
             return;
         }
+        _downloadsWatcher.Dispose();
+        _processGuard.Dispose();
+        ScanHistoryStore.Flush(); // don't lose the last throttled history rows on exit
         AppServices.Shutdown();
         _tray.Visible = false;
     }
@@ -209,11 +506,126 @@ internal sealed partial class MainForm : Form
             RunFirstRunWizard();
         else if (ContextMenuInstaller.NeedsRepair())
         {
-            if (NativeMessageBox.Confirm("Sağ tuş menüsü kaydı eski exe yolunu gösteriyor (uygulama taşınmış). Şimdi onarılsın mı?"))
+            if (NativeMessageBox.Confirm(Strings.RepairMenuPrompt))
                 ContextMenuInstaller.Repair(out _);
         }
 
         OfferResume();
+        StartWatchCheck();
+        RetryPendingOutbox();
+        CheckSweepResult();
+        if (Settings.QuarantineRetentionDays > 0)
+            try { QuarantineVault.PurgeOlderThan(Settings.QuarantineRetentionDays); } catch (Exception ex) { Log("Retention purge failed: " + ex.Message, LogLevel.Warning); }
+
+        int hrs = Settings.PeriodicRecheckHours;
+        if (hrs > 0)
+        {
+            _periodicTimer.Interval = (int)Math.Min(int.MaxValue, (long)hrs * 3600 * 1000);
+            _periodicTimer.Tick += (_, _) => _ = RunPeriodicChecksAsync();
+            _periodicTimer.Start();
+        }
+    }
+
+    /// <summary>Make the zero-quota re-verdict + the already-built tamper detection genuinely passive for a
+    /// tray session: re-run the watch list, the due-cache re-check and the baseline drift check on a timer
+    /// (skipped while a scan is running). Toasts go through the quiet-hours/fullscreen gate.</summary>
+    async Task RunPeriodicChecksAsync()
+    {
+        if (AppServices.Scheduler.IsRunning) return;
+        try
+        {
+            var esc = await WatchService.CheckAllAsync();
+            if (esc.Count > 0) SafeUi(() => ShowWatchEscalations(esc));
+
+            var due = RecheckService.DueForRecheck(AppServices.Cache, Settings.RecheckPeriodDays);
+            if (due.Count > 0) await RecheckService.RunAsync(AppServices.Cache, due, null, default);
+
+            var alarms = (await BaselineStore.VerifyAsync(null, default)).Where(d => d.IsAlarm).ToList();
+            if (alarms.Count > 0) SafeUi(() => ShowDriftAlarm(alarms));
+        }
+        catch (Exception ex) { Log("Periodic re-verdict failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    void ShowDriftAlarm(System.Collections.Generic.List<DriftResult> alarms)
+    {
+        _toastAction = ToastAction.None;
+        _tray.BalloonTipTitle = "Bütünlük uyarısı!";
+        _tray.BalloonTipText = $"{alarms.Count} izlenen dosya değişti ve güvenini kaybetti: {Path.GetFileName(alarms[0].Path)}";
+        _tray.BalloonTipIcon = ToolTipIcon.Warning;
+        if (!Gated()) _tray.ShowBalloonTip(8000);
+    }
+
+    /// <summary>Surface a scheduled sweep that found threats while the app was closed: a one-time attention
+    /// line + toast (click loads the threat paths into the queue), so a background sweep becomes something
+    /// the user actually notices instead of a silent HTML file.</summary>
+    void CheckSweepResult()
+    {
+        try
+        {
+            var r = SweepResultStore.TryRead(SweepScheduler.ResultPath);
+            if (r == null || r.Threats <= 0) return;
+            if (DateTime.TryParse(Settings.LastSeenSweepUtc.Value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var seen)
+                && r.WhenUtc <= seen) return; // already announced this sweep
+            Settings.LastSeenSweepUtc.Value = r.WhenUtc.ToString("o");
+            SettingsManager.SaveSettings();
+
+            _sweepThreatPaths = r.ThreatPaths.Where(File.Exists).ToArray();
+            _overview.SetSweepNotice($"🌙 Zamanlı tarama {r.Threats} tehdit buldu — kuyruğa yüklemek için bildirime tıkla.");
+            if (_sweepThreatPaths.Length > 0)
+            {
+                _toastAction = ToastAction.LoadSweepThreats;
+                _tray.BalloonTipTitle = "Zamanlı tarama tehdit buldu";
+                _tray.BalloonTipText = $"{r.Threats} tehdit bulundu. Kuyruğa yüklemek için tıkla.";
+                _tray.BalloonTipIcon = ToolTipIcon.Warning;
+                if (!Gated()) _tray.ShowBalloonTip(8000);
+            }
+        }
+        catch (Exception ex) { Log("Sweep result check failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>Self-heal: re-scan files that failed while offline, now that we're back online.</summary>
+    void RetryPendingOutbox()
+    {
+        try
+        {
+            PendingOutbox.PruneMissing();
+            if (!PendingOutbox.ShouldRetry() || AppServices.Scheduler.IsRunning) return;
+            var paths = PendingOutbox.Paths().Where(File.Exists).ToArray();
+            if (paths.Length == 0) return;
+            _tabs.SelectedIndex = 1; // Tarama
+            _scan.StartScan(paths, recurse: false);
+        }
+        catch (Exception ex) { Log("Pending-outbox retry failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>Re-check the borderline watch list in the background (keyless, zero quota); alert on any
+    /// file whose detection count has climbed since it was added.</summary>
+    void StartWatchCheck()
+    {
+        if (ReverdictWatchStore.Count == 0) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(8000);
+                var escalations = await WatchService.CheckAllAsync();
+                if (escalations.Count > 0) SafeUi(() => ShowWatchEscalations(escalations));
+            }
+            catch (Exception ex) { Log("Watch startup check failed: " + ex.Message, LogLevel.Warning); }
+        });
+    }
+
+    void ShowWatchEscalations(System.Collections.Generic.List<(WatchEntry Entry, int Old, int New)> esc)
+    {
+        if (!Settings.NotifyOnThreat || esc.Count == 0) return;
+        var first = esc[0];
+        _toastAction = ToastAction.None;
+        _tray.BalloonTipTitle = "İzlenen dosya artık daha tehlikeli!";
+        _tray.BalloonTipText = esc.Count == 1
+            ? $"{first.Entry.Name}: {first.Old} → {first.New} motor tespit ediyor."
+            : $"{esc.Count} izlenen dosyanın tespiti arttı (ör. {first.Entry.Name}).";
+        _tray.BalloonTipIcon = ToolTipIcon.Warning;
+        if (!Gated()) _tray.ShowBalloonTip(7000);
     }
 
     void OfferResume()
@@ -225,7 +637,7 @@ internal sealed partial class MainForm : Form
         if (Settings.AutoResumeScans)
         {
             ScanSessionStore.Clear();
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
             return;
         }
@@ -235,36 +647,18 @@ internal sealed partial class MainForm : Form
 
         string list = string.Join(", ", s.Paths.Take(3).Select(p => Path.GetFileName(p.TrimEnd('\\'))));
         if (s.Paths.Length > 3) list += " …";
-        if (NativeMessageBox.Confirm($"Yarım kalan bir tarama bulundu ({s.Paths.Length} öğe):\n{list}\n\nKaldığı yerden devam edilsin mi?", "Yarım kalan tarama"))
+        if (NativeMessageBox.Confirm(string.Format(Strings.ResumePromptFormat, s.Paths.Length, list), Strings.ResumePromptTitle))
         {
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
         }
     }
 
     void RunFirstRunWizard()
     {
-        NativeMessageBox.Info(
-            "VirusTotal Scanner'a hoş geldiniz!\n\n" +
-            "• Dosya/klasörleri sürükleyip bırakarak veya sağ tuş menüsünden tarayabilirsiniz.\n" +
-            "• Başlamak için bir VirusTotal API anahtarı ekleyin.");
-
-        if (!AppServices.Rotator.HasUsableKeys)
-        {
-            if (NativeMessageBox.Confirm("Şimdi bir VirusTotal API anahtarı eklemek ister misiniz?"))
-            {
-                using var dlg = new ApiKeyDialog();
-                if (dlg.ShowDialog(this) == DialogResult.OK)
-                    AppServices.Vault.Add(dlg.KeyLabel, dlg.KeyValue);
-            }
-        }
-
-        if (ContextMenuInstaller.Verify() != MenuState.Ok &&
-            NativeMessageBox.Confirm("Sağ tuş menüsüne 'VirusTotal ile tara' eklensin mi?\n(Tüm kullanıcılar için; yönetici izni/UAC istenecek.)", "İzin"))
-        {
-            _ = Task.Run(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out _));
-        }
-
+        // No blocking yes/no dialog chain anymore — the overview's onboarding checklist card guides setup
+        // (add a key / install the menu / watch downloads / run a scan) at the user's own pace. Just mark
+        // first run done so this doesn't fire again.
         Settings.FirstRunCompleted.Value = true;
         SettingsManager.SaveSettings();
     }
@@ -279,9 +673,11 @@ internal sealed partial class MainForm : Form
         _status.BackColor = p.Panel;
         _status.ForeColor = p.Text;
         ThemeManager.Apply(this);
+        _overview.ApplyTheme();
         _scan.ApplyTheme();
         _quota.ApplyTheme();
         _settings.ApplyTheme();
+        _history.ApplyTheme();
         _logs.RefreshState();
         if (IsHandleCreated) ApplyDarkTitleBar();
     }
@@ -290,7 +686,7 @@ internal sealed partial class MainForm : Form
     {
         int total = AppServices.Vault.Keys.Count;
         int usable = AppServices.Vault.UsableKeyCount;
-        _statusKeys.Text = $"  Anahtar: {usable}/{total} kullanılabilir   •   Ayar: {ConfigPathResolver.ConfigPath}";
+        _statusKeys.Text = string.Format(Strings.StatusBarFormat, usable, total, ConfigPathResolver.ConfigPath);
     }
 
     void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
