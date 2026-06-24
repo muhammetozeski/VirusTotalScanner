@@ -74,14 +74,17 @@ internal sealed class ScanItem : INotifyPropertyChanged
         ScanStatus.LookingUp => "VirusTotal sorgulanıyor…",
         ScanStatus.Uploading => Detail ?? "Yükleniyor…",
         ScanStatus.Polling => Detail ?? "Analiz bekleniyor…",
-        ScanStatus.Completed => Report == null ? "Tamamlandı" :
-            $"{Report.Verdict} ({Report.DetectionCount}/{Report.TotalEngines})" + (FromCache ? " • önbellek" : ""),
-        ScanStatus.Failed => "Hata: " + (Error ?? "bilinmiyor"),
-        ScanStatus.Skipped => "Atlandı (" + (SkipReason ?? "güvenli tür") + ")",
-        ScanStatus.TrustedSkipped => (SkipReason ?? "İmzalı") + " (VT atlandı)",
-        ScanStatus.Cancelled => "İptal edildi",
+        ScanStatus.Completed => Report == null ? "✅ Tamamlandı" :
+            $"{VerdictEmoji(Report)} {Report.Verdict} ({Report.DetectionCount}/{Report.TotalEngines})" + (FromCache ? " • önbellek" : ""),
+        ScanStatus.Failed => "⚠ Hata: " + (Error ?? "bilinmiyor"),
+        ScanStatus.Skipped => "⏭ Atlandı (" + (SkipReason ?? "güvenli tür") + ")",
+        ScanStatus.TrustedSkipped => "🔵 " + (SkipReason ?? "İmzalı") + " (VT atlandı)",
+        ScanStatus.Cancelled => "✋ İptal edildi",
         _ => _status.ToString(),
     };
+
+    static string VerdictEmoji(VtFileReport r) =>
+        r.TotalEngines == 0 ? "⚪" : r.IsMalicious ? "🔴" : r.DetectionCount > 0 ? "🟡" : "🟢";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

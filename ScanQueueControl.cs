@@ -114,6 +114,7 @@ internal sealed class ScanQueueControl : UserControl
         ThemeManager.StyleGrid(_grid);
         _grid.DataSource = _scheduler.Items;
         _grid.CellPainting += Grid_CellPainting;
+        _grid.CellFormatting += Grid_CellFormatting;
 
         var menu = new ContextMenuStrip();
         var miOpenVt = (ToolStripMenuItem)menu.Items.Add("🔗  VirusTotal'de aç", null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
@@ -154,6 +155,24 @@ internal sealed class ScanQueueControl : UserControl
 
     static string VerdictLine(ScanItem i) =>
         i.Report is { } r ? $"{r.Verdict} ({r.DetectionCount}/{r.TotalEngines})  {i.FileName}" : $"{i.StatusText}  {i.FileName}";
+
+    // Tint each row by its verdict so the list scans at a glance (red threat, yellow suspicious, …).
+    void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex == _progressCol) return;
+        if (_grid.Rows[e.RowIndex].DataBoundItem is not ScanItem item) return;
+        var p = Theme.Current;
+        Color? c = item.Status switch
+        {
+            ScanStatus.TrustedSkipped => p.Accent,
+            ScanStatus.Failed => p.Danger,
+            ScanStatus.Skipped => p.SubtleText,
+            ScanStatus.Completed when item.Report is { TotalEngines: > 0 } r =>
+                r.IsMalicious ? p.Danger : r.DetectionCount > 0 ? p.Warning : p.Success,
+            _ => null,
+        };
+        if (c.HasValue) e.CellStyle!.ForeColor = c.Value;
+    }
 
     void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
     {
