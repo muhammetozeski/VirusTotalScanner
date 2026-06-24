@@ -7,6 +7,7 @@ namespace VirusTotalScanner;
 internal sealed class QuarantineVaultDialog : Form
 {
     readonly DataGridView _grid = new();
+    readonly Label _sizeLabel = new() { AutoSize = true, Margin = new Padding(14, 9, 0, 0), Tag = "subtle" };
 
     public QuarantineVaultDialog()
     {
@@ -28,10 +29,17 @@ internal sealed class QuarantineVaultDialog : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColOriginalPath, DataPropertyName = nameof(QuarantineEntry.OriginalPath), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
         var restore = ThemeManager.MakeButton(Strings.BtnRestore, (_, _) => _ = RestoreSelectedAsync());
+        var purge = ThemeManager.MakeButton("🗑  Kalıcı sil", (_, _) => PurgeSelected());
+        var cleanup = ThemeManager.MakeButton("🧹  Eski kayıtları temizle…", (_, _) => CleanupOld());
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Dock = DockStyle.Right, Width = 100 };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
+        actions.Controls.Add(restore);
+        actions.Controls.Add(purge);
+        actions.Controls.Add(cleanup);
+        actions.Controls.Add(_sizeLabel);
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 46, Padding = new Padding(10, 7, 10, 7) };
+        bottom.Controls.Add(actions);
         bottom.Controls.Add(close);
-        bottom.Controls.Add(restore);
 
         Controls.Add(_grid);
         Controls.Add(bottom);
@@ -40,13 +48,46 @@ internal sealed class QuarantineVaultDialog : Form
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
         ThemeManager.StyleButton(restore);
+        ThemeManager.StyleButton(purge);
+        ThemeManager.StyleButton(cleanup);
         ThemeManager.StyleButton(close);
         Refresh2();
     }
 
-    void Refresh2() => _grid.DataSource = QuarantineVault.List().ToList();
+    void Refresh2()
+    {
+        var list = QuarantineVault.List().ToList();
+        _grid.DataSource = list;
+        _sizeLabel.Text = $"{list.Count} dosya  •  geri kazanılabilir {FormatBytes(QuarantineVault.ReclaimableBytes())}";
+    }
 
     QuarantineEntry? Selected() => _grid.CurrentRow?.DataBoundItem as QuarantineEntry;
+
+    void PurgeSelected()
+    {
+        var e = Selected();
+        if (e == null) return;
+        if (!ConfirmGates.Quarantine.Ask(this, $"{e.FileName} kalıcı olarak silinsin mi?\nBu geri ALINAMAZ (dosya kasadan tamamen kaldırılır).")) return;
+        if (QuarantineVault.Purge(e, out var err)) { NativeMessageBox.Info("Kalıcı olarak silindi."); Refresh2(); }
+        else NativeMessageBox.Error("Silinemedi: " + err);
+    }
+
+    void CleanupOld()
+    {
+        string? input = Dialogs.InputBox("Kaç günden eski karantina kayıtları kalıcı silinsin?", "Eski kayıtları temizle", "30");
+        if (!int.TryParse(input, out int days) || days <= 0) return;
+        int n = QuarantineVault.PurgeOlderThan(days);
+        NativeMessageBox.Info($"{n} kayıt kalıcı silindi.");
+        Refresh2();
+    }
+
+    static string FormatBytes(long b)
+    {
+        string[] u = ["B", "KB", "MB", "GB", "TB"];
+        double v = b; int i = 0;
+        while (v >= 1024 && i < u.Length - 1) { v /= 1024; i++; }
+        return $"{v:0.#} {u[i]}";
+    }
 
     async Task RestoreSelectedAsync()
     {
