@@ -464,6 +464,13 @@ internal sealed class ScanQueueControl : UserControl
         var miFindCopies = (ToolStripMenuItem)menu.Items.Add(Strings.MenuFindCopies, null, (_, _) => _ = FindCopiesAsync());
         var miPin = (ToolStripMenuItem)menu.Items.Add(Strings.MenuPinBaseline, null, (_, _) => _ = PinBaselineAsync());
         var miPersist = (ToolStripMenuItem)menu.Items.Add(Strings.MenuHuntPersistence, null, (_, _) => HuntPersistence());
+        var miWatch = (ToolStripMenuItem)menu.Items.Add("👁  İzlemeye al (re-verdict)", null, (_, _) =>
+        {
+            var i = SelectedItem();
+            if (i?.Sha256 == null) return;
+            if (ReverdictWatchStore.Contains(i.Sha256)) ReverdictWatchStore.Remove(i.Sha256);
+            else ReverdictWatchStore.Add(i);
+        });
         menu.Items.Add(new ToolStripSeparator());
         var miRescan = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescan, null, (_, _) => RescanSelected());
         var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescanNoTrust, null, (_, _) => RescanIgnoringTrust());
@@ -483,6 +490,8 @@ internal sealed class ScanQueueControl : UserControl
             miFindCopies.Enabled = i.Report != null && !string.IsNullOrEmpty(i.Sha256);
             miPin.Enabled = exists;
             miPersist.Enabled = i != null;
+            miWatch.Enabled = !string.IsNullOrEmpty(i?.Sha256);
+            miWatch.Text = i?.Sha256 != null && ReverdictWatchStore.Contains(i.Sha256) ? "👁  İzlemeden çıkar" : "👁  İzlemeye al (re-verdict)";
             miRescan.Enabled = exists;
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;

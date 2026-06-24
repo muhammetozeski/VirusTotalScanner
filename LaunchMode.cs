@@ -29,6 +29,7 @@ internal sealed class CliOptions
     public string? ImportLedger;
     public string? LedgerDiff;
     public int? TimelineDays;
+    public bool WatchCheck;
     public bool ShowHelp;
     public bool ShowVersion;
     public bool InstallMenu;
@@ -64,6 +65,7 @@ internal static class ArgumentDef
     static readonly CmdArg ImportLedger = new("--import-ledger", "--import-ledger");
     static readonly CmdArg LedgerDiff = new("--ledger-diff", "--ledger-diff");
     static readonly CmdArg Timeline = new("--timeline", "--timeline");
+    static readonly CmdArg WatchCheck = new("--watch-check", "--watch-check");
     static readonly CmdArg NoGui = new("--nogui", "-n");
     static readonly CmdArg Cli = new("--cli", "-c");
     static readonly CmdArg Gui = new("--gui", "-g");
@@ -107,6 +109,7 @@ internal static class ArgumentDef
             else if (ImportLedger.IsMatch(a)) { if (i + 1 < args.Length) o.ImportLedger = args[++i]; o.NoGui = true; }
             else if (LedgerDiff.IsMatch(a)) { if (i + 1 < args.Length) o.LedgerDiff = args[++i]; o.NoGui = true; }
             else if (Timeline.IsMatch(a)) { o.TimelineDays = 60; if (i + 1 < args.Length && int.TryParse(args[i + 1], out var td)) { o.TimelineDays = td; i++; } o.NoGui = true; }
+            else if (WatchCheck.IsMatch(a)) { o.WatchCheck = true; o.NoGui = true; }
             else if (NoGui.IsMatch(a) || Cli.IsMatch(a)) o.NoGui = true;
             else if (Gui.IsMatch(a)) o.ForceGui = true;
             else if (Tray.IsMatch(a)) { o.Tray = true; o.ForceGui = true; }

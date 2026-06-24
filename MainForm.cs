@@ -331,6 +331,36 @@ internal sealed partial class MainForm : Form
         }
 
         OfferResume();
+        StartWatchCheck();
+    }
+
+    /// <summary>Re-check the borderline watch list in the background (keyless, zero quota); alert on any
+    /// file whose detection count has climbed since it was added.</summary>
+    void StartWatchCheck()
+    {
+        if (ReverdictWatchStore.Count == 0) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(8000);
+                var escalations = await WatchService.CheckAllAsync();
+                if (escalations.Count > 0) SafeUi(() => ShowWatchEscalations(escalations));
+            }
+            catch (Exception ex) { Log("Watch startup check failed: " + ex.Message, LogLevel.Warning); }
+        });
+    }
+
+    void ShowWatchEscalations(System.Collections.Generic.List<(WatchEntry Entry, int Old, int New)> esc)
+    {
+        if (!Settings.NotifyOnThreat || esc.Count == 0) return;
+        var first = esc[0];
+        _tray.BalloonTipTitle = "İzlenen dosya artık daha tehlikeli!";
+        _tray.BalloonTipText = esc.Count == 1
+            ? $"{first.Entry.Name}: {first.Old} → {first.New} motor tespit ediyor."
+            : $"{esc.Count} izlenen dosyanın tespiti arttı (ör. {first.Entry.Name}).";
+        _tray.BalloonTipIcon = ToolTipIcon.Warning;
+        _tray.ShowBalloonTip(7000);
     }
 
     void OfferResume()

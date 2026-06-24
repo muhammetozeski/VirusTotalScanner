@@ -33,6 +33,7 @@ internal static class CliRunner
         if (opts.ImportLedger != null) { var (add, conf, ok) = LedgerService.Import(AppServices.Cache, opts.ImportLedger); Console.WriteLine(string.Format(Strings.CliLedgerImportedFormat, add, conf, ok ? Strings.CliLedgerOk : Strings.CliLedgerBad)); return 0; }
         if (opts.LedgerDiff != null) { var (nw, cf) = LedgerService.Diff(AppServices.Cache, opts.LedgerDiff); Console.WriteLine(string.Format(Strings.CliLedgerDiffFormat, nw.Count, cf.Count)); foreach (var x in nw.Take(20)) Console.WriteLine("  " + Strings.CliTagNew + " " + x); foreach (var x in cf.Take(20)) Console.WriteLine("  " + Strings.CliTagConflict + " " + x); return 0; }
         if (opts.TimelineDays != null) return await TimelineCmd(opts.TimelineDays.Value);
+        if (opts.WatchCheck) return await WatchCheckCmd();
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;
@@ -219,6 +220,18 @@ internal static class CliRunner
             return 4;
         }
         catch (Exception ex) { Console.Error.WriteLine(Strings.CliErrPrefix + ex.Message); return 3; }
+    }
+
+    static async Task<int> WatchCheckCmd()
+    {
+        int n = ReverdictWatchStore.Count;
+        if (n == 0) { Console.WriteLine("İzleme listesi boş."); return 0; }
+        Console.WriteLine($"{n} izlenen dosya yeniden denetleniyor (anahtarsız)…");
+        var escalations = await WatchService.CheckAllAsync();
+        if (escalations.Count == 0) { Console.WriteLine("Tespit artışı yok."); return 0; }
+        foreach (var (e, oldD, newD) in escalations)
+            Console.WriteLine($"[ARTIŞ] {e.Name}: {oldD} → {newD}/{e.LastTotal} motor");
+        return 1;
     }
 
     static async Task<int> TimelineCmd(int days)

@@ -160,7 +160,10 @@ internal sealed class ScanOverviewControl : UserControl
             _recent.Controls.Add(ThemeManager.MakeLabel("Henüz tarama yok — yukarıdan bir dosya bırak.", subtle: true));
 
         int usable = AppServices.Vault.UsableKeyCount, total = AppServices.Vault.Keys.Count;
-        _quota.Text = $"Anahtar: {usable}/{total} kullanılabilir" + (Settings.KeylessGuiLookup ? "  •  anahtarsız (GUI) mod açık" : "");
+        int watching = ReverdictWatchStore.Count;
+        _quota.Text = $"Anahtar: {usable}/{total} kullanılabilir"
+            + (Settings.KeylessGuiLookup ? "  •  anahtarsız (GUI) mod açık" : "")
+            + (watching > 0 ? $"  •  👁 {watching} dosya izleniyor" : "");
 
         UpdateAttention(tehdit);
     }
