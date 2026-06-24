@@ -19,6 +19,8 @@ internal sealed class ScanOverviewControl : UserControl
 
     /// <summary>Files dropped or picked here — the host switches to the scan tab and starts a scan.</summary>
     public event Action<string[]>? ScanRequested;
+    /// <summary>Quick-action launchpad verbs, dispatched to the scan control by the host.</summary>
+    public event Action? ScanRunningRequested, ScanDownloadsRequested, RecheckRequested;
 
     public ScanOverviewControl()
     {
@@ -75,6 +77,9 @@ internal sealed class ScanOverviewControl : UserControl
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Anchor = AnchorStyles.None, AutoSize = true };
         buttons.Controls.Add(ThemeManager.MakeButton("📄  Dosya seç…", (_, _) => PickFiles(), accent: true));
         buttons.Controls.Add(ThemeManager.MakeButton("📁  Klasör seç…", (_, _) => PickFolder()));
+        buttons.Controls.Add(ThemeManager.MakeButton("🔬  Çalışanları tara", (_, _) => ScanRunningRequested?.Invoke()));
+        buttons.Controls.Add(ThemeManager.MakeButton("⬇  İndirilenleri tara", (_, _) => ScanDownloadsRequested?.Invoke()));
+        buttons.Controls.Add(ThemeManager.MakeButton("🔁  Yeniden denetle", (_, _) => RecheckRequested?.Invoke()));
         inner.Controls.Add(hint, 0, 0);
         inner.Controls.Add(FlowCenter(buttons), 0, 1);
         _drop.Controls.Add(inner);

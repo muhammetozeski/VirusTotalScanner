@@ -76,6 +76,9 @@ internal sealed partial class MainForm : Form
         _scan.ThreatFound += OnThreatFound;
         _history.RescanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: false); };
         _overview.ScanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: true); };
+        _overview.ScanRunningRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanRunningProcesses(); };
+        _overview.ScanDownloadsRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanDownloadsFolder(); };
+        _overview.RecheckRequested += () => { _tabs.SelectedIndex = 1; _scan.RescanSweep(); };
         _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item));
         StartDownloadsWatchIfEnabled();
 

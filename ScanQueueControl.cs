@@ -851,4 +851,14 @@ internal sealed class ScanQueueControl : UserControl
         new() { Name = "Autostart kancalarını bul", Desc = "Seçili dosya için kalıcılık kayıtlarını ara", Run = HuntPersistence },
         new() { Name = "Klasör komşuları", Desc = "Seçili dosyanın klasöründeki diğer dosyalar", Run = ShowNeighbors },
     ];
+
+    // ---- entry points used by the landing-tab launchpad ----
+    public void ScanRunningProcesses() => ScanRunning();
+    public void RescanSweep() => _ = RunRecheckAsync();
+    public void ScanDownloadsFolder()
+    {
+        var dl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        if (Directory.Exists(dl)) StartScan([dl], recurse: false);
+        else NativeMessageBox.Info("İndirilenler klasörü bulunamadı.");
+    }
 }
