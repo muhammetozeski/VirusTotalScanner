@@ -302,6 +302,11 @@ internal sealed class ScanQueueControl : UserControl
         {
             if (keyData == Keys.Enter) { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); return true; }
             if (keyData == Keys.Space && _scheduler.IsRunning) { TogglePause(); return true; }
+            // J/K walk between the only rows that matter after a big sweep — the threats; Shift+J/K walks errors.
+            if (keyData == Keys.J) { JumpVerdict(true, IsThreatish); return true; }
+            if (keyData == Keys.K) { JumpVerdict(false, IsThreatish); return true; }
+            if (keyData == (Keys.Shift | Keys.J)) { JumpVerdict(true, i => BucketOf(i) == Bucket.Error); return true; }
+            if (keyData == (Keys.Shift | Keys.K)) { JumpVerdict(false, i => BucketOf(i) == Bucket.Error); return true; }
         }
         return base.ProcessCmdKey(ref msg, keyData);
     }
@@ -1032,6 +1037,31 @@ internal sealed class ScanQueueControl : UserControl
     }
 
     /// <summary>Select and reveal a specific item (e.g. jumped to from a threat toast).</summary>
+    static bool IsThreatish(ScanItem i) => BucketOf(i) is Bucket.Malicious or Bucket.Suspicious;
+
+    /// <summary>Move the selection to the next/previous grid row matching <paramref name="match"/>
+    /// (wrapping at the ends), scroll it into view, and show a "3/12" position hint in the status line.</summary>
+    void JumpVerdict(bool forward, Func<ScanItem, bool> match)
+    {
+        int n = _grid.Rows.Count;
+        if (n == 0) return;
+        int cur = _grid.CurrentRow?.Index ?? (forward ? -1 : 0);
+        for (int step = 1; step <= n; step++)
+        {
+            int idx = (((forward ? cur + step : cur - step) % n) + n) % n;
+            if (_grid.Rows[idx].DataBoundItem is ScanItem it && match(it))
+            {
+                FocusItem(it);
+                try { _grid.FirstDisplayedScrollingRowIndex = idx; } catch { }
+                var rows = _grid.Rows.Cast<DataGridViewRow>().ToList();
+                int total = rows.Count(r => r.DataBoundItem is ScanItem s && match(s));
+                int rank = rows.Take(idx + 1).Count(r => r.DataBoundItem is ScanItem s && match(s));
+                _summary.Text = $"{rank}/{total}  —  J/K sonraki/önceki, Shift+J/K hatalar";
+                return;
+            }
+        }
+    }
+
     public void FocusItem(ScanItem item)
     {
         foreach (DataGridViewRow row in _grid.Rows)
