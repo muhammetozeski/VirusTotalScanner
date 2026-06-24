@@ -151,4 +151,101 @@ internal static class ReportWriter
     }
 
     static string H(string s) => WebUtility.HtmlEncode(s);
+
+    // ---- history report (over the persisted scan log, not a live queue) ----
+
+    /// <summary>Render the persisted scan history (optionally a date-range slice) to a standalone file —
+    /// the "what did this machine see in March" document the live-queue report can't produce.</summary>
+    public static void WriteHistory(string path, IEnumerable<HistoryEntry> entries, string rangeLabel)
+    {
+        var list = entries.OrderByDescending(e => e.WhenUtc).ToList();
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+        string content = ext switch
+        {
+            ".json" => BuildHistoryJson(list, rangeLabel),
+            ".csv" => BuildHistoryCsv(list),
+            _ => BuildHistoryHtml(list, rangeLabel),
+        };
+        File.WriteAllText(path, content, new UTF8Encoding(false));
+    }
+
+    static string VtUrl(HistoryEntry e) => !string.IsNullOrEmpty(e.Sha256) ? "https://www.virustotal.com/gui/file/" + e.Sha256 : "";
+
+    static string BuildHistoryCsv(List<HistoryEntry> list)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("When,File,Verdict,Detections,Total,Source,MD5,SHA256,ReportUrl");
+        foreach (var e in list)
+            sb.Append(Csv(e.WhenLocal.ToString("yyyy-MM-dd HH:mm"))).Append(',')
+              .Append(Csv(e.Name)).Append(',').Append(Csv(e.Verdict)).Append(',')
+              .Append(e.Detections).Append(',').Append(e.Total).Append(',')
+              .Append(Csv(e.Source)).Append(',').Append(Csv(e.Md5 ?? "")).Append(',')
+              .Append(Csv(e.Sha256 ?? "")).Append(',').Append(Csv(VtUrl(e))).AppendLine();
+        return sb.ToString();
+    }
+
+    static string BuildHistoryJson(List<HistoryEntry> list, string rangeLabel)
+    {
+        int threats = list.Count(e => VerdictCategories.IsThreat(e.Detections));
+        var payload = new
+        {
+            tool = AppConstants.AppTitle,
+            range = rangeLabel,
+            summary = new { total = list.Count, threats, clean = list.Count(e => e.Detections == 0) },
+            sources = list.GroupBy(e => string.IsNullOrEmpty(e.Source) ? "—" : e.Source).ToDictionary(g => g.Key, g => g.Count()),
+            entries = list.Select(e => new { when = e.WhenLocal, file = e.Name, path = e.Path, verdict = e.Verdict, detections = e.Detections, total = e.Total, source = e.Source, md5 = e.Md5, sha256 = e.Sha256, report = VtUrl(e) }),
+        };
+        return JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    static string BuildHistoryHtml(List<HistoryEntry> list, string rangeLabel)
+    {
+        int threats = list.Count(e => VerdictCategories.IsThreat(e.Detections));
+        int clean = list.Count(e => e.Detections == 0);
+        var sb = new StringBuilder();
+        sb.AppendLine("<!doctype html><html lang=\"tr\"><head><meta charset=\"utf-8\">");
+        sb.AppendLine($"<title>{H(AppConstants.AppTitle)} — güvenlik raporu</title>");
+        sb.AppendLine("""
+        <style>
+          body{font-family:Segoe UI,Arial,sans-serif;background:#1e1e1e;color:#e0e0e0;margin:24px}
+          h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;color:#9aa;margin:18px 0 6px}
+          .sum{color:#9aa;margin-bottom:8px}
+          table{border-collapse:collapse;width:100%}
+          th,td{padding:6px 10px;border-bottom:1px solid #333;text-align:left;font-size:13px;vertical-align:top}
+          th{color:#9aa;font-weight:600}
+          .threat{color:#ff6b6b;font-weight:700}.clean{color:#6bd06b}.susp{color:#e0c060}
+          tr:hover{background:#262626}a{color:#5ad}.small{color:#888;font-size:12px}
+          .bar{display:inline-block;height:10px;background:#ff6b6b;border-radius:2px}
+        </style></head><body>
+        """);
+        sb.AppendLine($"<h1>{H(AppConstants.AppTitle)} — güvenlik raporu</h1>");
+        sb.AppendLine($"<div class=\"sum\">Aralık: <b>{H(rangeLabel)}</b> &nbsp;•&nbsp; Tarandı: {list.Count} &nbsp;•&nbsp; Tehdit: <b class=\"threat\">{threats}</b> &nbsp;•&nbsp; Temiz: <b class=\"clean\">{clean}</b></div>");
+
+        // Source breakdown
+        sb.AppendLine("<h2>Kaynak kırılımı</h2><div class=\"sum\">");
+        foreach (var g in list.GroupBy(e => string.IsNullOrEmpty(e.Source) ? "—" : e.Source).OrderByDescending(g => g.Count()))
+            sb.Append($"{H(g.Key)}: {g.Count()} &nbsp; ");
+        sb.AppendLine("</div>");
+
+        // Weekly trend (scanned + threats per ISO week)
+        sb.AppendLine("<h2>Haftalık eğilim</h2><table><thead><tr><th>Hafta başı</th><th>Tarandı</th><th>Tehdit</th></tr></thead><tbody>");
+        foreach (var g in list.GroupBy(e => e.WhenLocal.Date.AddDays(-((int)e.WhenLocal.DayOfWeek + 6) % 7)).OrderByDescending(g => g.Key))
+        {
+            int t = g.Count(e => VerdictCategories.IsThreat(e.Detections));
+            sb.AppendLine($"<tr><td>{g.Key:yyyy-MM-dd}</td><td>{g.Count()}</td><td class=\"{(t > 0 ? "threat" : "")}\">{t} <span class=\"bar\" style=\"width:{Math.Min(160, t * 12)}px\"></span></td></tr>");
+        }
+        sb.AppendLine("</tbody></table>");
+
+        // Threat rows
+        var threatRows = list.Where(e => VerdictCategories.IsThreat(e.Detections)).ToList();
+        sb.AppendLine($"<h2>Tehditler ({threatRows.Count})</h2>");
+        sb.AppendLine("<table><thead><tr><th>Tarih</th><th>Dosya</th><th>Tespit</th><th>Kaynak</th><th>SHA-256</th></tr></thead><tbody>");
+        foreach (var e in threatRows)
+        {
+            string fileCell = VtUrl(e) is { Length: > 0 } u ? $"<a href=\"{H(u)}\">{H(e.Name)}</a>" : H(e.Name);
+            sb.AppendLine($"<tr><td>{e.WhenLocal:yyyy-MM-dd HH:mm}</td><td class=\"threat\">{fileCell}</td><td>{e.Detections}/{e.Total}</td><td>{H(e.Source)}</td><td class=\"small\">{H(e.Sha256 ?? "")}</td></tr>");
+        }
+        sb.AppendLine("</tbody></table></body></html>");
+        return sb.ToString();
+    }
 }

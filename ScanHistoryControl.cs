@@ -41,10 +41,38 @@ internal sealed class ScanHistoryControl : UserControl
             dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
             dlg.ShowDialog(FindForm());
         });
+        var report = ThemeManager.MakeButton("📄  Rapor olarak ver…", (_, _) =>
+        {
+            var menu = new ContextMenuStrip();
+            void AddRange(string label, int? days)
+            {
+                menu.Items.Add(label, null, (_, _) =>
+                {
+                    var cutoff = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : DateTime.MinValue;
+                    var rows = ScanHistoryStore.All().Where(e => e.WhenUtc >= cutoff).ToList();
+                    if (rows.Count == 0) { NativeMessageBox.Info("Bu aralıkta kayıt yok."); return; }
+                    using var dlg = new SaveFileDialog { Filter = "HTML|*.html|CSV|*.csv|JSON|*.json", FileName = "guvenlik-raporu.html" };
+                    if (dlg.ShowDialog() != DialogResult.OK) return;
+                    try
+                    {
+                        ReportWriter.WriteHistory(dlg.FileName, rows, label);
+                        NativeMessageBox.Info($"Rapor yazıldı: {rows.Count} kayıt ({label}).");
+                        try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + dlg.FileName + "\""); } catch { }
+                    }
+                    catch (Exception ex) { NativeMessageBox.Error("Rapor yazılamadı: " + ex.Message); }
+                });
+            }
+            AddRange("Son 7 gün", 7);
+            AddRange("Son 30 gün", 30);
+            AddRange("Son 90 gün", 90);
+            AddRange("Tümü", null);
+            menu.Show(Cursor.Position);
+        });
         strip.Controls.Add(_search);
         strip.Controls.Add(_threatsOnly);
         strip.Controls.Add(_starredOnly);
         strip.Controls.Add(reverdict);
+        strip.Controls.Add(report);
         strip.Controls.Add(clear);
         strip.Controls.Add(_count);
 
