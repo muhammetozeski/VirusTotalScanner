@@ -368,6 +368,7 @@ internal sealed class ScanQueueControl : UserControl
             case Keys.Control | Keys.R: RescanSelected(); return true;
             case Keys.Control | Keys.Q: QuarantineSelected(); return true;
             case Keys.Control | Keys.Shift | Keys.J: SelectAllThreats(); return true;
+            case Keys.Control | Keys.Shift | Keys.C: CopyVerdictImage(); return true;
             case Keys.F5: _ = RunRecheckAsync(); return true;
         }
 
@@ -1298,6 +1299,17 @@ internal sealed class ScanQueueControl : UserControl
     }
 
     ScanItem? SelectedItem() => _grid.CurrentRow?.DataBoundItem as ScanItem;
+
+    /// <summary>Ctrl+Shift+C: copy the selected file's verdict card to the clipboard as an IMAGE (reusing the
+    /// proven ShareCard renderer), so a colored badge can be pasted straight into Teams/WhatsApp/mail without
+    /// the screenshot-crop-paste dance.</summary>
+    void CopyVerdictImage()
+    {
+        var i = SelectedItem();
+        if (i == null) return;
+        try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = "📋 Verdikt görseli panoya kopyalandı."; }
+        catch (Exception ex) { Log("Verdict image copy failed: " + ex.Message, LogLevel.Warning); }
+    }
 
     /// <summary>All currently-selected items (multi-select), for batch actions.</summary>
     List<ScanItem> SelectedItems()

@@ -8,7 +8,7 @@ internal sealed class HelpDialog : Form
 {
     static readonly (string Term, string Meaning)[] Glossary =
     [
-        ("⌨ Klavye kısayolları", "Ctrl+K komut paleti · Ctrl+F ara · Ctrl+C SHA-256 kopyala · Ctrl+R yeniden tara · Ctrl+Q karantina · Enter VT raporunu aç · Boşluk duraklat/sürdür · F5 verdikt yeniden denetle."),
+        ("⌨ Klavye kısayolları", "Ctrl+K komut paleti · Ctrl+F ara · Ctrl+C SHA-256 kopyala · Ctrl+Shift+C verdikt görseli (pano) · Ctrl+R yeniden tara · Ctrl+Q karantina · Ctrl+Shift+J tüm tehditleri seç · J/K tehdide atla · Enter VT raporunu aç · Boşluk duraklat/sürdür · F5 verdikt yeniden denetle."),
         ("Verdikt (Temiz/Şüpheli/Zararlı)", "Kaç motorun dosyayı işaretlediğine göre verilen sonuç. Eşikleri ve adları Ayarlar'dan değiştirebilirsin."),
         ("Konsensüs — büyük vs küçük motorlar", "Tespiti yapanlar büyük/itibarlı motorlar mı, yoksa yalnızca küçük motorlar mı? Sadece küçük motorlar işaretlediyse büyük olasılıkla yanlış pozitiftir."),
         ("İmza vs sezgisel/ML", "İmza eşleşmesi = bilinen bir zararlının parmak izi (kesin). Sezgisel/ML = tahmin (kesin değil). Tüm tespitler sezgiselse temkinli ol."),
