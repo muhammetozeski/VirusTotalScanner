@@ -89,8 +89,10 @@ internal sealed class ScanHistoryControl : UserControl
 
         _grid.CellFormatting += (_, e) =>
         {
-            if (_grid.Rows[e.RowIndex].DataBoundItem is HistoryEntry h && h.Detections > 0)
-                e.CellStyle!.ForeColor = Theme.Current.Danger;
+            if (_grid.Rows[e.RowIndex].DataBoundItem is not HistoryEntry h || h.Detections <= 0) return;
+            // Match the queue/overview: real threat = red, low-detection suspicious = amber (per the
+            // user's verdict categories), instead of painting every nonzero hit bright red.
+            e.CellStyle!.ForeColor = VerdictCategories.IsThreat(h.Detections) ? Theme.Current.Danger : Theme.Current.Warning;
         };
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) Reopen(Selected()); };
 
