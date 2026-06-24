@@ -29,6 +29,10 @@ internal sealed class ScanQueueControl : UserControl
     System.ComponentModel.BindingList<ScanItem>? _view;
     Bucket _bucket = Bucket.All;
 
+    // ---- "have I scanned this before?" recall bar ----
+    readonly Panel _recallBar = new() { Dock = DockStyle.Top, Height = 30, Visible = false, Padding = new Padding(10, 4, 4, 4) };
+    readonly Label _recallLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+
     /// <summary>Raised when a scan is requested but no API key is configured.</summary>
     public event Action? NeedApiKey;
     /// <summary>Raised when a threat is found (for tray notifications).</summary>
@@ -71,6 +75,7 @@ internal sealed class ScanQueueControl : UserControl
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
         ConfigureGrid();
         split.Panel1.Controls.Add(_grid);
+        split.Panel1.Controls.Add(BuildRecallBar());
         split.Panel2.Controls.Add(_detail);
         // Set min sizes / splitter only once the container has a real width (avoids the
         // "SplitterDistance must be between Panel1MinSize and Width - Panel2MinSize" crash).
@@ -102,7 +107,7 @@ internal sealed class ScanQueueControl : UserControl
         root.Controls.Add(bottom, 0, 3);
         Controls.Add(root);
 
-        _grid.SelectionChanged += (_, _) => _detail.Show(SelectedItem());
+        _grid.SelectionChanged += (_, _) => { var it = SelectedItem(); _detail.Show(it); UpdateRecallBar(it); };
 
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
         _scheduler.ProgressChanged += OnProgress;
@@ -268,6 +273,35 @@ internal sealed class ScanQueueControl : UserControl
         if (keyData == (Keys.Control | Keys.F)) { _search.Focus(); _search.SelectAll(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
     }
+
+    // ---- "have I scanned this before?" recall bar ----
+
+    Panel BuildRecallBar()
+    {
+        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand };
+        close.FlatAppearance.BorderSize = 0;
+        close.Click += (_, _) => _recallBar.Visible = false;
+        _recallBar.Controls.Add(_recallLabel);
+        _recallBar.Controls.Add(close);
+        close.BringToFront();
+        return _recallBar;
+    }
+
+    void UpdateRecallBar(ScanItem? item)
+    {
+        string? md5 = item?.Md5;
+        if (string.IsNullOrEmpty(md5)) { _recallBar.Visible = false; return; }
+        var prior = ScanHistoryStore.All().Where(e => string.Equals(e.Md5, md5, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (prior.Count < 2) { _recallBar.Visible = false; return; } // 1 = only the current scan's own record
+        var last = prior[^2]; // the scan before the most recent (this one)
+        _recallBar.BackColor = RecallBlend(Theme.Current.Accent, Theme.Current.Panel, 0.22f);
+        _recallLabel.ForeColor = Theme.Current.Text;
+        _recallLabel.Text = $"🕘 Bu dosyayı daha önce {prior.Count - 1} kez taradın. Önceki: {last.WhenLocal:yyyy-MM-dd HH:mm} — {last.Verdict} {last.Ratio}".TrimEnd();
+        _recallBar.Visible = true;
+    }
+
+    static Color RecallBlend(Color a, Color b, float t) => Color.FromArgb(
+        (int)(a.R * t + b.R * (1 - t)), (int)(a.G * t + b.G * (1 - t)), (int)(a.B * t + b.B * (1 - t)));
 
     void ConfigureGrid()
     {
