@@ -61,6 +61,7 @@ internal static class Strings
     // ---- common buttons / column words (reused across dialogs) ----
     public static string BtnClose = "Kapat";
     public static string BtnOk = "Tamam";
+    public static string DlgCancel = "İptal";
     public static string ColThreat = "Tehdit";
     public static string ColSuspicious = "Şüpheli";
     public static string ColClean = "Temiz";
@@ -90,6 +91,13 @@ internal static class Strings
     public static string ColLocations = "Konum";
     public static string ColFirstSeen = "İlk görülme";
     public static string ColPaths = "Yollar";
+
+    // ---- quota-exhausted dialog ----
+    public static string DlgQuotaTitle = "API kotası doldu";
+    public static string QuotaExhaustedMsgFormat = "Tüm API anahtarlarının kotası doldu.\nEn erken sıfırlanma: {0:HH:mm} (yerel saat).\n\nNe yapmak istersiniz?";
+    public static string QuotaChoiceWait = "⏳  Bekle — sıfırlanınca otomatik devam et";
+    public static string QuotaChoiceKeyless = "🌐  Anahtarsız (GUI) moda geç — kotasız, daha yavaş";
+    public static string QuotaChoiceNewKey = "🔑  Yeni API anahtarı ekle";
 
     // ---- scan item status text ----
     public static string StatusQueued = "Sırada";

@@ -14,7 +14,7 @@ internal sealed class QuotaExhaustedDialog : Form
 
     public QuotaExhaustedDialog(DateTime resumeUtc)
     {
-        Text = "API kotası doldu";
+        Text = Strings.DlgQuotaTitle;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
@@ -29,12 +29,12 @@ internal sealed class QuotaExhaustedDialog : Form
             Width = 438,
             Height = 64,
             AutoSize = false,
-            Text = $"Tüm API anahtarlarının kotası doldu.\nEn erken sıfırlanma: {localResume:HH:mm} (yerel saat).\n\nNe yapmak istersiniz?",
+            Text = string.Format(Strings.QuotaExhaustedMsgFormat, localResume),
         };
 
-        var wait = MakeChoice("⏳  Bekle — sıfırlanınca otomatik devam et", QuotaExhaustedChoice.Wait, 86);
-        var keyless = MakeChoice("🌐  Anahtarsız (GUI) moda geç — kotasız, daha yavaş", QuotaExhaustedChoice.Keyless, 124);
-        var newKey = MakeChoice("🔑  Yeni API anahtarı ekle", QuotaExhaustedChoice.NewKey, 162);
+        var wait = MakeChoice(Strings.QuotaChoiceWait, QuotaExhaustedChoice.Wait, 86);
+        var keyless = MakeChoice(Strings.QuotaChoiceKeyless, QuotaExhaustedChoice.Keyless, 124);
+        var newKey = MakeChoice(Strings.QuotaChoiceNewKey, QuotaExhaustedChoice.NewKey, 162);
 
         Controls.AddRange([msg, wait, keyless, newKey]);
         AcceptButton = wait;

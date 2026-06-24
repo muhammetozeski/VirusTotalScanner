@@ -34,6 +34,12 @@
   <s name="LanguageRestartNote">The language change takes full effect after the app is restarted.</s>
   <s name="BtnClose">Close</s>
   <s name="BtnOk">OK</s>
+  <s name="DlgCancel">Cancel</s>
+  <s name="DlgQuotaTitle">API quota exhausted</s>
+  <s name="QuotaExhaustedMsgFormat">All API keys are out of quota.\nSoonest reset: {0:HH:mm} (local time).\n\nWhat would you like to do?</s>
+  <s name="QuotaChoiceWait">⏳  Wait — auto-resume when it resets</s>
+  <s name="QuotaChoiceKeyless">🌐  Switch to keyless (GUI) mode — no quota, slower</s>
+  <s name="QuotaChoiceNewKey">🔑  Add a new API key</s>
   <s name="ColThreat">Threat</s>
   <s name="ColSuspicious">Suspicious</s>
   <s name="ColClean">Clean</s>

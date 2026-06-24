@@ -18,8 +18,8 @@ internal static class Dialogs
         };
         var label = new Label { Text = prompt, Left = 12, Top = 12, Width = 436, AutoSize = false, Height = 36 };
         var tb = new TextBox { Left = 12, Top = 52, Width = 436, Text = defaultValue };
-        var ok = new Button { Text = "Tamam", DialogResult = DialogResult.OK, Left = 292, Top = 88, Width = 75 };
-        var cancel = new Button { Text = "İptal", DialogResult = DialogResult.Cancel, Left = 373, Top = 88, Width = 75 };
+        var ok = new Button { Text = Strings.BtnOk, DialogResult = DialogResult.OK, Left = 292, Top = 88, Width = 75 };
+        var cancel = new Button { Text = Strings.DlgCancel, DialogResult = DialogResult.Cancel, Left = 373, Top = 88, Width = 75 };
         form.Controls.AddRange([label, tb, ok, cancel]);
         form.AcceptButton = ok;
         form.CancelButton = cancel;
