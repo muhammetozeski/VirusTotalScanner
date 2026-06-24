@@ -72,10 +72,17 @@ internal sealed class ScanHistoryControl : UserControl
             AddRange("Tümü", null);
             menu.Show(Cursor.Position);
         });
+        var recurring = ThemeManager.MakeButton("🔁  Tekrar eden tehditler", (_, _) =>
+        {
+            using var dlg = new RecurrenceDialog(RecurrenceService.Find());
+            dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
+            dlg.ShowDialog(FindForm());
+        });
         strip.Controls.Add(_search);
         strip.Controls.Add(_threatsOnly);
         strip.Controls.Add(_starredOnly);
         strip.Controls.Add(reverdict);
+        strip.Controls.Add(recurring);
         strip.Controls.Add(report);
         strip.Controls.Add(clear);
         strip.Controls.Add(_count);
