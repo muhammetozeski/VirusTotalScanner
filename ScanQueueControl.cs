@@ -121,6 +121,7 @@ internal sealed class ScanQueueControl : UserControl
         _grid.SelectionChanged += (_, _) => { var it = SelectedItem(); _detail.Show(it); UpdateRecallBar(it); };
         _detail.QuarantineRequested += QuarantineItem;
         _detail.RescanRequested += i => { if (File.Exists(i.FilePath)) StartScan([i.FilePath], recurse: false); };
+        _detail.MarkCleanRequested += MarkClean;
 
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
         _scheduler.ProgressChanged += OnProgress;
@@ -480,6 +481,7 @@ internal sealed class ScanQueueControl : UserControl
         var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescanNoTrust, null, (_, _) => RescanIgnoringTrust());
         menu.Items.Add(new ToolStripSeparator());
         var miQuarantine = (ToolStripMenuItem)menu.Items.Add(Strings.MenuQuarantine, null, (_, _) => QuarantineSelected());
+        var miMarkClean = (ToolStripMenuItem)menu.Items.Add("✓  Temiz olarak işaretle", null, (_, _) => MarkCleanSelected());
 
         // Context-aware: disable actions that don't apply to the selected row's current state.
         menu.Opening += (_, e) =>
@@ -499,6 +501,7 @@ internal sealed class ScanQueueControl : UserControl
             miRescan.Enabled = exists;
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;
+            miMarkClean.Enabled = !string.IsNullOrEmpty(i?.Sha256) || !string.IsNullOrEmpty(i?.Md5);
 
             // Count-aware labels when several rows are selected (batch actions).
             int n = SelectedItems().Count;
@@ -673,6 +676,29 @@ internal sealed class ScanQueueControl : UserControl
             if (entry != null) ShowQuarantineUndo(i.FileName, entry); else NativeMessageBox.Info(Strings.QuarantineDoneInfo);
         }
         else NativeMessageBox.Error(Strings.QuarantineFailedPrefix + err);
+    }
+
+    void MarkClean(ScanItem item)
+    {
+        if (item == null) return;
+        if (!AllowlistStore.Add(item, "Kullanıcı temiz olarak işaretledi"))
+        {
+            NativeMessageBox.Info("Bu dosyanın hash'i henüz yok; temiz olarak işaretlenemiyor.");
+            return;
+        }
+        item.SkipReason = "Kullanıcı temiz dedi";
+        item.Status = ScanStatus.TrustedSkipped;
+        _detail.Show(item);
+    }
+
+    void MarkCleanSelected()
+    {
+        var items = SelectedItems().Where(i => !string.IsNullOrEmpty(i.Sha256) || !string.IsNullOrEmpty(i.Md5)).ToList();
+        if (items.Count == 0) return;
+        int n = 0;
+        foreach (var i in items)
+            if (AllowlistStore.Add(i, "Kullanıcı temiz olarak işaretledi")) { i.SkipReason = "Kullanıcı temiz dedi"; i.Status = ScanStatus.TrustedSkipped; n++; }
+        NativeMessageBox.Info($"{n} dosya temiz olarak işaretlendi (bundan sonra taramada atlanır).");
     }
 
     void QuarantineSelected()

@@ -13,7 +13,7 @@ internal sealed class ScanDetailControl : UserControl
     readonly Label _meta = new();
 
     /// <summary>The user chose the recommended action from the detail pane's guided strip.</summary>
-    public event Action<ScanItem>? QuarantineRequested, RescanRequested;
+    public event Action<ScanItem>? QuarantineRequested, RescanRequested, MarkCleanRequested;
     readonly Label _stats = new();
     readonly Panel _ratioBar = new();
     readonly Label _md5 = new();
@@ -332,6 +332,9 @@ internal sealed class ScanDetailControl : UserControl
         if (remove) { _actionStrip.Controls.Add(quar); _actionStrip.Controls.Add(rescan); }
         else { _actionStrip.Controls.Add(rescan); _actionStrip.Controls.Add(quar); }
         _actionStrip.Controls.Add(vt);
+        // False-positive escape hatch: vouch the file is clean so it stops being re-flagged every scan.
+        var markClean = ThemeManager.MakeButton("✓  Temiz olarak işaretle", (_, _) => { if (_item != null) MarkCleanRequested?.Invoke(_item); });
+        _actionStrip.Controls.Add(markClean);
         _actionStrip.Visible = true;
     }
 
