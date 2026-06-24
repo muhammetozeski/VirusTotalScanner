@@ -23,7 +23,7 @@ internal sealed class HelpDialog : Form
         ("Anahtarsız (GUI) mod", "API anahtarı yerine gizli bir tarayıcı ile VT'nin web arayüzünü kullanır: kotasız ama daha yavaş."),
     ];
 
-    public HelpDialog()
+    public HelpDialog(string? jumpTo = null)
     {
         Text = "❓ Yardım — sinyaller ne anlama geliyor?";
         StartPosition = FormStartPosition.CenterParent;
@@ -56,8 +56,11 @@ internal sealed class HelpDialog : Form
         var t = Theme.Current;
         box.BackColor = t.Panel;
         box.ForeColor = t.Text;
+        int jumpOffset = -1;
         foreach (var (term, meaning) in Glossary)
         {
+            if (jumpOffset < 0 && !string.IsNullOrEmpty(jumpTo) && term.Contains(jumpTo, StringComparison.OrdinalIgnoreCase))
+                jumpOffset = box.TextLength; // start of the matched term
             box.SelectionFont = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             box.SelectionColor = t.Accent;
             box.AppendText(term + "\n");
@@ -65,7 +68,7 @@ internal sealed class HelpDialog : Form
             box.SelectionColor = t.Text;
             box.AppendText(meaning + "\n\n");
         }
-        box.SelectionStart = 0;
+        box.SelectionStart = jumpOffset >= 0 ? jumpOffset : 0;
         box.ScrollToCaret();
     }
 }

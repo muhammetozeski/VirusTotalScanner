@@ -129,6 +129,9 @@ internal sealed class ScanDetailControl : UserControl
 
         togglePanel.Controls.Add(_showAll);
         togglePanel.Controls.Add(_majorOnly);
+        var signalsHelp = new LinkLabel { Text = "❓ Sinyaller ne demek?", AutoSize = true, Margin = new Padding(14, 5, 0, 0) };
+        signalsHelp.LinkClicked += (_, _) => { using var d = new HelpDialog("Konsensüs"); d.ShowDialog(FindForm()); };
+        togglePanel.Controls.Add(signalsHelp);
         togglePanel.Controls.Add(_link);
         togglePanel.Controls.Add(commentsBtn);
         togglePanel.Controls.Add(behaviourBtn);
