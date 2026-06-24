@@ -32,6 +32,7 @@ internal sealed partial class MainForm : Form
     }
 
     readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    readonly ScanOverviewControl _overview = new();
     readonly ScanQueueControl _scan = new();
     readonly QuotaDashboardControl _quota = new();
     readonly LogViewerControl _logs = new();
@@ -71,9 +72,10 @@ internal sealed partial class MainForm : Form
         Controls.Add(_tabs);
         Controls.Add(_status);
 
-        _scan.NeedApiKey += () => _tabs.SelectedIndex = 4; // Ayarlar tab
+        _scan.NeedApiKey += () => _tabs.SelectedIndex = 5; // Ayarlar tab
         _scan.ThreatFound += OnThreatFound;
-        _history.RescanRequested += paths => { _tabs.SelectedIndex = 0; _scan.StartScan(paths, recurse: false); };
+        _history.RescanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: false); };
+        _overview.ScanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: true); };
         _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item));
         StartDownloadsWatchIfEnabled();
 
@@ -104,6 +106,7 @@ internal sealed partial class MainForm : Form
     void BuildTabs()
     {
         _tabs.Appearance = TabAppearance.Normal;
+        AddTab("🏠  Genel Bakış", _overview);
         AddTab(Strings.TabScan, _scan);
         AddTab(Strings.TabQuota, _quota);
         AddTab(Strings.TabLogs, _logs);
@@ -161,7 +164,7 @@ internal sealed partial class MainForm : Form
             // Ignore control tokens like "--show"; keep only real existing paths.
             var real = paths.Where(p => !p.StartsWith("--") && (File.Exists(p) || Directory.Exists(p))).ToArray();
             if (real.Length == 0) return;
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(real, recurse: true);
         });
     }
@@ -170,7 +173,7 @@ internal sealed partial class MainForm : Form
     {
         if (e.Data?.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
         {
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(paths, recurse: true);
         }
     }
@@ -256,7 +259,7 @@ internal sealed partial class MainForm : Form
         if (Settings.AutoResumeScans)
         {
             ScanSessionStore.Clear();
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
             return;
         }
@@ -268,7 +271,7 @@ internal sealed partial class MainForm : Form
         if (s.Paths.Length > 3) list += " …";
         if (NativeMessageBox.Confirm(string.Format(Strings.ResumePromptFormat, s.Paths.Length, list), Strings.ResumePromptTitle))
         {
-            _tabs.SelectedIndex = 0;
+            _tabs.SelectedIndex = 1;
             _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
         }
     }
@@ -307,6 +310,7 @@ internal sealed partial class MainForm : Form
         _status.BackColor = p.Panel;
         _status.ForeColor = p.Text;
         ThemeManager.Apply(this);
+        _overview.ApplyTheme();
         _scan.ApplyTheme();
         _quota.ApplyTheme();
         _settings.ApplyTheme();
