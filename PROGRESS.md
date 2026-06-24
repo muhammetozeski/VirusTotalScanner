@@ -37,8 +37,16 @@ A Windows (WinForms, .NET 10) single-exe app that scans files/folders with Virus
 - EN/TR localization system (Strings + LocManager + lang.en.xml + switcher; main screen migrated).
 - Rich context menus + double-click; verdict row coloring + emojis.
 - Keyless GUI: fixed the browser popping up with no captcha (invisible reCAPTCHA false-trigger).
+- In-scan content dedup (per-md5 gate); live Downloads watch (FileSystemWatcher); verdict drift
+  report (`--drift-report`); 7z/rar/iso/msi expansion via the 7-Zip CLI.
+- Keyless community COMMENTS + full sandbox BEHAVIOURS (network/files/registry/processes/MITRE via
+  generalized GUI capture of /comments and /behaviours) + connected-threats IOC correlation.
+- Publisher-continuity (product→signer registry); stale-signature discounting (engine_update);
+  crowdsourced rules Sigma/IDS/YARA (keyed-path; keyless GUI omits these); jargon-decoder tooltips.
+- Reversible quarantine vault (manifest + restore + recheck); risk-weighted scan ordering;
+  shareable team verdict ledger (export/import/diff with tamper hash); signed-file overlay detector.
 
-## Not yet done (in the queue, ~8 items)
-Community comments, finish string migration, full sandbox behaviours (network/dropped/MITRE),
-7z/rar/msi/iso expansion, live Downloads watch (FileSystemWatcher), publisher continuity check,
-verdict drift report, in-scan content dedup.
+## Not yet done (in the queue, 3 items)
+Finish string migration (big mechanical sweep of ~200 Turkish UI strings to Strings + lang.en.xml),
+incident timeline (cluster executables by arrival time via es + Zone.Identifier), pending-lookup
+outbox (capture VT-unreachable files, self-heal when back online).
