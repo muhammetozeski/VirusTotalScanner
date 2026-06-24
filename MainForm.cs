@@ -587,24 +587,9 @@ internal sealed partial class MainForm : Form
 
     void RunFirstRunWizard()
     {
-        NativeMessageBox.Info(Strings.FirstRunWelcome);
-
-        if (!AppServices.Rotator.HasUsableKeys)
-        {
-            if (NativeMessageBox.Confirm(Strings.FirstRunAddKey))
-            {
-                using var dlg = new ApiKeyDialog();
-                if (dlg.ShowDialog(this) == DialogResult.OK)
-                    AppServices.Vault.Add(dlg.KeyLabel, dlg.KeyValue);
-            }
-        }
-
-        if (ContextMenuInstaller.Verify() != MenuState.Ok &&
-            NativeMessageBox.Confirm(Strings.FirstRunMenuPrompt, Strings.FirstRunMenuTitle))
-        {
-            _ = Task.Run(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out _));
-        }
-
+        // No blocking yes/no dialog chain anymore — the overview's onboarding checklist card guides setup
+        // (add a key / install the menu / watch downloads / run a scan) at the user's own pace. Just mark
+        // first run done so this doesn't fire again.
         Settings.FirstRunCompleted.Value = true;
         SettingsManager.SaveSettings();
     }
