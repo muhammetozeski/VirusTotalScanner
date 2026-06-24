@@ -51,6 +51,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportReport, (_, _) => ExportReport()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFolderRollup, (_, _) => ShowFolderRollup()));
         bar.Controls.Add(ThemeManager.MakeButton("🧬  Aile kümeleri", (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
+        bar.Controls.Add(ThemeManager.MakeButton("🗄  Karantina kasası", (_, _) => ShowQuarantineVault()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
         var hint = ThemeManager.MakeLabel(Strings.DropHint, subtle: true);
@@ -318,26 +319,21 @@ internal sealed class ScanQueueControl : UserControl
     {
         var i = SelectedItem();
         if (i == null || !File.Exists(i.FilePath)) return;
-        if (!ConfirmGates.Quarantine.Ask(this, $"'{i.FileName}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz)")) return;
-        if (QuarantinePath(i.FilePath, out var err))
-            NativeMessageBox.Info("Dosya karantinaya alındı (çalıştırılamaz).");
+        if (!ConfirmGates.Quarantine.Ask(this, $"'{i.FileName}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)")) return;
+        if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err))
+            NativeMessageBox.Info("Dosya karantinaya alındı (çalıştırılamaz). Karantina kasasından geri yüklenebilir.");
         else
             NativeMessageBox.Error("Karantina başarısız: " + err);
     }
 
-    /// <summary>Moves one file into the quarantine folder with a .VIRUS extension (can't run).</summary>
-    static bool QuarantinePath(string path, out string? error)
+    /// <summary>Moves one file into the reversible quarantine vault (used by the batch copy-finder).</summary>
+    static bool QuarantinePath(string path, out string? error) =>
+        QuarantineVault.Quarantine(path, null, null, null, out error);
+
+    void ShowQuarantineVault()
     {
-        error = null;
-        try
-        {
-            Directory.CreateDirectory(ConfigPathResolver.QuarantineFolder);
-            string dest = Path.Combine(ConfigPathResolver.QuarantineFolder, Path.GetFileName(path) + ".VIRUS");
-            File.Move(path, dest, overwrite: true);
-            Log($"Quarantined: {path} -> {dest}", LogLevel.Warning);
-            return true;
-        }
-        catch (Exception ex) { error = ex.Message; return false; }
+        using var dlg = new QuarantineVaultDialog();
+        dlg.ShowDialog(FindForm());
     }
 
     async Task FindCopiesAsync()
