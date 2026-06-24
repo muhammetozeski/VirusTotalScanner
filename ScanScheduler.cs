@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 
 namespace VirusTotalScanner;
@@ -23,6 +24,7 @@ internal sealed class ScanScheduler
 
     CancellationTokenSource? _cts;
     SemaphoreSlim? _uploadGate; // limits how many files upload to VT in parallel (set per run)
+    ConcurrentDictionary<string, SemaphoreSlim>? _md5Gates; // per-run: one lookup per identical content
 
     /// <summary>Marshals an action to the UI thread (set by the GUI; direct call by default/CLI).</summary>
     public Action<Action> UiPost { get; set; } = a => a();
@@ -99,6 +101,7 @@ internal sealed class ScanScheduler
             }
 
             _uploadGate = new SemaphoreSlim(Math.Max(1, opts.MaxUploads));
+            _md5Gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
             var po = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, opts.MaxConcurrency), CancellationToken = ct };
             await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
         }
@@ -181,45 +184,19 @@ internal sealed class ScanScheduler
                 return;
             }
 
-            await _pause.WaitWhilePausedAsync(ct);
-            SetStatus(item, ScanStatus.LookingUp);
-
-            // Resilient lookup chain: GUI engine first (keyless, default), then the API with
-            // Polly; if a brand-new file is unknown to VT, the API uploads it. If the API path
-            // is what fails/exhausts, the GUI is tried as a last resort.
-            bool preferGui = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
-            VtFileReport? report = null;
-
-            if (preferGui)
-                report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
-
-            if (report == null && _rotator.HasUsableKeys)
+            // In-scan dedup: serialize lookups of identical content within one run so duplicate
+            // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
+            // lookup. The first item caches the report; the rest get the cache hit here.
+            var dedupGate = _md5Gates!.GetOrAdd(md5, _ => new SemaphoreSlim(1, 1));
+            await dedupGate.WaitAsync(ct);
+            VtFileReport? report;
+            try
             {
-                report = await CallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ct);
-                if (report == null)
-                {
-                    await _pause.WaitWhilePausedAsync(ct);
-                    SetStatus(item, ScanStatus.Uploading);
-                    var progress = new ActionProgress<UploadProgress>(p => UiPost(() =>
-                    {
-                        item.Progress = (int)Math.Round(p.Percent);
-                        item.Detail = $"Yükleniyor… {p.Percent:F0}%  {FormatBytes(p.BytesSent)}/{FormatBytes(p.TotalBytes)}  ({FormatBytes(p.BytesPerSecond)}/s)";
-                    }));
-                    await _uploadGate!.WaitAsync(ct);
-                    string analysisId;
-                    try { analysisId = await CallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ct); }
-                    finally { _uploadGate.Release(); }
-                    SetStatus(item, ScanStatus.Polling);
-                    report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
-                }
+                var dup = (opts.UseCache && !opts.BypassTrust) ? _cache.TryGet(md5, opts.CacheDays) : null;
+                if (dup != null) { UiPost(() => item.FromCache = true); report = dup; }
+                else report = await DoLookupAsync(item, md5, sha256, opts, ct);
             }
-
-            // Last resort: API was off/exhausted -> try the GUI engine once.
-            if (report == null && !preferGui && GuiScrapeService.IsRuntimeAvailable)
-                report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
-
-            if (report != null && opts.UseCache && report.TotalEngines > 0)
-                _cache.Put(md5, report, item.FilePath);
+            finally { dedupGate.Release(); }
 
             if (report == null)
             {
@@ -249,6 +226,50 @@ internal sealed class ScanScheduler
             DoneOne();
             try { ItemFinished?.Invoke(item); } catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); }
         }
+    }
+
+    /// <summary>The resilient lookup chain for one file (GUI first, then API + upload, GUI last
+    /// resort), caching the result. Held under a per-md5 gate so duplicates in a run share it.</summary>
+    async Task<VtFileReport?> DoLookupAsync(ScanItem item, string md5, string sha256, ScanOptions opts, CancellationToken ct)
+    {
+        await _pause.WaitWhilePausedAsync(ct);
+        SetStatus(item, ScanStatus.LookingUp);
+
+        bool preferGui = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
+        VtFileReport? report = null;
+
+        if (preferGui)
+            report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
+
+        if (report == null && _rotator.HasUsableKeys)
+        {
+            report = await CallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ct);
+            if (report == null)
+            {
+                await _pause.WaitWhilePausedAsync(ct);
+                SetStatus(item, ScanStatus.Uploading);
+                var progress = new ActionProgress<UploadProgress>(p => UiPost(() =>
+                {
+                    item.Progress = (int)Math.Round(p.Percent);
+                    item.Detail = $"Yükleniyor… {p.Percent:F0}%  {FormatBytes(p.BytesSent)}/{FormatBytes(p.TotalBytes)}  ({FormatBytes(p.BytesPerSecond)}/s)";
+                }));
+                await _uploadGate!.WaitAsync(ct);
+                string analysisId;
+                try { analysisId = await CallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ct); }
+                finally { _uploadGate.Release(); }
+                SetStatus(item, ScanStatus.Polling);
+                report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
+            }
+        }
+
+        // Last resort: API was off/exhausted -> try the GUI engine once.
+        if (report == null && !preferGui && GuiScrapeService.IsRuntimeAvailable)
+            report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
+
+        if (report != null && opts.UseCache && report.TotalEngines > 0)
+            _cache.Put(md5, report, item.FilePath);
+
+        return report;
     }
 
     async Task<VtFileReport?> PollUntilCompleteAsync(string analysisId, string sha256, ScanItem item, CancellationToken ct)
