@@ -307,6 +307,8 @@ internal sealed class ScanQueueControl : UserControl
     {
         _grid.Dock = DockStyle.Fill;
         _grid.AutoGenerateColumns = false;
+        _grid.MultiSelect = true;
+        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.FileName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColSize, DataPropertyName = nameof(ScanItem.SizeText), Width = 80 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(ScanItem.StatusText), Width = 220 });
@@ -321,7 +323,7 @@ internal sealed class ScanQueueControl : UserControl
         var miOpenVt = (ToolStripMenuItem)menu.Items.Add(Strings.MenuOpenVt, null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
 
         var copyMenu = new ToolStripMenuItem(Strings.MenuCopy);
-        copyMenu.DropDownItems.Add("SHA-256", null, (_, _) => CopySafe(SelectedItem()?.Sha256));
+        copyMenu.DropDownItems.Add("SHA-256", null, (_, _) => CopySafe(string.Join("\n", SelectedItems().Select(i => i.Sha256).Where(s => !string.IsNullOrEmpty(s)))));
         copyMenu.DropDownItems.Add("MD5", null, (_, _) => CopySafe(SelectedItem()?.Md5));
         copyMenu.DropDownItems.Add(Strings.MenuCopyFilePath, null, (_, _) => CopySafe(SelectedItem()?.FilePath));
         copyMenu.DropDownItems.Add(Strings.MenuCopyFileName, null, (_, _) => CopySafe(SelectedItem()?.FileName));
@@ -355,6 +357,11 @@ internal sealed class ScanQueueControl : UserControl
             miRescan.Enabled = exists;
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;
+
+            // Count-aware labels when several rows are selected (batch actions).
+            int n = SelectedItems().Count;
+            miRescan.Text = n > 1 ? $"🔄  {n} dosyayı yeniden tara" : Strings.MenuRescan;
+            miQuarantine.Text = n > 1 ? $"⚠  {n} dosyayı karantinaya al (.VIRUS)" : Strings.MenuQuarantine;
         };
         _grid.ContextMenuStrip = menu;
 
@@ -500,25 +507,36 @@ internal sealed class ScanQueueControl : UserControl
 
     void RescanSelected()
     {
-        var i = SelectedItem();
-        if (i != null && File.Exists(i.FilePath)) StartScan([i.FilePath], recurse: false);
+        var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
+        if (paths.Length > 0) StartScan(paths, recurse: false);
     }
 
     void RescanIgnoringTrust()
     {
-        var i = SelectedItem();
-        if (i != null && File.Exists(i.FilePath)) StartScan([i.FilePath], recurse: false, bypassTrust: true);
+        var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
+        if (paths.Length > 0) StartScan(paths, recurse: false, bypassTrust: true);
     }
 
     void QuarantineSelected()
     {
-        var i = SelectedItem();
-        if (i == null || !File.Exists(i.FilePath)) return;
-        if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.QuarantineConfirmFormat, i.FileName))) return;
-        if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err))
+        var items = SelectedItems().Where(i => File.Exists(i.FilePath)).ToList();
+        if (items.Count == 0) return;
+        string prompt = items.Count == 1
+            ? string.Format(Strings.QuarantineConfirmFormat, items[0].FileName)
+            : $"{items.Count} dosya karantinaya alınsın mı? (uzantıları .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)";
+        if (!ConfirmGates.Quarantine.Ask(this, prompt)) return;
+
+        int ok = 0;
+        var errors = new List<string>();
+        foreach (var i in items)
+            if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err)) ok++;
+            else errors.Add(Path.GetFileName(i.FilePath) + ": " + err);
+
+        if (items.Count == 1 && ok == 1)
             NativeMessageBox.Info(Strings.QuarantineDoneInfo);
         else
-            NativeMessageBox.Error(Strings.QuarantineFailedPrefix + err);
+            NativeMessageBox.Info($"{ok}/{items.Count} dosya karantinaya alındı." +
+                (errors.Count > 0 ? Strings.ErrorsHeader + string.Join("\n", errors.Take(10)) : ""));
     }
 
     /// <summary>Moves one file into the reversible quarantine vault (used by the batch copy-finder).</summary>
@@ -793,6 +811,14 @@ internal sealed class ScanQueueControl : UserControl
     }
 
     ScanItem? SelectedItem() => _grid.CurrentRow?.DataBoundItem as ScanItem;
+
+    /// <summary>All currently-selected items (multi-select), for batch actions.</summary>
+    List<ScanItem> SelectedItems()
+    {
+        var list = _grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem).OfType<ScanItem>().ToList();
+        if (list.Count == 0 && SelectedItem() is { } one) list.Add(one);
+        return list;
+    }
     static void CopySafe(string? s) { if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } } }
     void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
 
