@@ -19,6 +19,7 @@ internal sealed partial class MainForm : Form
     {
         base.OnHandleCreated(e);
         ApplyDarkTitleBar();
+        TaskbarProgress.Init(Handle);
     }
 
     void ApplyDarkTitleBar()
@@ -82,6 +83,13 @@ internal sealed partial class MainForm : Form
         _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item));
         StartDownloadsWatchIfEnabled();
 
+        AppServices.Scheduler.Started += () => SafeUi(TaskbarProgress.Indeterminate);
+        AppServices.Scheduler.ProgressChanged += p => SafeUi(() => TaskbarProgress.Set(p.Done, p.Total));
+        AppServices.Scheduler.Finished += () => SafeUi(() =>
+        {
+            bool threats = AppServices.Scheduler.Items.Any(i => i.Report?.IsMalicious == true);
+            if (threats) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
+        });
         AppServices.Vault.Changed += () => SafeUi(UpdateStatusBar);
         AppServices.Vault.CountersUpdated += () => SafeUi(UpdateStatusBar);
         Theme.Changed += () => SafeUi(ApplyTheme);
