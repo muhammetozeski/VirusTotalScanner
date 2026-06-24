@@ -13,7 +13,9 @@ internal sealed class ScanQueueControl : UserControl
     readonly ScanScheduler _scheduler = AppServices.Scheduler;
     readonly DataGridView _grid = new();
     readonly ScanDetailControl _detail = new();
-    readonly ProgressBar _overall = new();
+    readonly Panel _overall = new();
+    OverallProgress? _lastProgress; // drives the segmented bar's owner-draw
+    readonly ToolTip _overallTip = new();
     readonly Label _summary = new();
     readonly Button _pauseBtn;
     readonly Button _cancelBtn;
@@ -109,7 +111,7 @@ internal sealed class ScanQueueControl : UserControl
         var bottom = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, AutoSize = true, Padding = new Padding(8, 4, 8, 8) };
         _overall.Dock = DockStyle.Fill;
         _overall.Height = 16;
-        _overall.Style = ProgressBarStyle.Continuous;
+        _overall.Paint += PaintOverall;
         _summary.AutoSize = true;
         _summary.Text = Strings.StatusReady;
         bottom.Controls.Add(_overall, 0, 0);
@@ -1053,7 +1055,8 @@ internal sealed class ScanQueueControl : UserControl
 
     void OnProgress(OverallProgress p)
     {
-        _overall.Value = Math.Clamp((int)p.Percent, 0, 100);
+        _lastProgress = p;
+        _overall.Invalidate();
         string text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed);
         if (p.Done < p.Total && p.FilesPerSec > 0)
         {
@@ -1061,6 +1064,43 @@ internal sealed class ScanQueueControl : UserControl
             text += $"{eta}  •  {p.FilesPerSec:0.#} dosya/sn  •  Geçen {ShortDuration(p.Elapsed)}";
         }
         _summary.Text = text;
+        try { _overallTip.SetToolTip(_overall, $"Zararlı {p.Malicious} · Şüpheli {p.Suspicious} · Temiz {p.Clean} · İmzalı {p.SignedSkipped} · Atlandı {p.Skipped} · Hata {p.Failed}  ({p.Done}/{p.Total})"); } catch { }
+    }
+
+    /// <summary>Owner-draws the overall bar as stacked verdict segments (red/amber/green/grey) with a
+    /// hatched tail for the not-yet-scanned remainder — so a red sliver among thousands of pending files
+    /// answers "are there threats in this batch yet?" at a glance.</summary>
+    void PaintOverall(object? sender, PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        var rect = _overall.ClientRectangle;
+        var t = Theme.Current;
+        using (var bg = new SolidBrush(t.Surface)) g.FillRectangle(bg, rect);
+        var p = _lastProgress;
+        if (p == null || p.Total <= 0) return;
+
+        float x = 0;
+        void Seg(int count, Color c)
+        {
+            if (count <= 0) return;
+            float w = (float)count / p.Total * rect.Width;
+            using var b = new SolidBrush(c);
+            g.FillRectangle(b, x, 0, w, rect.Height);
+            x += w;
+        }
+        Seg(p.Malicious, t.Danger);
+        Seg(p.Suspicious, t.Warning);
+        Seg(p.Clean, t.Success);
+        Seg(p.SignedSkipped, Color.FromArgb(95, 120, 150));   // trusted-signed: muted blue-grey
+        Seg(p.Skipped + p.Failed, Color.FromArgb(90, 90, 90)); // skipped/failed: neutral grey
+
+        int pending = Math.Max(0, p.Total - p.Done);
+        if (pending > 0)
+        {
+            float w = (float)pending / p.Total * rect.Width;
+            using var hatch = new System.Drawing.Drawing2D.HatchBrush(System.Drawing.Drawing2D.HatchStyle.LightUpwardDiagonal, t.Panel, t.Surface);
+            g.FillRectangle(hatch, x, 0, w, rect.Height);
+        }
     }
 
     static string ShortDuration(TimeSpan t)
