@@ -29,6 +29,7 @@ internal static class GuiScrapeService
     static bool _shuttingDown;
 
     static string _targetHash = "";
+    static string _targetSuffix = ""; // "" = the file report; "/comments" = community comments
     static string _currentUrl = "";
     static TaskCompletionSource<string?>? _pending;
     static CancellationTokenSource? _timeoutCts;
@@ -83,6 +84,63 @@ internal static class GuiScrapeService
         }
         catch (Exception ex) { Log("Keyless GUI lookup failed: " + ex.Message, LogLevel.Warning); return null; }
         finally { _gate.Release(); }
+    }
+
+    /// <summary>Fetches the community comments for a hash via the GUI (keyless). Empty on miss.</summary>
+    public static async Task<List<VtComment>> FetchCommentsAsync(string hash, CancellationToken ct = default)
+    {
+        hash = hash.Trim().ToLowerInvariant();
+        var result = new List<VtComment>();
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (!await EnsureReadyAsync()) return result;
+
+            var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _targetHash = hash;
+            _targetSuffix = "/comments";
+            _currentUrl = "https://www.virustotal.com/gui/file/" + hash + "/community";
+            _pending = tcs;
+            _captchaShown = false;
+
+            Log("Keyless GUI comments: " + hash, LogLevel.Info);
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _timeoutCts = timeout;
+            timeout.CancelAfter(TimeSpan.FromSeconds(45));
+
+            _form!.BeginInvoke(() =>
+            {
+                try { _web!.CoreWebView2.Navigate(_currentUrl); }
+                catch (Exception ex) { tcs.TrySetResult(null); Log("GUI navigate (comments) failed: " + ex.Message, LogLevel.Warning); }
+            });
+
+            string? json;
+            using (timeout.Token.Register(() => tcs.TrySetResult(null)))
+                json = await tcs.Task;
+
+            _pending = null;
+            _timeoutCts = null;
+            HideBrowser();
+
+            if (string.IsNullOrEmpty(json)) return result;
+
+            var dto = JsonSerializer.Deserialize<VtResponse<List<VtCommentData>>>(json, JsonOpts);
+            foreach (var c in dto?.Data ?? [])
+            {
+                var a = c.Attributes;
+                if (a == null || string.IsNullOrWhiteSpace(a.Text)) continue;
+                result.Add(new VtComment
+                {
+                    Date = a.Date > 0 ? DateTimeOffset.FromUnixTimeSeconds(a.Date).UtcDateTime : null,
+                    Text = a.Text,
+                    Tags = a.Tags ?? [],
+                });
+            }
+            return result;
+        }
+        catch (Exception ex) { Log("Keyless GUI comments failed: " + ex.Message, LogLevel.Warning); return result; }
+        finally { _targetSuffix = ""; _gate.Release(); }
     }
 
     public static void Shutdown()
@@ -215,7 +273,7 @@ internal static class GuiScrapeService
             // genuinely VISIBLE DOM challenge counts. This stops the browser popping up with no captcha.
 
             string path = fullUri.Split('?')[0].TrimEnd('/');
-            if (!path.EndsWith("/ui/files/" + _targetHash, StringComparison.OrdinalIgnoreCase)) return;
+            if (!path.EndsWith("/ui/files/" + _targetHash + _targetSuffix, StringComparison.OrdinalIgnoreCase)) return;
 
             int code = e.Response.StatusCode;
             if (code == 200)

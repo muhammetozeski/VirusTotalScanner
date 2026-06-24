@@ -62,8 +62,36 @@ internal sealed class ScanDetailControl : UserControl
         _link.AutoSize = true;
         _link.Margin = new Padding(16, 3, 0, 0);
         _link.LinkClicked += (_, _) => { if (_item?.Report != null) OpenUrlInBrowser(_item.Report.ReportUrl); };
+        var commentsBtn = new Button { Text = Strings.BtnComments, AutoSize = true, Margin = new Padding(16, 0, 0, 0) };
+        commentsBtn.Click += async (_, _) =>
+        {
+            string? sha = _item?.Sha256;
+            if (string.IsNullOrWhiteSpace(sha)) return;
+            if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) { NativeMessageBox.Warn("Topluluk yorumları için anahtarsız (GUI) mod gerekli."); return; }
+            commentsBtn.Enabled = false;
+            string old = commentsBtn.Text;
+            commentsBtn.Text = "💬  Getiriliyor…";
+            try
+            {
+                var comments = await GuiScrapeService.FetchCommentsAsync(sha);
+                if (comments.Count == 0) { NativeMessageBox.Info("Topluluk yorumu bulunamadı."); return; }
+                var sb = new System.Text.StringBuilder();
+                foreach (var c in comments.Take(20))
+                {
+                    sb.AppendLine($"[{c.Date:yyyy-MM-dd}] {c.Text?.Trim()}");
+                    if (c.Tags.Count > 0) sb.AppendLine("   #" + string.Join(" #", c.Tags));
+                    sb.AppendLine();
+                }
+                NativeMessageBox.Info(sb.ToString());
+            }
+            catch (Exception ex) { NativeMessageBox.Error("Yorumlar alınamadı: " + ex.Message); }
+            finally { commentsBtn.Enabled = true; commentsBtn.Text = old; }
+        };
+        ThemeManager.StyleButton(commentsBtn);
+
         togglePanel.Controls.Add(_showAll);
         togglePanel.Controls.Add(_link);
+        togglePanel.Controls.Add(commentsBtn);
 
         ConfigureEnginesGrid();
         _engines.Dock = DockStyle.Fill;

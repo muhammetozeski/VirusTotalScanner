@@ -24,6 +24,7 @@ internal static class CliRunner
         if (opts.RemoveKeyValue != null) return RemoveKey(opts.RemoveKeyValue);
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
+        if (opts.CommentsHash != null) return await CommentsCmd(opts.CommentsHash);
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
         if (opts.VerifyBaseline) return await VerifyBaselineCmd();
         if (opts.DriftReport != null) return await DriftReportCmd(opts.DriftReport);
@@ -139,6 +140,20 @@ internal static class CliRunner
 
         Console.WriteLine($"{changes.Count} verdikt değişikliği yazıldı: {path}");
         return changes.Any(c => c.GotWorse) ? 1 : 0;
+    }
+
+    static async Task<int> CommentsCmd(string hash)
+    {
+        if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable))
+        { Console.Error.WriteLine("HATA: yorumlar için anahtarsız GUI gerekli (--keyless)."); return 3; }
+        var comments = await GuiScrapeService.FetchCommentsAsync(hash);
+        if (comments.Count == 0) { Console.WriteLine("Yorum bulunamadı."); return 0; }
+        foreach (var c in comments.Take(20))
+        {
+            Console.WriteLine($"[{c.Date:yyyy-MM-dd}] {c.Text?.Replace("\n", " ").Trim()}");
+            if (c.Tags.Count > 0) Console.WriteLine("   #" + string.Join(" #", c.Tags));
+        }
+        return 0;
     }
 
     static async Task<int> VerifyBaselineCmd()

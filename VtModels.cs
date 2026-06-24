@@ -11,6 +11,26 @@ internal sealed class VtResponse<T>
     [JsonPropertyName("data")] public T? Data { get; set; }
 }
 
+internal sealed class VtCommentData
+{
+    [JsonPropertyName("attributes")] public VtCommentAttributes? Attributes { get; set; }
+}
+
+internal sealed class VtCommentAttributes
+{
+    [JsonPropertyName("date")] public long Date { get; set; }
+    [JsonPropertyName("text")] public string? Text { get; set; }
+    [JsonPropertyName("tags")] public List<string>? Tags { get; set; }
+}
+
+/// <summary>A community comment on a file (date + text + tags), from the keyless GUI comments fetch.</summary>
+internal sealed class VtComment
+{
+    public DateTime? Date { get; set; }
+    public string? Text { get; set; }
+    public List<string> Tags { get; set; } = [];
+}
+
 internal sealed class VtFileData
 {
     [JsonPropertyName("attributes")] public VtFileAttributes? Attributes { get; set; }

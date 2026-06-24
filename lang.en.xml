@@ -39,6 +39,7 @@
   <s name="StatusReady">Ready.</s>
   <s name="ShowAllEngines">Show all engines</s>
   <s name="OpenVtReport">Open VirusTotal report ↗</s>
+  <s name="BtnComments">💬  Comments</s>
   <s name="ColEngine">Antivirus</s>
   <s name="ColCategory">Category</s>
   <s name="ColResult">Result</s>
