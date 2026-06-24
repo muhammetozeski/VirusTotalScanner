@@ -105,7 +105,7 @@ internal static class ScanHistoryStore
             if (File.Exists(FilePath))
                 return JsonSerializer.Deserialize<List<HistoryEntry>>(File.ReadAllText(FilePath)) ?? [];
         }
-        catch (Exception ex) { Log("History load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("History load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
         return [];
     }
 

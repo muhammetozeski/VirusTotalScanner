@@ -47,7 +47,7 @@ internal static class BaselineStore
                     if (!string.IsNullOrEmpty(r.Path)) _records[r.Path] = r;
             Log($"Baseline loaded: {_records.Count} watched path(s).", LogLevel.Info);
         }
-        catch (Exception ex) { Log("Baseline load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Baseline load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
     }
 
     static void Save()

@@ -27,7 +27,7 @@ internal static class ProductSignerRegistry
             var d = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(FilePath));
             if (d != null) foreach (var kv in d) _map[kv.Key] = kv.Value;
         }
-        catch (Exception ex) { Log("Product-signer registry load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Product-signer registry load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
     }
 
     static void Save()

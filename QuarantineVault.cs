@@ -43,7 +43,7 @@ internal static class QuarantineVault
             var l = JsonSerializer.Deserialize<List<QuarantineEntry>>(File.ReadAllText(ManifestPath));
             if (l != null) _entries.AddRange(l);
         }
-        catch (Exception ex) { Log("Quarantine manifest load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Quarantine manifest load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(ManifestPath); }
     }
 
     static void Save()

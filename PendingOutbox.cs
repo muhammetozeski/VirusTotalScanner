@@ -69,7 +69,7 @@ internal static class PendingOutbox
     static List<PendingEntry> Load()
     {
         try { if (File.Exists(FilePath)) return JsonSerializer.Deserialize<List<PendingEntry>>(File.ReadAllText(FilePath)) ?? []; }
-        catch (Exception ex) { Log("Pending outbox load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Pending outbox load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
         return [];
     }
 

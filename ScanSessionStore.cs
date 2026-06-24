@@ -41,6 +41,6 @@ internal static class ScanSessionStore
     public static ScanSession? TryLoad()
     {
         try { return File.Exists(FilePath) ? JsonSerializer.Deserialize<ScanSession>(File.ReadAllText(FilePath)) : null; }
-        catch (Exception ex) { Log("Scan session load failed: " + ex.Message, LogLevel.Warning); return null; }
+        catch (Exception ex) { Log("Scan session load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); return null; }
     }
 }

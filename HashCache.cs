@@ -48,7 +48,7 @@ internal sealed class HashCache
                     if (!string.IsNullOrEmpty(e.Md5)) _entries[e.Md5] = e;
             Log($"Hash cache loaded: {_entries.Count} entr(ies).", LogLevel.Info);
         }
-        catch (Exception ex) { Log("Hash cache load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Hash cache load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(ConfigPathResolver.HashCachePath); }
     }
 
     /// <summary>Returns a cached report if present and fresh enough (within ttlDays).</summary>

@@ -8,6 +8,21 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class AtomicFile
 {
+    /// <summary>Renames a file that failed to parse to a timestamped <c>.corrupt-…</c> sidecar so the
+    /// data is preserved for manual recovery, instead of being silently overwritten with an empty store
+    /// on the next save. Most important for the quarantine manifest, whose loss orphans .VIRUS files.</summary>
+    public static void BackupCorrupt(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return;
+            string dest = $"{path}.corrupt-{DateTime.Now:yyyyMMdd-HHmmss}.bak";
+            File.Move(path, dest);
+            Log($"Preserved corrupt store as {dest}", LogLevel.Warning);
+        }
+        catch { }
+    }
+
     public static void WriteAllText(string path, string content)
     {
         string tmp = path + ".tmp";

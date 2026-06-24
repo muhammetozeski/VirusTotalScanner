@@ -33,7 +33,7 @@ internal static class IocStore
             var l = JsonSerializer.Deserialize<List<IocRecord>>(File.ReadAllText(FilePath));
             if (l != null) foreach (var r in l) if (!string.IsNullOrEmpty(r.Sha256)) _byHash[r.Sha256] = r;
         }
-        catch (Exception ex) { Log("IOC index load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("IOC index load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
     }
 
     static void Save()

@@ -70,7 +70,7 @@ internal static class ReverdictWatchStore
     static List<WatchEntry> Load()
     {
         try { if (File.Exists(FilePath)) return JsonSerializer.Deserialize<List<WatchEntry>>(File.ReadAllText(FilePath)) ?? []; }
-        catch (Exception ex) { Log("Watch load failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Watch load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
         return [];
     }
 
