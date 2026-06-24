@@ -42,6 +42,8 @@ internal static class RecommendationService
             string why = r.MajorClean ? Strings.RecoMajorClean
                 : r.HeuristicOnly ? Strings.RecoHeuristicOnly
                 : string.Format(Strings.RecoSomeFlaggedFormat, r.DetectionCount);
+            if (Settings.ShowCommunityVotes && r.CommunityHarmlessLean)
+                why += " · " + string.Format(Strings.RecoCommunityHarmlessFormat, r.VotesHarmless, r.VotesHarmless + r.VotesMalicious);
             return new Reco(Level.Caution, Strings.RecoHeadlineCautionDontRun, string.Format(Strings.RecoCautionRationaleFormat, why, dl));
         }
 

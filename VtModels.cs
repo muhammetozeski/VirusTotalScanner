@@ -275,6 +275,10 @@ internal sealed class VtFileReport
     /// <summary>True when there are detections but no major/high-reputation engine flagged it
     /// (the classic false-positive shape).</summary>
     [JsonIgnore] public bool MajorClean => TotalEngines > 0 && DetectionCount > 0 && MajorDetectionCount == 0;
+
+    /// <summary>A strong community "harmless" lean with no major-engine hit — one of the better false-positive
+    /// signals (a community-vouched unsigned tool that signature-softening would miss).</summary>
+    [JsonIgnore] public bool CommunityHarmlessLean => VotesHarmless >= 10 && VotesHarmless >= VotesMalicious * 5 && MajorClean;
     /// <summary>A "threat" per the user's verdict categories (e.g. 1 detection may count as clean).</summary>
     [JsonIgnore] public bool IsMalicious => TotalEngines > 0 && VerdictCategories.IsThreat(DetectionCount);
     [JsonIgnore] public string ReportUrl => AppConstants.VtGuiFile + (Sha256 ?? Md5 ?? Sha1 ?? string.Empty);

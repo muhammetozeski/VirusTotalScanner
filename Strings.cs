@@ -570,6 +570,7 @@ internal static class Strings
     public static string RecoMaliciousFormat = "{0}/{1} motor '{2}' olarak işaretledi{3}.";
     public static string RecoMajorClean = "yalnızca küçük/itibarsız motorlar işaretledi (olası yanlış pozitif)";
     public static string RecoHeuristicOnly = "tüm tespitler sezgisel/ML (imza eşleşmesi yok)";
+    public static string RecoCommunityHarmlessFormat = "topluluk çoğunlukla zararsız işaretledi ({0}/{1} oy)";
     public static string RecoSomeFlaggedFormat = "{0} motor işaretledi";
     public static string RecoCautionRationaleFormat = "{0}{1}.";
     public static string RecoRareNewFormat = "0 tespit ama çok yeni/nadir bir dosya{0}.";

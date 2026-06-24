@@ -76,6 +76,13 @@ internal sealed class ScanItem : INotifyPropertyChanged
         Settings.SignatureSoftenLowDetections && Trust is { Trusted: true }
         && Report is { } r && r.DetectionCount is > 0 and <= 2 && r.HeuristicOnly && r.Reputation >= 0;
 
+    /// <summary>The signature-free sibling of <see cref="SignatureSoftened"/>: a strong community-harmless
+    /// lean (no major-engine hit) on a 1-2 detection file — catches community-vouched unsigned tools that
+    /// the signature path misses. Also a HINT only; never changes the verdict band.</summary>
+    public bool CommunitySoftened =>
+        Settings.SignatureSoftenLowDetections && Settings.ShowCommunityVotes
+        && Report is { } r && r.DetectionCount is > 0 and <= 2 && r.Reputation >= 0 && r.CommunityHarmlessLean;
+
     string? _error;
     public string? Error { get => _error; set => Set(ref _error, value); }
 

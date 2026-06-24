@@ -324,6 +324,7 @@ internal sealed class ScanDetailControl : UserControl
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.ConfidenceText != null ? $"\n{report.ConfidenceText}" : "") +
             (item.SignatureSoftened ? $"\n🔓 Geçerli imza nedeniyle muhtemel yanlış pozitif: {item.Trust?.Publisher ?? item.Publisher ?? "imzalı"} — ‘Temiz olarak işaretle’ ile onayla" : "") +
+            (item.CommunitySoftened ? $"\n👍 Topluluk çoğunlukla zararsız oyladı ({report.VotesHarmless}/{report.VotesHarmless + report.VotesMalicious} oy) — muhtemel yanlış pozitif" : "") +
             (report.StaleText != null ? $"\n{report.StaleText}" : "") +
             (report.CommunityRulesText != null ? $"\n{report.CommunityRulesText}" : "") +
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +
