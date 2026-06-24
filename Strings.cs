@@ -373,6 +373,35 @@ internal static class Strings
     public static string TrustSigInvalid = "imza geçersiz";
     public static string TrustUntrustedFormat = "güvenilmiyor (0x{0:X8})";
 
+    // ---- behavior/capability tags (detail pane) ----
+    public static string BtagDetectDebug = "🐞 hata ayıklayıcı tespiti (anti-analiz)";
+    public static string BtagAntiDebug = "🐞 anti-debug";
+    public static string BtagDetectVm = "🖥 sanal makine tespiti";
+    public static string BtagChecksVm = "🖥 sanal makine kontrolü";
+    public static string BtagChecksNet = "🌐 ağ adaptörlerini kontrol ediyor";
+    public static string BtagChecksCpu = "🔍 CPU/donanım kontrolü";
+    public static string BtagChecksBios = "🔍 BIOS kontrolü";
+    public static string BtagChecksDisk = "🔍 disk kontrolü";
+    public static string BtagCpuClock = "⏱ CPU saatine doğrudan erişim";
+    public static string BtagLongSleeps = "⏱ uzun bekleme (kum havuzu kaçınma)";
+    public static string BtagSelfDelete = "🗑 kendini siliyor";
+    public static string BtagPersistence = "📌 kalıcılık (autostart)";
+    public static string BtagAutorun = "📌 autorun";
+    public static string BtagRuntimeModules = "🧩 çalışma anında modül yükleme";
+    public static string BtagCreateProcess = "⚙ süreç başlatıyor";
+    public static string BtagSpawnProcess = "⚙ alt süreç oluşturuyor";
+    public static string BtagRegistry = "🗝 kayıt defteri değişikliği";
+    public static string BtagKeylogger = "⌨ tuş kaydı";
+    public static string BtagContacts = "🌐 ağ iletişimi";
+    public static string BtagNetwork = "🌐 ağ etkinliği";
+    public static string BtagObfuscated = "📦 gizlenmiş/obfuscate";
+    public static string BtagPacked = "📦 paketlenmiş";
+    public static string BtagExploit = "💥 exploit";
+    public static string BtagPowershell = "🔧 PowerShell kullanımı";
+    public static string BtagCve = "💥 bilinen açık (CVE)";
+    public static string BtagClassFormat = "🧬 Sınıf: {0}";
+    public static string BtagBehavior = "🧬 Davranış";
+
     // ---- report signal text (detail pane / CLI) ----
     public static string StaleTextFormat = "🕗 {0}/{1} tespit aylarca eski imzalardan — yeniden denetlemek iyi olur";
     public static string CommunityRulesPrefixFormat = "🛡 Topluluk kuralları ({0}): ";

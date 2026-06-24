@@ -9,34 +9,35 @@ internal static class BehaviorTags
 {
     // Ordered substring -> readable label. First match per tag wins; structural-only tags
     // (peexe, signed, 64bits, overlay…) are intentionally ignored — they are not behavior.
-    static readonly (string Needle, string Label)[] Map =
+    // A property (not a cached field) so a runtime language switch is reflected in the labels.
+    static (string Needle, string Label)[] Map =>
     [
-        ("detect-debug", "🐞 hata ayıklayıcı tespiti (anti-analiz)"),
-        ("anti-debug", "🐞 anti-debug"),
-        ("detect-vm", "🖥 sanal makine tespiti"),
-        ("checks-vm", "🖥 sanal makine kontrolü"),
-        ("checks-network-adapters", "🌐 ağ adaptörlerini kontrol ediyor"),
-        ("checks-cpu", "🔍 CPU/donanım kontrolü"),
-        ("checks-bios", "🔍 BIOS kontrolü"),
-        ("checks-disk", "🔍 disk kontrolü"),
-        ("direct-cpu-clock-access", "⏱ CPU saatine doğrudan erişim"),
-        ("long-sleeps", "⏱ uzun bekleme (kum havuzu kaçınma)"),
-        ("self-delete", "🗑 kendini siliyor"),
-        ("persistence", "📌 kalıcılık (autostart)"),
-        ("autorun", "📌 autorun"),
-        ("runtime-modules", "🧩 çalışma anında modül yükleme"),
-        ("create-process", "⚙ süreç başlatıyor"),
-        ("spawn-process", "⚙ alt süreç oluşturuyor"),
-        ("registry", "🗝 kayıt defteri değişikliği"),
-        ("keylogger", "⌨ tuş kaydı"),
-        ("contacts-", "🌐 ağ iletişimi"),
-        ("communicates", "🌐 ağ iletişimi"),
-        ("network", "🌐 ağ etkinliği"),
-        ("obfuscated", "📦 gizlenmiş/obfuscate"),
-        ("packed", "📦 paketlenmiş"),
-        ("exploit", "💥 exploit"),
-        ("powershell", "🔧 PowerShell kullanımı"),
-        ("cve-", "💥 bilinen açık (CVE)"),
+        ("detect-debug", Strings.BtagDetectDebug),
+        ("anti-debug", Strings.BtagAntiDebug),
+        ("detect-vm", Strings.BtagDetectVm),
+        ("checks-vm", Strings.BtagChecksVm),
+        ("checks-network-adapters", Strings.BtagChecksNet),
+        ("checks-cpu", Strings.BtagChecksCpu),
+        ("checks-bios", Strings.BtagChecksBios),
+        ("checks-disk", Strings.BtagChecksDisk),
+        ("direct-cpu-clock-access", Strings.BtagCpuClock),
+        ("long-sleeps", Strings.BtagLongSleeps),
+        ("self-delete", Strings.BtagSelfDelete),
+        ("persistence", Strings.BtagPersistence),
+        ("autorun", Strings.BtagAutorun),
+        ("runtime-modules", Strings.BtagRuntimeModules),
+        ("create-process", Strings.BtagCreateProcess),
+        ("spawn-process", Strings.BtagSpawnProcess),
+        ("registry", Strings.BtagRegistry),
+        ("keylogger", Strings.BtagKeylogger),
+        ("contacts-", Strings.BtagContacts),
+        ("communicates", Strings.BtagContacts),
+        ("network", Strings.BtagNetwork),
+        ("obfuscated", Strings.BtagObfuscated),
+        ("packed", Strings.BtagPacked),
+        ("exploit", Strings.BtagExploit),
+        ("powershell", Strings.BtagPowershell),
+        ("cve-", Strings.BtagCve),
     ];
 
     public static string? Summarize(IReadOnlyList<string> tags, string? threatLabel)
@@ -59,7 +60,7 @@ internal static class BehaviorTags
         bool hasLabel = !string.IsNullOrWhiteSpace(threatLabel);
         if (labels.Count == 0 && !hasLabel) return null;
 
-        string head = hasLabel ? $"🧬 Sınıf: {threatLabel}" : "🧬 Davranış";
+        string head = hasLabel ? string.Format(Strings.BtagClassFormat, threatLabel) : Strings.BtagBehavior;
         return labels.Count > 0 ? $"{head}  •  {string.Join("  •  ", labels.Take(8))}" : head;
     }
 }
