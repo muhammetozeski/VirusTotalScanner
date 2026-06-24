@@ -779,8 +779,24 @@ internal sealed class ScanQueueControl : UserControl
         {
             var entry = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, i.FilePath, StringComparison.OrdinalIgnoreCase));
             if (entry != null) ShowQuarantineUndo(i.FileName, entry); else NativeMessageBox.Info(Strings.QuarantineDoneInfo);
+            OfferPersistenceCleanup(i.FilePath, i.FileName);
         }
         else if (!string.IsNullOrEmpty(err)) NativeMessageBox.Error(Strings.QuarantineFailedPrefix + err);
+    }
+
+    /// <summary>Right after a quarantine, hunt the autostart hooks still pointing at the (now-missing) file
+    /// and offer to cut them — otherwise Windows keeps trying to launch a vanished .VIRUS every boot.</summary>
+    void OfferPersistenceCleanup(string originalPath, string fileName)
+    {
+        try
+        {
+            var hooks = PersistenceHunter.Find(originalPath);
+            if (hooks.Count == 0) return;
+            if (!NativeMessageBox.Confirm($"{fileName} karantinaya alındı, ama {hooks.Count} otomatik başlatma kancası hâlâ ona işaret ediyor (her açılışta çalıştırmaya çalışır). Şimdi temizleyelim mi?")) return;
+            using var dlg = new PersistenceHooksDialog(fileName, hooks);
+            dlg.ShowDialog(FindForm());
+        }
+        catch (Exception ex) { Log("Persistence cleanup offer failed: " + ex.Message, LogLevel.Warning); }
     }
 
     /// <summary>Quarantine a file, recovering from the "binary is running so Windows refuses to rename the
