@@ -222,7 +222,7 @@ internal static class CliRunner
     static async Task<int> LookupAsync(string hash, bool json)
     {
         bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
-        if (!keyless && !AppServices.Rotator.HasUsableKeys) { Console.Error.WriteLine("HATA: API anahtarı yok (veya --keyless kullanın)."); return 3; }
+        if (!keyless && !AppServices.Rotator.HasUsableKeys) { Console.Error.WriteLine(Strings.CliErrNoKeyOrKeyless); return 3; }
         try
         {
             VtFileReport? report;
@@ -235,7 +235,7 @@ internal static class CliRunner
                 string key = await AppServices.Rotator.AcquireAsync();
                 report = await AppServices.Api.GetFileReportAsync(hash, key);
             }
-            if (report == null) { Console.WriteLine("Bulunamadı (VT'de yok)."); return 0; }
+            if (report == null) { Console.WriteLine(Strings.CliNotFound); return 0; }
             if (json) { PrintJson([new ScanItem(hash) { Report = report, Md5 = report.Md5, Sha256 = report.Sha256 }]); return report.IsMalicious ? 1 : 0; }
             Console.WriteLine($"[{report.Verdict}] ({report.DetectionCount}/{report.TotalEngines})  {report.MeaningfulName ?? hash}");
             var reco = RecommendationService.Build(new ScanItem(hash) { Report = report });
@@ -250,18 +250,18 @@ internal static class CliRunner
             Console.WriteLine("   " + report.ReportUrl);
             return report.IsMalicious ? 1 : 0;
         }
-        catch (Exception ex) { Console.Error.WriteLine("HATA: " + ex.Message); return 3; }
+        catch (Exception ex) { Console.Error.WriteLine(Strings.CliErrPrefix + ex.Message); return 3; }
     }
 
     static void ListKeysCmd()
     {
         var keys = AppServices.Vault.Keys;
-        if (keys.Count == 0) { Console.WriteLine("Anahtar yok."); return; }
+        if (keys.Count == 0) { Console.WriteLine(Strings.CliNoKeys); return; }
         var now = DateTime.UtcNow;
         foreach (var k in keys)
             Console.WriteLine($"{k.Id}  {k.Masked}  [{(string.IsNullOrWhiteSpace(k.Label) ? "-" : k.Label)}]  " +
-                $"{(k.Disabled ? "devre dışı" : k.IsExhausted(now) ? "dolu" : "aktif")}  " +
-                $"gün {k.Daily.Used}/{k.Daily.Allowed}  ay {k.Monthly.Used}/{k.Monthly.Allowed}");
+                $"{(k.Disabled ? Strings.CliKeyDisabled : k.IsExhausted(now) ? Strings.CliKeyExhausted : Strings.CliKeyActive)}  " +
+                string.Format(Strings.CliQuotaFormat, k.Daily.Used, k.Daily.Allowed, k.Monthly.Used, k.Monthly.Allowed));
     }
 
     static int RemoveKey(string idOrAll)
@@ -269,18 +269,18 @@ internal static class CliRunner
         if (idOrAll.Equals("all", StringComparison.OrdinalIgnoreCase))
         {
             foreach (var k in AppServices.Vault.Keys.ToList()) AppServices.Vault.Remove(k.Id);
-            Console.WriteLine("Tüm anahtarlar silindi.");
+            Console.WriteLine(Strings.CliAllKeysDeleted);
             return 0;
         }
         AppServices.Vault.Remove(idOrAll);
-        Console.WriteLine("Anahtar silindi (varsa): " + idOrAll);
+        Console.WriteLine(Strings.CliKeyRemovedPrefix + idOrAll);
         return 0;
     }
 
     static int MenuCmd(bool ok, string? err, string okMsg)
     {
         if (ok) { Console.WriteLine(okMsg); return 0; }
-        Console.Error.WriteLine("HATA: " + err);
+        Console.Error.WriteLine(Strings.CliErrPrefix + err);
         return 2;
     }
 
@@ -289,7 +289,7 @@ internal static class CliRunner
         if (item.Status == ScanStatus.TrustedSkipped)
         {
             try { Console.ForegroundColor = ConsoleColor.Cyan; } catch { }
-            Console.WriteLine($"[İMZALI] {item.FileName}  — {item.SkipReason} (VT atlandı)");
+            Console.WriteLine(string.Format(Strings.CliSignedFormat, item.FileName, item.SkipReason));
             try { Console.ResetColor(); } catch { }
             return;
         }
@@ -314,7 +314,7 @@ internal static class CliRunner
         if (!quiet && r != null)
             Console.WriteLine($"      {r.ReportUrl}");
         if (item.Status == ScanStatus.Failed && item.Error != null)
-            Console.WriteLine("      Hata: " + item.Error);
+            Console.WriteLine(Strings.CliItemErrorPrefix + item.Error);
     }
 
     static void PrintJson(IEnumerable<ScanItem> items)

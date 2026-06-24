@@ -176,6 +176,17 @@
   <s name="CliHashExpectedFormat">   Expected {0}: {1}</s>
   <s name="CliHashActualFormat">   Actual   {0}: {1}</s>
   <s name="CliErrPrefix">ERROR: </s>
+  <s name="CliErrNoKeyOrKeyless">ERROR: no API key (or use --keyless).</s>
+  <s name="CliNotFound">Not found (not on VT).</s>
+  <s name="CliNoKeys">No keys.</s>
+  <s name="CliKeyDisabled">disabled</s>
+  <s name="CliKeyExhausted">exhausted</s>
+  <s name="CliKeyActive">active</s>
+  <s name="CliQuotaFormat">day {0}/{1}  month {2}/{3}</s>
+  <s name="CliAllKeysDeleted">All keys deleted.</s>
+  <s name="CliKeyRemovedPrefix">Key removed (if any): </s>
+  <s name="CliSignedFormat">[SIGNED] {0}  — {1} (VT skipped)</s>
+  <s name="CliItemErrorPrefix">      Error: </s>
   <s name="AdminDenied">Administrator permission was not granted.</s>
   <s name="MenuStateOk">Installed ✓ (all users)</s>
   <s name="MenuStateMissing">Not installed</s>

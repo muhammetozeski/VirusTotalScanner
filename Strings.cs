@@ -224,6 +224,19 @@ internal static class Strings
     public static string CliHashActualFormat = "   Gerçek   {0}: {1}";
     public static string CliErrPrefix = "HATA: ";
 
+    // ---- CLI: lookup / keys / signed-print ----
+    public static string CliErrNoKeyOrKeyless = "HATA: API anahtarı yok (veya --keyless kullanın).";
+    public static string CliNotFound = "Bulunamadı (VT'de yok).";
+    public static string CliNoKeys = "Anahtar yok.";
+    public static string CliKeyDisabled = "devre dışı";
+    public static string CliKeyExhausted = "dolu";
+    public static string CliKeyActive = "aktif";
+    public static string CliQuotaFormat = "gün {0}/{1}  ay {2}/{3}";
+    public static string CliAllKeysDeleted = "Tüm anahtarlar silindi.";
+    public static string CliKeyRemovedPrefix = "Anahtar silindi (varsa): ";
+    public static string CliSignedFormat = "[İMZALI] {0}  — {1} (VT atlandı)";
+    public static string CliItemErrorPrefix = "      Hata: ";
+
     // ---- context-menu installer ----
     public static string AdminDenied = "Yönetici izni verilmedi.";
     public static string MenuStateOk = "Kurulu ✓ (tüm kullanıcılar)";
