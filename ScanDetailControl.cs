@@ -210,6 +210,7 @@ internal sealed class ScanDetailControl : UserControl
             (report.CapabilitySummary != null ? $"\n{report.CapabilitySummary}" : "") +
             (Settings.ShowCommunityVotes && report.VotesText != null ? $"\n{report.VotesText}" : "") +
             (ZoneIdentifier.Read(item.FilePath)?.Summary is { } zone ? $"\n{zone}" : "") +
+            (PeIdentityService.IdentitySummary(item.FilePath, TrustService.Evaluate(item.FilePath)) is { } pe ? $"\n{pe}" : "") +
             $"\n{provenance}";
 
         _md5.Text = report.Md5 ?? item.Md5 ?? "-";
