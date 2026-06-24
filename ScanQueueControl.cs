@@ -548,7 +548,7 @@ internal sealed class ScanQueueControl : UserControl
         if (items.Count == 0) { NativeMessageBox.Info("Dışa aktarılacak sonuç yok."); return; }
         using var dlg = new SaveFileDialog
         {
-            Filter = "HTML rapor|*.html|JSON|*.json|Metin|*.txt",
+            Filter = "HTML rapor|*.html|CSV|*.csv|JSON|*.json|Metin|*.txt",
             FileName = "virustotal-rapor.html",
         };
         if (dlg.ShowDialog() != DialogResult.OK) return;

@@ -286,7 +286,7 @@ internal static class CliRunner
           -n, --nogui, --cli  Grafik arayüz açmadan terminalde çalış
           -g, --gui           Terminalden bile olsa grafik arayüzü aç
           -j, --json          Sonuçları JSON olarak yaz (stdout)
-              --report <yol>  Rapor dosyası yaz (.html/.json/.txt — uzantıdan biçim seçilir)
+              --report <yol>  Rapor dosyası yaz (.html/.csv/.json/.txt — uzantıdan biçim seçilir)
               --fail-on <N>   N+ tespit olan dosyada çıkış kodu 1 (CI kapısı)
               --diff <json>   Önceki --report json ile karşılaştır (sha256); delta yaz
               --fail-on-new / --fail-on-regression  yeni/kötüleşen verdiktte çıkış 1

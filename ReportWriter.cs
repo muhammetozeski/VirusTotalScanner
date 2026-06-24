@@ -18,6 +18,7 @@ internal static class ReportWriter
         {
             ".html" or ".htm" => BuildHtml(items),
             ".json" => BuildJson(items),
+            ".csv" => BuildCsv(items),
             _ => BuildText(items),
         };
         File.WriteAllText(path, content, new UTF8Encoding(false));
@@ -30,6 +31,31 @@ internal static class ReportWriter
         items.Count(i => i.Status == ScanStatus.TrustedSkipped),
         items.Count(i => i.Status == ScanStatus.Failed)
     );
+
+    static string BuildCsv(IReadOnlyList<ScanItem> items)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("File,Verdict,Malicious,Suspicious,Total,Family,MD5,SHA256,ReportUrl");
+        foreach (var i in items)
+        {
+            var r = i.Report;
+            string verdict = i.Status == ScanStatus.TrustedSkipped ? "SIGNED" : r?.Verdict ?? i.Status.ToString();
+            sb.Append(Csv(i.FilePath)).Append(',')
+              .Append(Csv(verdict)).Append(',')
+              .Append(r?.Malicious ?? 0).Append(',')
+              .Append(r?.Suspicious ?? 0).Append(',')
+              .Append(r?.TotalEngines ?? 0).Append(',')
+              .Append(Csv(r?.Family ?? "")).Append(',')
+              .Append(Csv(i.Md5 ?? "")).Append(',')
+              .Append(Csv(i.Sha256 ?? "")).Append(',')
+              .Append(Csv(r?.ReportUrl ?? "")).AppendLine();
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Quotes a CSV field when it contains a comma, quote, or newline.</summary>
+    static string Csv(string s) =>
+        s.IndexOfAny([',', '"', '\n', '\r']) >= 0 ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
 
     static string BuildText(IReadOnlyList<ScanItem> items)
     {
