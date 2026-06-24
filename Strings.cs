@@ -92,6 +92,16 @@ internal static class Strings
     public static string ColFirstSeen = "İlk görülme";
     public static string ColPaths = "Yollar";
 
+    // ---- quarantine vault dialog ----
+    public static string DlgVaultTitle = "🗄 Karantina kasası";
+    public static string ColDate = "Tarih (UTC)";
+    public static string ColOriginalPath = "Orijinal konum";
+    public static string BtnRestore = "↩  Geri yükle";
+    public static string VaultStillMaliciousFormat = "DİKKAT: '{0}' hâlâ zararlı görünüyor ({1}/{2}). Yine de geri yüklensin mi?";
+    public static string VaultRestoreConfirmFormat = "'{0}' şu konuma geri yüklensin mi?\n{1}";
+    public static string VaultRestoredFormat = "Geri yüklendi: {0}";
+    public static string VaultRestoreFailedFormat = "Geri yüklenemedi: {0}";
+
     // ---- quota-exhausted dialog ----
     public static string DlgQuotaTitle = "API kotası doldu";
     public static string QuotaExhaustedMsgFormat = "Tüm API anahtarlarının kotası doldu.\nEn erken sıfırlanma: {0:HH:mm} (yerel saat).\n\nNe yapmak istersiniz?";

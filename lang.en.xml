@@ -35,6 +35,14 @@
   <s name="BtnClose">Close</s>
   <s name="BtnOk">OK</s>
   <s name="DlgCancel">Cancel</s>
+  <s name="DlgVaultTitle">🗄 Quarantine vault</s>
+  <s name="ColDate">Date (UTC)</s>
+  <s name="ColOriginalPath">Original location</s>
+  <s name="BtnRestore">↩  Restore</s>
+  <s name="VaultStillMaliciousFormat">WARNING: '{0}' still looks malicious ({1}/{2}). Restore anyway?</s>
+  <s name="VaultRestoreConfirmFormat">Restore '{0}' to this location?\n{1}</s>
+  <s name="VaultRestoredFormat">Restored: {0}</s>
+  <s name="VaultRestoreFailedFormat">Restore failed: {0}</s>
   <s name="DlgQuotaTitle">API quota exhausted</s>
   <s name="QuotaExhaustedMsgFormat">All API keys are out of quota.\nSoonest reset: {0:HH:mm} (local time).\n\nWhat would you like to do?</s>
   <s name="QuotaChoiceWait">⏳  Wait — auto-resume when it resets</s>

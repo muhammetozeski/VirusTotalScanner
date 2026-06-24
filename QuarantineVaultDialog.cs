@@ -10,7 +10,7 @@ internal sealed class QuarantineVaultDialog : Form
 
     public QuarantineVaultDialog()
     {
-        Text = "🗄 Karantina kasası";
+        Text = Strings.DlgVaultTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(860, 460);
         MinimumSize = new Size(620, 320);
@@ -21,14 +21,14 @@ internal sealed class QuarantineVaultDialog : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(QuarantineEntry.FileName), Width = 160 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Verdikt", DataPropertyName = nameof(QuarantineEntry.Verdict), Width = 90 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tespit", DataPropertyName = nameof(QuarantineEntry.Detections), Width = 60 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih (UTC)", DataPropertyName = nameof(QuarantineEntry.QuarantinedUtc), Width = 130 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Orijinal konum", DataPropertyName = nameof(QuarantineEntry.OriginalPath), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(QuarantineEntry.FileName), Width = 160 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVerdict, DataPropertyName = nameof(QuarantineEntry.Verdict), Width = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDetections, DataPropertyName = nameof(QuarantineEntry.Detections), Width = 60 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDate, DataPropertyName = nameof(QuarantineEntry.QuarantinedUtc), Width = 130 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColOriginalPath, DataPropertyName = nameof(QuarantineEntry.OriginalPath), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
-        var restore = ThemeManager.MakeButton("↩  Geri yükle", (_, _) => _ = RestoreSelectedAsync());
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Dock = DockStyle.Right, Width = 100 };
+        var restore = ThemeManager.MakeButton(Strings.BtnRestore, (_, _) => _ = RestoreSelectedAsync());
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Dock = DockStyle.Right, Width = 100 };
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 46, Padding = new Padding(10, 7, 10, 7) };
         bottom.Controls.Add(close);
         bottom.Controls.Add(restore);
@@ -60,19 +60,19 @@ internal sealed class QuarantineVaultDialog : Form
             {
                 var fresh = await GuiScrapeService.LookupAsync(e.Sha256!);
                 if (fresh is { } r && r.IsMalicious &&
-                    !NativeMessageBox.Confirm($"DİKKAT: '{e.FileName}' hâlâ zararlı görünüyor ({r.DetectionCount}/{r.TotalEngines}). Yine de geri yüklensin mi?"))
+                    !NativeMessageBox.Confirm(string.Format(Strings.VaultStillMaliciousFormat, e.FileName, r.DetectionCount, r.TotalEngines)))
                     return;
             }
             catch (Exception ex) { Log("Vault restore recheck failed: " + ex.Message, LogLevel.Warning); }
         }
 
-        if (!NativeMessageBox.Confirm($"'{e.FileName}' şu konuma geri yüklensin mi?\n{e.OriginalPath}")) return;
+        if (!NativeMessageBox.Confirm(string.Format(Strings.VaultRestoreConfirmFormat, e.FileName, e.OriginalPath))) return;
 
         if (QuarantineVault.Restore(e, out var err))
         {
-            NativeMessageBox.Info("Geri yüklendi: " + e.OriginalPath);
+            NativeMessageBox.Info(string.Format(Strings.VaultRestoredFormat, e.OriginalPath));
             Refresh2();
         }
-        else NativeMessageBox.Error("Geri yüklenemedi: " + err);
+        else NativeMessageBox.Error(string.Format(Strings.VaultRestoreFailedFormat, err));
     }
 }
