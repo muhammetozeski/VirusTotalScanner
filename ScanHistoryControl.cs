@@ -35,9 +35,16 @@ internal sealed class ScanHistoryControl : UserControl
             if (ScanHistoryStore.Count > 0 && NativeMessageBox.Confirm("Tüm tarama geçmişi silinsin mi? (önbellek etkilenmez)"))
                 ScanHistoryStore.Clear();
         });
+        var reverdict = ThemeManager.MakeButton("⚠  Sonradan tehdit oldu mu?", (_, _) =>
+        {
+            using var dlg = new HistoryReverdictDialog();
+            dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
+            dlg.ShowDialog(FindForm());
+        });
         strip.Controls.Add(_search);
         strip.Controls.Add(_threatsOnly);
         strip.Controls.Add(_starredOnly);
+        strip.Controls.Add(reverdict);
         strip.Controls.Add(clear);
         strip.Controls.Add(_count);
 
