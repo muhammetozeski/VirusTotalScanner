@@ -437,6 +437,9 @@ internal sealed partial class MainForm : Form
         {
             e.Cancel = true;
             Hide();
+            // Hand the (often big, post-scan) working set back to the OS while idling in the tray — pages
+            // fault back in on demand. Skipped during an active scan, where emptying pages backfires.
+            if (!AppServices.Scheduler.IsRunning) NativeFileOps.TrimWorkingSet();
             _toastAction = ToastAction.None;
             _tray.BalloonTipTitle = AppConstants.AppTitle;
             _tray.BalloonTipText = Strings.TrayRunningText;
