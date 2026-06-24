@@ -220,6 +220,16 @@ internal sealed class ScanDetailControl : UserControl
             OpenUrlInBrowser("https://www.google.com/search?q=" + Uri.EscapeDataString(res + " malware"));
     }
 
+    /// <summary>"When did THIS machine first see it" — the local arrival anchor from the hash cache, which
+    /// VT's global FirstSeen can't answer ("the world saw it 2y ago, but it landed here yesterday").</summary>
+    internal static string? LocalFirstSeenLine(ScanItem item)
+    {
+        if (AppServices.Cache.LocalFirstSeen(item.Md5 ?? item.Report?.Md5) is not { } utc) return null;
+        int days = Math.Max(0, (int)(DateTime.UtcNow - utc).TotalDays);
+        string ago = days == 0 ? "bugün" : $"{days} gün önce";
+        return $"💻 Bu makinede ilk görülme: {utc.ToLocalTime():yyyy-MM-dd} ({ago})";
+    }
+
     static bool IsStaleSig(VtEngineResult r)
     {
         int days = Settings.StaleSignatureDays;
@@ -310,6 +320,7 @@ internal sealed class ScanDetailControl : UserControl
             $"{Strings.DetailLblSize}{(report.Size > 0 ? FormatBytes(report.Size) : item.SizeText)}" +
             (report.Reputation != 0 ? $"\n{Strings.DetailLblReputation}{report.Reputation}" : "") +
             (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
+            (LocalFirstSeenLine(item) is { } lfs ? $"\n{lfs}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.ConfidenceText != null ? $"\n{report.ConfidenceText}" : "") +
             (report.StaleText != null ? $"\n{report.StaleText}" : "") +

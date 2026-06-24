@@ -89,6 +89,7 @@ internal static class ShareCard
         if (r?.ThreatLabel is { Length: > 0 } tl) sb.AppendLine("Tür: " + tl);
         else if (r?.Family is { Length: > 0 } fam) sb.AppendLine("Aile: " + fam);
         if (r?.FirstSeenText is { } fs) sb.AppendLine(fs);
+        if (AppServices.Cache.LocalFirstSeen(item.Md5 ?? r?.Md5) is { } lf) sb.AppendLine($"Bu makinede ilk görülme: {lf.ToLocalTime():yyyy-MM-dd}");
         if (item.Md5 is { Length: > 0 } md5) sb.AppendLine("MD5    " + md5);
         if ((item.Sha256 ?? r?.Sha256) is { Length: > 0 } sha) sb.AppendLine("SHA256 " + sha);
         if (r != null) sb.AppendLine(r.ReportUrl);

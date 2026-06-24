@@ -13,6 +13,10 @@ internal sealed class HashCacheEntry
     /// <summary>Last on-disk path this hash was seen at (for the folder-neighbors view).</summary>
     public string? LastPath { get; set; }
 
+    /// <summary>When THIS machine first cached this hash — set once on creation and preserved across
+    /// re-caches (unlike <see cref="CachedUtc"/>, which tracks last-seen). The local arrival anchor.</summary>
+    public DateTime LocalFirstSeenUtc { get; set; }
+
     // Explicitly recorded so cache.json is self-documenting (the user's ask): VT link + threat count.
     public string? ReportUrl { get; set; }
     public int Detections { get; set; }
@@ -72,8 +76,14 @@ internal sealed class HashCache
 
     public void Put(string md5, VtFileReport report, string? sourcePath = null)
     {
-        // Preserve a previously-recorded path when this Put has none (e.g. a hash-only re-check).
-        if (sourcePath == null && _entries.TryGetValue(md5, out var prev)) sourcePath = prev.LastPath;
+        // Preserve a previously-recorded path (e.g. a hash-only re-check) and the local first-seen anchor
+        // when this Put updates an existing entry — CachedUtc still advances to now as the last-seen time.
+        DateTime localFirstSeen = DateTime.UtcNow;
+        if (_entries.TryGetValue(md5, out var prev))
+        {
+            sourcePath ??= prev.LastPath;
+            if (prev.LocalFirstSeenUtc > DateTime.MinValue) localFirstSeen = prev.LocalFirstSeenUtc;
+        }
 
         // Store only the summary (no per-engine list) to keep cache.json small; the engine
         // table is re-fetched if the user re-scans.
@@ -110,6 +120,7 @@ internal sealed class HashCache
             Md5 = md5,
             Sha256 = report.Sha256,
             CachedUtc = DateTime.UtcNow,
+            LocalFirstSeenUtc = localFirstSeen,
             LastPath = sourcePath,
             ReportUrl = report.ReportUrl,
             Detections = report.DetectionCount,
@@ -118,6 +129,15 @@ internal sealed class HashCache
         };
         _dirty = true;
         MaybeSave();
+    }
+
+    /// <summary>When this machine first cached the given md5 (preserved across re-caches), or null if the
+    /// hash isn't cached or predates the field.</summary>
+    public DateTime? LocalFirstSeen(string? md5)
+    {
+        if (!string.IsNullOrEmpty(md5) && _entries.TryGetValue(md5, out var e) && e.LocalFirstSeenUtc > DateTime.MinValue)
+            return e.LocalFirstSeenUtc;
+        return null;
     }
 
     public int Count => _entries.Count;
