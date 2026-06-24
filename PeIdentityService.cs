@@ -53,6 +53,10 @@ internal static class PeIdentityService
                 !string.Equals(orig, onDisk, StringComparison.OrdinalIgnoreCase))
                 notes.Add($"📛 gömülü ad '{orig}' ≠ disk adı '{onDisk}'");
 
+            // Cross-history: this product was previously seen signed by a publisher it no longer matches.
+            var continuity = ProductSignerRegistry.ContinuityWarning(path, trust);
+            if (continuity != null) notes.Insert(0, continuity);
+
             if (notes.Count > 0) return "🪪 " + string.Join("  •  ", notes);
 
             // Otherwise a benign one-line identity, if there is one.

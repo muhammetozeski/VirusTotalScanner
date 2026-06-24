@@ -22,6 +22,7 @@ internal static class AppServices
         LocManager.Init();
         VerdictCategories.Load();
         MajorEngines.Load();
+        ProductSignerRegistry.Load();
         ConfirmGateManager.Load();
         Vault.Load();
         Cache.Load();

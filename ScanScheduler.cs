@@ -154,6 +154,7 @@ internal sealed class ScanScheduler
             if (opts.SkipTrusted && !opts.BypassTrust)
             {
                 var trust = TrustService.Evaluate(item.FilePath);
+                if (trust.Trusted) ProductSignerRegistry.RecordTrusted(item.FilePath, trust.Publisher);
                 if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
                 {
                     TrustSkip(item, trust.Reason, trust.Publisher);
