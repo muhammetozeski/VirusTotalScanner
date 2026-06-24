@@ -21,21 +21,24 @@ A Windows (WinForms, .NET 10) single-exe app that scans files/folders with Virus
 - Lessons in `öğrenilen değerli şeyler.md`.
 
 ## Done in the loop so far
-- Parallel-upload setting (separate upload semaphore from the scan concurrency).
-- Major/minor engine consensus ("who flagged it"): editable major-engine set, shown in the
-  detail pane + CLI + cache; surfaces likely false positives (verified on ski32.exe: 1 major / 5 minor).
-- Detail pane shows all engine results by default; community votes (harmless/malicious), toggleable.
-- CLI `--report <html|json|txt>` + `--fail-on <N>` exit-code gate (shared `ReportWriter`).
-- GUI "Export report (HTML/JSON/text)" button.
-- Detection-name normalization → most-common malware family label (detail + CLI + cache).
-- Download-origin signal from the NTFS Zone.Identifier stream (detail pane).
-- Verdict re-check sweep: keyless re-lookup of cached files older than a configurable period,
-  one batch confirm, reports verdict changes (GUI button + setting).
-- Folder rollup dialog: per-folder verdict breakdown, threats worst-first.
-- Size pre-filter: skip files over a configurable MB cap, shown as skip-ledger rows.
+- Parallel-upload setting; major/minor engine consensus ("who flagged it", editable set); all
+  engines shown by default; community votes; detection-name → family label; download-origin
+  (Zone.Identifier); behavior/capability summary (VT tags + threat label).
+- Signature-vs-heuristic confidence (VT `method` field); plain-language Keep/Caution/Remove
+  recommendation synthesizing all signals (detail pane + CLI).
+- PE identity / impersonation card (version-resource vs Authenticode signer; filename masquerade).
+- Verdict re-check sweep; folder rollup; size pre-filter; expected-hash verify (`--expect`).
+- CLI `--report html/csv/json/txt` + `--fail-on N`; `--diff <baseline.json>` verdict-regression
+  gate (`--fail-on-new`, `--fail-on-regression`); `--running`; `--verify-baseline`.
+- IR set: quarantine; find-all-copies on disk (Everything `es`); scan running processes; folder
+  neighbors; path-integrity baseline + drift; persistence hunt (Run/Startup/Tasks); family clusters.
+- Scheduled folder sweep (Windows Task); archive (ZIP-family) member expansion; quota-exhausted
+  3-option prompt; resilient WaitAsync (principle 43, built-in); trust-before-hash perf reorder.
+- EN/TR localization system (Strings + LocManager + lang.en.xml + switcher; main screen migrated).
+- Rich context menus + double-click; verdict row coloring + emojis.
+- Keyless GUI: fixed the browser popping up with no captcha (invisible reCAPTCHA false-trigger).
 
-## Not yet done (in the queue)
-Localization EN/TR (next), community comments, quota-exhausted 3-option, spread resilient
-recovery chains, behavior/sandbox summary, archive expansion, expected-hash, scheduled sweep,
-find-all-copies, folder neighbors, integrity baseline, scan running processes, context menus
-everywhere, UI polish/emojis.
+## Not yet done (in the queue, ~8 items)
+Community comments, finish string migration, full sandbox behaviours (network/dropped/MITRE),
+7z/rar/msi/iso expansion, live Downloads watch (FileSystemWatcher), publisher continuity check,
+verdict drift report, in-scan content dedup.
