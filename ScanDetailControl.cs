@@ -174,6 +174,17 @@ internal sealed class ScanDetailControl : UserControl
         _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVersion, DataPropertyName = nameof(VtEngineResult.EngineVersion), Width = 110 });
         _engines.CellFormatting += Engines_CellFormatting;
 
+        // Plain-language tooltips decoding AV jargon on the Category / Result columns.
+        _engines.ShowCellToolTips = true;
+        _engines.CellToolTipTextNeeded += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string prop = _engines.Columns[e.ColumnIndex].DataPropertyName;
+            string? val = _engines.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
+            if (prop == nameof(VtEngineResult.Category)) e.ToolTipText = JargonGlossary.Category(val);
+            else if (prop == nameof(VtEngineResult.Result)) e.ToolTipText = JargonGlossary.Result(val);
+        };
+
         // Right-click an engine row: copy the engine name, its result, or search the result online.
         var menu = new ContextMenuStrip();
         menu.Items.Add("📋  Motor adını kopyala", null, (_, _) => CopyEngine(r => r.EngineName));
