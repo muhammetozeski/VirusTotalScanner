@@ -17,9 +17,12 @@ internal sealed class HistoryEntry
     public int Detections { get; set; }
     public int Total { get; set; }
     public string Source { get; set; } = "";
+    public bool Starred { get; set; }
+    public string? Note { get; set; }
 
     [JsonIgnore] public DateTime WhenLocal => WhenUtc.ToLocalTime();
     [JsonIgnore] public string Ratio => Total > 0 ? $"{Detections}/{Total}" : "";
+    [JsonIgnore] public string Star => Starred ? "★" : "☆";
 }
 
 /// <summary>
@@ -85,6 +88,13 @@ internal static class ScanHistoryStore
     public static void Clear()
     {
         lock (Lock) { Entries.Clear(); Save(); }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Persist an in-place edit (star toggle, note) and notify listeners.</summary>
+    public static void Persist()
+    {
+        lock (Lock) { Save(); }
         Changed?.Invoke();
     }
 

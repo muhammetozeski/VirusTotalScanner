@@ -10,6 +10,7 @@ internal sealed class ScanHistoryControl : UserControl
     readonly DataGridView _grid = new();
     readonly TextBox _search = new() { Width = 220 };
     readonly CheckBox _threatsOnly = new() { Text = "Sadece tehditler", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
+    readonly CheckBox _starredOnly = new() { Text = "★ Yıldızlılar", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
     readonly Label _count = new() { AutoSize = true, Margin = new Padding(12, 7, 0, 0), Tag = "subtle" };
 
     /// <summary>Raised when the user asks to rescan a path from history.</summary>
@@ -28,6 +29,7 @@ internal sealed class ScanHistoryControl : UserControl
         _search.TextChanged += (_, _) => Reload();
         _search.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) _search.Clear(); };
         _threatsOnly.CheckedChanged += (_, _) => Reload();
+        _starredOnly.CheckedChanged += (_, _) => Reload();
         var clear = ThemeManager.MakeButton("🗑  Geçmişi temizle", (_, _) =>
         {
             if (ScanHistoryStore.Count > 0 && NativeMessageBox.Confirm("Tüm tarama geçmişi silinsin mi? (önbellek etkilenmez)"))
@@ -35,6 +37,7 @@ internal sealed class ScanHistoryControl : UserControl
         });
         strip.Controls.Add(_search);
         strip.Controls.Add(_threatsOnly);
+        strip.Controls.Add(_starredOnly);
         strip.Controls.Add(clear);
         strip.Controls.Add(_count);
 
@@ -64,13 +67,25 @@ internal sealed class ScanHistoryControl : UserControl
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih", DataPropertyName = nameof(HistoryEntry.WhenLocal), Width = 140, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(HistoryEntry.Name), Width = 200 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Verdikt", DataPropertyName = nameof(HistoryEntry.Verdict), Width = 100 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tespit", DataPropertyName = nameof(HistoryEntry.Ratio), Width = 70, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kaynak", DataPropertyName = nameof(HistoryEntry.Source), Width = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "★", DataPropertyName = nameof(HistoryEntry.Star), Width = 30, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih", DataPropertyName = nameof(HistoryEntry.WhenLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(HistoryEntry.Name), Width = 190 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Verdikt", DataPropertyName = nameof(HistoryEntry.Verdict), Width = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tespit", DataPropertyName = nameof(HistoryEntry.Ratio), Width = 60, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kaynak", DataPropertyName = nameof(HistoryEntry.Source), Width = 80 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Not", DataPropertyName = nameof(HistoryEntry.Note), Width = 160 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Yol", DataPropertyName = nameof(HistoryEntry.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         ThemeManager.StyleGrid(_grid);
+
+        // Click the ★ cell to toggle the star.
+        _grid.CellClick += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && e.ColumnIndex == 0 && _grid.Rows[e.RowIndex].DataBoundItem is HistoryEntry h)
+            {
+                h.Starred = !h.Starred;
+                ScanHistoryStore.Persist();
+            }
+        };
 
         _grid.CellFormatting += (_, e) =>
         {
@@ -84,6 +99,13 @@ internal sealed class ScanHistoryControl : UserControl
         menu.Items.Add("🔎  Ayrıntıyı aç", null, (_, _) => Reopen(Selected()));
         menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var h = Selected(); if (h?.Path != null && File.Exists(h.Path)) try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + h.Path + "\""); } catch { } });
         menu.Items.Add("📋  SHA-256 kopyala", null, (_, _) => { var h = Selected(); if (!string.IsNullOrEmpty(h?.Sha256)) try { Clipboard.SetText(h.Sha256); } catch { } });
+        menu.Items.Add("⭐  Yıldız aç/kapat", null, (_, _) => { if (Selected() is { } h) { h.Starred = !h.Starred; ScanHistoryStore.Persist(); } });
+        menu.Items.Add("📝  Not ekle/düzenle…", null, (_, _) =>
+        {
+            if (Selected() is not { } h) return;
+            string? note = Dialogs.InputBox("Bu tarama için not:", "Not", h.Note ?? "");
+            if (note != null) { h.Note = note; ScanHistoryStore.Persist(); }
+        });
         _grid.ContextMenuStrip = menu;
     }
 
@@ -95,6 +117,7 @@ internal sealed class ScanHistoryControl : UserControl
         var rows = ScanHistoryStore.All()
             .Reverse() // newest first
             .Where(e => !_threatsOnly.Checked || e.Detections > 0)
+            .Where(e => !_starredOnly.Checked || e.Starred)
             .Where(e => q.Length == 0
                 || (e.Name?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0
                 || (e.Path?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
