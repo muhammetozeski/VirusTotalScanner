@@ -366,6 +366,7 @@ internal sealed class ScanQueueControl : UserControl
                 return true;
             case Keys.Control | Keys.R: RescanSelected(); return true;
             case Keys.Control | Keys.Q: QuarantineSelected(); return true;
+            case Keys.Control | Keys.Shift | Keys.J: SelectAllThreats(); return true;
             case Keys.F5: _ = RunRecheckAsync(); return true;
         }
 
@@ -1221,6 +1222,24 @@ internal sealed class ScanQueueControl : UserControl
 
     /// <summary>Select and reveal a specific item (e.g. jumped to from a threat toast).</summary>
     static bool IsThreatish(ScanItem i) => BucketOf(i) is Bucket.Malicious or Bucket.Suspicious;
+
+    /// <summary>Ctrl+Shift+J: select every visible threat row (within the current filter) and scroll the
+    /// first into view, so the existing Ctrl+Q batch quarantine can clear them all hands-on-keyboard.</summary>
+    void SelectAllThreats()
+    {
+        _grid.ClearSelection();
+        int n = 0, first = -1;
+        foreach (DataGridViewRow row in _grid.Rows)
+            if (row.DataBoundItem is ScanItem it && IsThreatish(it))
+            {
+                row.Selected = true;
+                if (first < 0) first = row.Index;
+                n++;
+            }
+        if (n == 0) { _summary.Text = "Görünür tehdit yok."; return; }
+        if (first >= 0) try { _grid.FirstDisplayedScrollingRowIndex = first; } catch { }
+        _summary.Text = $"{n} tehdit seçildi — Ctrl+Q ile karantina";
+    }
 
     /// <summary>Move the selection to the next/previous grid row matching <paramref name="match"/>
     /// (wrapping at the ends), scroll it into view, and show a "3/12" position hint in the status line.</summary>
