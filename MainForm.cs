@@ -201,8 +201,7 @@ internal sealed partial class MainForm : Form
     {
         if (keyData == (Keys.Control | Keys.K))
         {
-            using var palette = new CommandPaletteForm(_scan.Commands());
-            palette.ShowDialog(this);
+            _scan.OpenPalette();
             return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);

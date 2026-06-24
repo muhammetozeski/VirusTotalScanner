@@ -86,6 +86,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
         bar.Controls.Add(ThemeManager.MakeButton("❓  Yardım", (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
+        bar.Controls.Add(ThemeManager.MakeButton("⌨  Ctrl+K · Tüm komutlar", (_, _) => OpenPalette()));
         var hint = ThemeManager.MakeLabel(Strings.DropHint, subtle: true);
         bar.Controls.Add(hint);
         AttachBarTooltips(bar);
@@ -404,6 +405,7 @@ internal sealed class ScanQueueControl : UserControl
             [Strings.BtnRecheck] = "Eski önbellek kayıtlarını kotasız (GUI) yeniden sorgula.",
             [Strings.BtnClearCache] = "Yerel hash önbelleğini temizle (verdiktler tekrar VT'den alınır).",
             ["🕓  Olay zaman çizelgesi"] = "Diske gelen çalıştırılabilirleri varış gününe göre kümele.",
+            ["⌨  Ctrl+K · Tüm komutlar"] = "Tüm özelliklere tek yerden ulaş (kopya bul, autostart kancaları, aile kümeleri…).",
             [Strings.BtnPause] = "Devam eden taramayı duraklat / sürdür.",
             [Strings.BtnCancel] = "Devam eden taramayı iptal et.",
         };
@@ -1326,6 +1328,14 @@ internal sealed class ScanQueueControl : UserControl
     }
 
     /// <summary>Every action, by Turkish name, for the Ctrl+K command palette.</summary>
+    /// <summary>Opens the Ctrl+K command palette over the full command list — shared by the visible
+    /// action-bar chip and the keyboard shortcut so both lead to the same discoverable door.</summary>
+    public void OpenPalette()
+    {
+        using var palette = new CommandPaletteForm(Commands());
+        palette.ShowDialog(FindForm());
+    }
+
     public List<CommandRecord> Commands() =>
     [
         new() { Name = "Dosya seç…", Desc = "Taranacak dosya(lar) seç", Run = SelectFiles },
