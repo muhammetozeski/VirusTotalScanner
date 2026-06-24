@@ -133,6 +133,11 @@
   <s name="GateYes">Yes</s>
   <s name="GateNo">No</s>
   <s name="GateAsking">  —  asking</s>
+  <s name="AdminDenied">Administrator permission was not granted.</s>
+  <s name="MenuStateOk">Installed ✓ (all users)</s>
+  <s name="MenuStateMissing">Not installed</s>
+  <s name="MenuStateStale">Old path — repair needed</s>
+  <s name="MenuStateUnknown">Status could not be read</s>
   <s name="MenuInstallConfirm">VirusTotalScanner will add itself to the Windows right-click menu (all users).\nAdministrator permission (UAC) will be requested.\n\nContinue?</s>
   <s name="MenuInstalledInfo">Added to the right-click menu.\nOn Windows 11 it appears under 'Show more options'.</s>
   <s name="MenuOpFailedWarn">The operation could not be completed (administrator permission may be required).</s>

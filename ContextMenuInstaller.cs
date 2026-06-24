@@ -29,7 +29,7 @@ internal static class ContextMenuInstaller
         error = null;
         if (!AdminHelper.IsRunningAsAdmin())
         {
-            if (!RunElevated("--install")) { error = "Yönetici izni verilmedi."; return false; }
+            if (!RunElevated("--install")) { error = Strings.AdminDenied; return false; }
             return Verify() == MenuState.Ok;
         }
 
@@ -59,7 +59,7 @@ internal static class ContextMenuInstaller
         error = null;
         if (!AdminHelper.IsRunningAsAdmin())
         {
-            if (!RunElevated("--repair")) { error = "Yönetici izni verilmedi."; return false; }
+            if (!RunElevated("--repair")) { error = Strings.AdminDenied; return false; }
             return Verify() == MenuState.Ok;
         }
         return Install(Settings.ContextMenuExcludeSafe, out error);
@@ -70,7 +70,7 @@ internal static class ContextMenuInstaller
         error = null;
         if (!AdminHelper.IsRunningAsAdmin())
         {
-            if (!RunElevated("--uninstall")) { error = "Yönetici izni verilmedi."; return false; }
+            if (!RunElevated("--uninstall")) { error = Strings.AdminDenied; return false; }
             return Verify() == MenuState.Missing;
         }
 
@@ -116,10 +116,10 @@ internal static class ContextMenuInstaller
 
     public static string Describe(MenuState s) => s switch
     {
-        MenuState.Ok => "Kurulu ✓ (tüm kullanıcılar)",
-        MenuState.Missing => "Kurulu değil",
-        MenuState.Stale => "Eski yol — onarım gerekli",
-        _ => "Durum okunamadı",
+        MenuState.Ok => Strings.MenuStateOk,
+        MenuState.Missing => Strings.MenuStateMissing,
+        MenuState.Stale => Strings.MenuStateStale,
+        _ => Strings.MenuStateUnknown,
     };
 
     public static bool NeedsRepair() => Settings.ContextMenuInstalled && Verify() == MenuState.Stale;
