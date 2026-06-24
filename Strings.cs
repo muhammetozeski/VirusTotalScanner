@@ -96,6 +96,33 @@ internal static class Strings
     public static string TrustHashLoadedFormat = "{0} hash yüklendi.";
     public static string TrustKeylessLabel = "Anahtarsız sorgu: VirusTotal'i GUI üzerinden aç (yavaş, kotasız)";
 
+    // ---- settings: verdict categories card ----
+    public static string CardVerdictCats = "Verdict Kategorileri (tespit sayısı → ad + renk)";
+    public static string ColMinDetections = "Min. tespit";
+    public static string ColName = "Ad";
+    public static string ColColor = "Renk";
+    public static string BtnAddShort = "Ekle";
+    public static string CatNewName = "Yeni";
+    public static string BtnPickColor = "Renk seç…";
+    public static string CatsSaved = "Kategoriler kaydedildi.";
+    public static string BtnDefault = "Varsayılan";
+    public static string BtnSaveMajorEngines = "Büyük motor listesini kaydet";
+    public static string MajorEnginesSaved = "Büyük motor listesi kaydedildi.";
+    public static string CatThresholdHint = "Eşikler benzersiz olmalı. Örn: 0→TEMİZ, 2→ŞÜPHELİ, 3→VİRÜS.";
+    public static string MajorEnginesHint = "Büyük (yüksek itibarlı) motorlar — konsensüs için (; ile ayır):";
+
+    // ---- settings: scan card ----
+    public static string CardScan = "Tarama";
+    public static string ScanConcurrencyLabel = "Eşzamanlı tarama:";
+    public static string ScanMaxSizeLabel = "Boyut sınırı (MB, 0=sınırsız):";
+    public static string ScanRecheckDaysLabel = "Verdikt yeniden denetim (gün):";
+    public static string ScanUploadsLabel = "Paralel yükleme (aynı anda):";
+    public static string ScanUseCacheLabel = "Yerel hash önbelleği kullan (kota tasarrufu)";
+    public static string ScanCacheDaysLabel = "Önbellek geçerlilik (gün):";
+    public static string ScanSkipSafeLabel = "Taramada güvenli türleri atla";
+    public static string ScanSafeExtsLabel = "Güvenli uzantılar (; ile ayır):";
+    public static string BtnSaveExts = "Uzantıları kaydet";
+
     // ---- API key dialog ----
     public static string DlgApiKeyAddTitle = "API anahtarı ekle";
     public static string DlgApiKeyEditTitle = "API anahtarını düzenle";

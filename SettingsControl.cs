@@ -149,12 +149,12 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildVerdictCard()
     {
-        var card = Card("Verdict Kategorileri (tespit sayısı → ad + renk)", 340, out var body);
+        var card = Card(Strings.CardVerdictCats, 340, out var body);
 
         _catGrid = new DataGridView { Dock = DockStyle.Top, Height = 130, AutoGenerateColumns = false };
-        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min. tespit", DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
-        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Ad", DataPropertyName = nameof(VerdictCategory.Name), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
-        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Renk", Width = 110, ReadOnly = true });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColMinDetections, DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColName, DataPropertyName = nameof(VerdictCategory.Name), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColColor, Width = 110, ReadOnly = true });
         _catGrid.ReadOnly = false;
         _catGrid.AllowUserToAddRows = false;
         _catGrid.CellFormatting += (_, e) =>
@@ -172,36 +172,36 @@ internal sealed class SettingsControl : UserControl
         RefreshCats();
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
-        buttons.Controls.Add(ThemeManager.MakeButton("Ekle", (_, _) =>
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAddShort, (_, _) =>
         {
             int next = (_catRows!.Count == 0 ? 0 : _catRows.Max(c => c.MinDetections) + 1);
-            _catRows.Add(new VerdictCategory { MinDetections = next, Name = "Yeni", ColorHex = "#888888" });
+            _catRows.Add(new VerdictCategory { MinDetections = next, Name = Strings.CatNewName, ColorHex = "#888888" });
         }, accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("Renk seç…", (_, _) =>
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnPickColor, (_, _) =>
         {
             if (_catGrid.CurrentRow?.DataBoundItem is not VerdictCategory c) return;
             using var dlg = new ColorDialog { Color = c.Color, FullOpen = true };
             if (dlg.ShowDialog() == DialogResult.OK) { c.ColorHex = "#" + dlg.Color.R.ToString("X2") + dlg.Color.G.ToString("X2") + dlg.Color.B.ToString("X2"); _catGrid.Invalidate(); }
         }));
-        buttons.Controls.Add(ThemeManager.MakeButton("Sil", (_, _) => { if (_catGrid.CurrentRow?.DataBoundItem is VerdictCategory c) _catRows!.Remove(c); }));
-        buttons.Controls.Add(ThemeManager.MakeButton("Kaydet", (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info("Kategoriler kaydedildi."); }));
-        buttons.Controls.Add(ThemeManager.MakeButton("Varsayılan", (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (_catGrid.CurrentRow?.DataBoundItem is VerdictCategory c) _catRows!.Remove(c); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSave, (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info(Strings.CatsSaved); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDefault, (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
 
         var majorBox = new TextBox { Dock = DockStyle.Top, Text = Settings.MajorEnginesList };
-        var majorSave = ThemeManager.MakeButton("Büyük motor listesini kaydet", (_, _) =>
+        var majorSave = ThemeManager.MakeButton(Strings.BtnSaveMajorEngines, (_, _) =>
         {
             Settings.MajorEnginesList.Value = majorBox.Text.Trim();
             SettingsManager.SaveSettings();
             MajorEngines.Load();
-            NativeMessageBox.Info("Büyük motor listesi kaydedildi.");
+            NativeMessageBox.Info(Strings.MajorEnginesSaved);
         });
 
         body.Controls.Add(buttons);
         body.Controls.Add(_catGrid);
-        body.Controls.Add(ThemeManager.MakeLabel("Eşikler benzersiz olmalı. Örn: 0→TEMİZ, 2→ŞÜPHELİ, 3→VİRÜS.", subtle: true));
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.CatThresholdHint, subtle: true));
         body.Controls.Add(majorSave);
         body.Controls.Add(majorBox);
-        body.Controls.Add(ThemeManager.MakeLabel("Büyük (yüksek itibarlı) motorlar — konsensüs için (; ile ayır):", subtle: true));
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.MajorEnginesHint, subtle: true));
         return card;
     }
 
@@ -214,26 +214,26 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildScanCard()
     {
-        var card = Card("Tarama", 355, out var body);
+        var card = Card(Strings.CardScan, 355, out var body);
 
-        var concurrency = LabeledNumeric("Eşzamanlı tarama:", Settings.MaxConcurrentScans, 1, 16,
+        var concurrency = LabeledNumeric(Strings.ScanConcurrencyLabel, Settings.MaxConcurrentScans, 1, 16,
             v => { Settings.MaxConcurrentScans.Value = v; SettingsManager.SaveSettings(); });
-        var maxSize = LabeledNumeric("Boyut sınırı (MB, 0=sınırsız):", Settings.MaxFileSizeMB, 0, 100000,
+        var maxSize = LabeledNumeric(Strings.ScanMaxSizeLabel, Settings.MaxFileSizeMB, 0, 100000,
             v => { Settings.MaxFileSizeMB.Value = v; SettingsManager.SaveSettings(); });
-        var recheckDays = LabeledNumeric("Verdikt yeniden denetim (gün):", Settings.RecheckPeriodDays, 1, 365,
+        var recheckDays = LabeledNumeric(Strings.ScanRecheckDaysLabel, Settings.RecheckPeriodDays, 1, 365,
             v => { Settings.RecheckPeriodDays.Value = v; SettingsManager.SaveSettings(); });
-        var uploads = LabeledNumeric("Paralel yükleme (aynı anda):", Settings.MaxConcurrentUploads, 1, 16,
+        var uploads = LabeledNumeric(Strings.ScanUploadsLabel, Settings.MaxConcurrentUploads, 1, 16,
             v => { Settings.MaxConcurrentUploads.Value = v; SettingsManager.SaveSettings(); });
-        var cache = new CheckBox { Text = "Yerel hash önbelleği kullan (kota tasarrufu)", AutoSize = true, Checked = Settings.UseLocalHashCache };
+        var cache = new CheckBox { Text = Strings.ScanUseCacheLabel, AutoSize = true, Checked = Settings.UseLocalHashCache };
         cache.CheckedChanged += (_, _) => { Settings.UseLocalHashCache.Value = cache.Checked; SettingsManager.SaveSettings(); };
-        var cacheDays = LabeledNumeric("Önbellek geçerlilik (gün):", Settings.HashCacheDays, 0, 365,
+        var cacheDays = LabeledNumeric(Strings.ScanCacheDaysLabel, Settings.HashCacheDays, 0, 365,
             v => { Settings.HashCacheDays.Value = v; SettingsManager.SaveSettings(); });
-        var skipSafe = new CheckBox { Text = "Taramada güvenli türleri atla", AutoSize = true, Checked = Settings.SkipSafeExtensionsOnScan };
+        var skipSafe = new CheckBox { Text = Strings.ScanSkipSafeLabel, AutoSize = true, Checked = Settings.SkipSafeExtensionsOnScan };
         skipSafe.CheckedChanged += (_, _) => { Settings.SkipSafeExtensionsOnScan.Value = skipSafe.Checked; SettingsManager.SaveSettings(); };
 
-        var lbl = ThemeManager.MakeLabel("Güvenli uzantılar (; ile ayır):");
+        var lbl = ThemeManager.MakeLabel(Strings.ScanSafeExtsLabel);
         var exts = new TextBox { Dock = DockStyle.Top, Text = Settings.SafeExtensions, Height = 24 };
-        var save = ThemeManager.MakeButton("Uzantıları kaydet", (_, _) => { Settings.SafeExtensions.Value = exts.Text.Trim(); SettingsManager.SaveSettings(); });
+        var save = ThemeManager.MakeButton(Strings.BtnSaveExts, (_, _) => { Settings.SafeExtensions.Value = exts.Text.Trim(); SettingsManager.SaveSettings(); });
 
         body.Controls.Add(exts);
         body.Controls.Add(lbl);
