@@ -12,6 +12,7 @@ internal sealed class ScanQueueControl : UserControl
 {
     readonly ScanScheduler _scheduler = AppServices.Scheduler;
     readonly DataGridView _grid = new();
+    readonly Panel _emptyCard = new() { Dock = DockStyle.Fill, Visible = false };
     readonly ScanDetailControl _detail = new();
     readonly Panel _overall = new();
     OverallProgress? _lastProgress; // drives the segmented bar's owner-draw
@@ -97,6 +98,9 @@ internal sealed class ScanQueueControl : UserControl
         split.Panel1.Controls.Add(_grid);
         split.Panel1.Controls.Add(BuildRecallBar());
         split.Panel1.Controls.Add(BuildUndoBar());
+        split.Panel1.Controls.Add(BuildEmptyState());
+        _emptyCard.BringToFront();
+        UpdateEmptyState(); // show over the empty queue at startup
         split.Panel2.Controls.Add(_detail);
         // Set min sizes / splitter only once the container has a real width (avoids the
         // "SplitterDistance must be between Panel1MinSize and Width - Panel2MinSize" crash).
@@ -136,8 +140,13 @@ internal sealed class ScanQueueControl : UserControl
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
         _scheduler.ProgressChanged += OnProgress;
         _scheduler.ItemFinished += OnItemFinished;
-        _scheduler.Started += () => SafeUi(() => { _exhaustPromptShown = false; UpdateRunningState(true); });
-        _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); });
+        _scheduler.Started += () => SafeUi(() => { _exhaustPromptShown = false; UpdateRunningState(true); _emptyCard.Visible = false; _grid.Visible = true; });
+        _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); UpdateEmptyState(); });
+        _scheduler.Items.ListChanged += (_, e) =>
+        {
+            if (e.ListChangedType is System.ComponentModel.ListChangedType.ItemAdded or System.ComponentModel.ListChangedType.ItemDeleted or System.ComponentModel.ListChangedType.Reset)
+                SafeUi(UpdateEmptyState);
+        };
         AppServices.Rotator.OnAllExhausted += t => SafeUi(() => OnAllKeysExhausted(t));
         AppServices.Rotator.OnResumed += () => SafeUi(() => _exhaustPromptShown = false);
 
@@ -1309,6 +1318,45 @@ internal sealed class ScanQueueControl : UserControl
         if (i == null) return;
         try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = "📋 Verdikt görseli panoya kopyalandı."; }
         catch (Exception ex) { Log("Verdict image copy failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>An overlay shown over the empty queue (auto-hidden once a row exists) that points a first-time
+    /// user at the otherwise-invisible ways in: pick files/folder, drag-drop, hash lookup, context-menu install.</summary>
+    Control BuildEmptyState()
+    {
+        _emptyCard.BackColor = Theme.Current.Background;
+        var stack = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        stack.Controls.Add(new Label { Text = "🛡️", AutoSize = true, Font = new Font("Segoe UI Emoji", 30f), ForeColor = Theme.Current.Accent, Margin = new Padding(0, 0, 0, 2) });
+        stack.Controls.Add(ThemeManager.MakeLabel("Taramaya başlamak için bir yol seç"));
+        stack.Controls.Add(ThemeManager.MakeLabel("Dosya/klasörleri buraya sürükleyip de bırakabilirsin", subtle: true));
+        var row = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        row.Controls.Add(ThemeManager.MakeButton("📄  Dosya seç…", (_, _) => SelectFiles(), accent: true));
+        row.Controls.Add(ThemeManager.MakeButton("📁  Klasör seç…", (_, _) => SelectFolder()));
+        row.Controls.Add(ThemeManager.MakeButton("🔎  Hash sorgula…", (_, _) => _ = HashLookupAsync()));
+        stack.Controls.Add(row);
+        if (ContextMenuInstaller.Verify() != MenuState.Ok)
+            stack.Controls.Add(ThemeManager.MakeButton("🖱  Sağ tuş menüsünü kur", (_, _) => _ = System.Threading.Tasks.Task.Run(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out _))));
+        _emptyCard.Controls.Add(stack);
+        void Center() => stack.Location = new Point(Math.Max(0, (_emptyCard.ClientSize.Width - stack.Width) / 2), Math.Max(0, (_emptyCard.ClientSize.Height - stack.Height) / 2));
+        _emptyCard.Resize += (_, _) => Center();
+        stack.SizeChanged += (_, _) => Center();
+        return _emptyCard;
+    }
+
+    void UpdateEmptyState()
+    {
+        bool empty = _scheduler.Items.Count == 0;
+        // Swap rather than overlay: only one Dock.Fill control is visible at a time, so there is no
+        // z-order race between the grid and the card.
+        _grid.Visible = !empty;
+        _emptyCard.Visible = empty;
+        if (empty) _emptyCard.BringToFront();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        UpdateEmptyState(); // re-assert once the control tree is realized (z-order is reliable here)
     }
 
     /// <summary>All currently-selected items (multi-select), for batch actions.</summary>
