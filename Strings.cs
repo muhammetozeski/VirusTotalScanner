@@ -200,6 +200,30 @@ internal static class Strings
     public static string CliDeltaFormat = "\nDelta: {0} yeni, {1} kötüleşti, {2} değişmedi.";
     public static string CliDoneFormat = "\nBitti. {0} dosya tarandı, {1} tehdit bulundu.";
 
+    // ---- CLI: recheck / behaviour / comments / baseline / verify-hash ----
+    public static string CliNoRecheckRecords = "Önbellekte denetlenecek kayıt yok.";
+    public static string CliRecheckingFormat = "{0} önbellek kaydı yeniden denetleniyor (kotasız)…";
+    public static string CliDriftHeaderFormat = "Verdict drift — {0} değişiklik / {1} denetlendi";
+    public static string CliDriftWrittenFormat = "{0} verdikt değişikliği yazıldı: {1}";
+    public static string CliErrBehaviourKeyless = "HATA: davranış için anahtarsız GUI gerekli (--keyless).";
+    public static string CliSecNetwork = "Ağ";
+    public static string CliSecFiles = "Yazılan/bırakılan dosyalar";
+    public static string CliSecRegistry = "Kayıt defteri";
+    public static string CliSecProcesses = "Süreçler";
+    public static string CliErrCommentsKeyless = "HATA: yorumlar için anahtarsız GUI gerekli (--keyless).";
+    public static string CliNoComments = "Yorum bulunamadı.";
+    public static string CliNoWatchedFiles = "İzlenen dosya yok.";
+    public static string CliTagAlarm = "[ALARM]";
+    public static string CliTagChanged = "[değişti]";
+    public static string CliBaselineResultFormat = "{0} izlenen dosya denetlendi, {1} alarm.";
+    public static string CliErrExpectOneFile = "HATA: --expect tek bir dosya yolu ister.";
+    public static string CliErrHashFormat = "HATA: beklenen hash 32 (MD5), 40 (SHA-1) veya 64 (SHA-256) hex karakter olmalı.";
+    public static string CliHashMatchedFormat = "[EŞLEŞTİ] {0}: {1}  ✓  {2}";
+    public static string CliHashMismatchFormat = "[EŞLEŞMEDİ] {0}";
+    public static string CliHashExpectedFormat = "   Beklenen {0}: {1}";
+    public static string CliHashActualFormat = "   Gerçek   {0}: {1}";
+    public static string CliErrPrefix = "HATA: ";
+
     // ---- context-menu installer ----
     public static string AdminDenied = "Yönetici izni verilmedi.";
     public static string MenuStateOk = "Kurulu ✓ (tüm kullanıcılar)";

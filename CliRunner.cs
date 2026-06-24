@@ -121,8 +121,8 @@ internal static class CliRunner
     static async Task<int> DriftReportCmd(string path)
     {
         var due = RecheckService.DueForRecheck(AppServices.Cache, 0); // re-check every cached entry
-        if (due.Count == 0) { Console.WriteLine("Önbellekte denetlenecek kayıt yok."); return 0; }
-        Console.WriteLine($"{due.Count} önbellek kaydı yeniden denetleniyor (kotasız)…");
+        if (due.Count == 0) { Console.WriteLine(Strings.CliNoRecheckRecords); return 0; }
+        Console.WriteLine(string.Format(Strings.CliRecheckingFormat, due.Count));
         var changes = await RecheckService.RunAsync(AppServices.Cache, due, null, default);
 
         string ext = Path.GetExtension(path).ToLowerInvariant();
@@ -135,33 +135,33 @@ internal static class CliRunner
         }
         else
         {
-            sb.AppendLine($"Verdict drift — {changes.Count} değişiklik / {due.Count} denetlendi");
+            sb.AppendLine(string.Format(Strings.CliDriftHeaderFormat, changes.Count, due.Count));
             foreach (var c in changes)
-                sb.AppendLine($"{(c.GotWorse ? "⬆ kötüleşti" : "⬇ iyileşti")}: {c.OldVerdict}({c.OldDetections}) → {c.NewVerdict}({c.NewDetections})  {c.Url}");
+                sb.AppendLine($"{(c.GotWorse ? Strings.RecheckWorse : Strings.RecheckBetter)}: {c.OldVerdict}({c.OldDetections}) → {c.NewVerdict}({c.NewDetections})  {c.Url}");
         }
         try { File.WriteAllText(path, sb.ToString(), new System.Text.UTF8Encoding(false)); }
-        catch (Exception ex) { Console.Error.WriteLine("Rapor yazılamadı: " + ex.Message); return 2; }
+        catch (Exception ex) { Console.Error.WriteLine(Strings.ReportWriteErrorPrefix + ex.Message); return 2; }
 
-        Console.WriteLine($"{changes.Count} verdikt değişikliği yazıldı: {path}");
+        Console.WriteLine(string.Format(Strings.CliDriftWrittenFormat, changes.Count, path));
         return changes.Any(c => c.GotWorse) ? 1 : 0;
     }
 
     static async Task<int> BehaviourCmd(string hash)
     {
         if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable))
-        { Console.Error.WriteLine("HATA: davranış için anahtarsız GUI gerekli (--keyless)."); return 3; }
+        { Console.Error.WriteLine(Strings.CliErrBehaviourKeyless); return 3; }
         var b = await GuiScrapeService.FetchBehaviourAsync(hash);
-        if (!b.Any) { Console.WriteLine("Sandbox davranış verisi bulunamadı."); return 0; }
+        if (!b.Any) { Console.WriteLine(Strings.BehaviourNone); return 0; }
         static void Section(string title, List<string> items)
         {
             if (items.Count == 0) return;
             Console.WriteLine(title + ":");
             foreach (var x in items.Take(15)) Console.WriteLine("   " + x);
         }
-        Section("Ağ", b.Network);
-        Section("Yazılan/bırakılan dosyalar", b.FilesWritten);
-        Section("Kayıt defteri", b.Registry);
-        Section("Süreçler", b.Processes);
+        Section(Strings.CliSecNetwork, b.Network);
+        Section(Strings.CliSecFiles, b.FilesWritten);
+        Section(Strings.CliSecRegistry, b.Registry);
+        Section(Strings.CliSecProcesses, b.Processes);
         Section("MITRE ATT&CK", b.Mitre);
         return 0;
     }
@@ -169,9 +169,9 @@ internal static class CliRunner
     static async Task<int> CommentsCmd(string hash)
     {
         if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable))
-        { Console.Error.WriteLine("HATA: yorumlar için anahtarsız GUI gerekli (--keyless)."); return 3; }
+        { Console.Error.WriteLine(Strings.CliErrCommentsKeyless); return 3; }
         var comments = await GuiScrapeService.FetchCommentsAsync(hash);
-        if (comments.Count == 0) { Console.WriteLine("Yorum bulunamadı."); return 0; }
+        if (comments.Count == 0) { Console.WriteLine(Strings.CliNoComments); return 0; }
         foreach (var c in comments.Take(20))
         {
             Console.WriteLine($"[{c.Date:yyyy-MM-dd}] {c.Text?.Replace("\n", " ").Trim()}");
@@ -182,12 +182,12 @@ internal static class CliRunner
 
     static async Task<int> VerifyBaselineCmd()
     {
-        if (BaselineStore.Count == 0) { Console.WriteLine("İzlenen dosya yok."); return 0; }
+        if (BaselineStore.Count == 0) { Console.WriteLine(Strings.CliNoWatchedFiles); return 0; }
         var res = await BaselineStore.VerifyAsync(null, default);
         foreach (var r in res.Where(r => r.Kind != DriftKind.Unchanged))
-            Console.WriteLine($"{(r.IsAlarm ? "[ALARM]" : "[değişti]")} {r.Path} — {r.Detail}");
+            Console.WriteLine($"{(r.IsAlarm ? Strings.CliTagAlarm : Strings.CliTagChanged)} {r.Path} — {r.Detail}");
         int alarms = res.Count(r => r.IsAlarm);
-        Console.WriteLine($"{res.Count} izlenen dosya denetlendi, {alarms} alarm.");
+        Console.WriteLine(string.Format(Strings.CliBaselineResultFormat, res.Count, alarms));
         return alarms > 0 ? 1 : 0;
     }
 
@@ -195,7 +195,7 @@ internal static class CliRunner
     {
         if (opts.Paths.Count != 1 || !File.Exists(opts.Paths[0]))
         {
-            Console.Error.WriteLine("HATA: --expect tek bir dosya yolu ister.");
+            Console.Error.WriteLine(Strings.CliErrExpectOneFile);
             return 2;
         }
         try
@@ -203,20 +203,20 @@ internal static class CliRunner
             var r = await HashService.VerifyExpectedAsync(opts.Paths[0], opts.ExpectedHash!);
             if (r.Algorithm == "?")
             {
-                Console.Error.WriteLine("HATA: beklenen hash 32 (MD5), 40 (SHA-1) veya 64 (SHA-256) hex karakter olmalı.");
+                Console.Error.WriteLine(Strings.CliErrHashFormat);
                 return 2;
             }
             if (r.Matched)
             {
-                Console.WriteLine($"[EŞLEŞTİ] {r.Algorithm}: {r.Actual}  ✓  {opts.Paths[0]}");
+                Console.WriteLine(string.Format(Strings.CliHashMatchedFormat, r.Algorithm, r.Actual, opts.Paths[0]));
                 return 0;
             }
-            Console.WriteLine($"[EŞLEŞMEDİ] {opts.Paths[0]}");
-            Console.WriteLine($"   Beklenen {r.Algorithm}: {r.Expected}");
-            Console.WriteLine($"   Gerçek   {r.Algorithm}: {r.Actual}");
+            Console.WriteLine(string.Format(Strings.CliHashMismatchFormat, opts.Paths[0]));
+            Console.WriteLine(string.Format(Strings.CliHashExpectedFormat, r.Algorithm, r.Expected));
+            Console.WriteLine(string.Format(Strings.CliHashActualFormat, r.Algorithm, r.Actual));
             return 4;
         }
-        catch (Exception ex) { Console.Error.WriteLine("HATA: " + ex.Message); return 3; }
+        catch (Exception ex) { Console.Error.WriteLine(Strings.CliErrPrefix + ex.Message); return 3; }
     }
 
     static async Task<int> LookupAsync(string hash, bool json)
