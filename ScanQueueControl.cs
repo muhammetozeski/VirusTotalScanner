@@ -913,11 +913,8 @@ internal sealed class ScanQueueControl : UserControl
         if (i == null) return;
         var hooks = PersistenceHunter.Find(i.FilePath);
         if (hooks.Count == 0) { NativeMessageBox.Info(string.Format(Strings.PersistenceNoneFormat, i.FileName)); return; }
-        var sb = new StringBuilder();
-        sb.AppendLine(string.Format(Strings.PersistenceFoundFormat, i.FileName, hooks.Count));
-        foreach (var h in hooks.Take(25)) sb.AppendLine($"[{h.Location}] {h.Name}\n   {h.Command}\n");
-        sb.AppendLine(Strings.PersistenceManualNote);
-        NativeMessageBox.Warn(sb.ToString());
+        using var dlg = new PersistenceHooksDialog(i.FileName, hooks);
+        dlg.ShowDialog(FindForm());
     }
 
     async Task PinBaselineAsync()
