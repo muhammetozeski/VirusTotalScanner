@@ -115,15 +115,17 @@ internal sealed partial class MainForm : Form
     ScanItem? _lastThreat;     // the item for a ShowThreat toast
     QuarantineEntry? _lastQuarantine; // the entry for an UndoQuarantine toast
     string[] _sweepThreatPaths = []; // the paths for a LoadSweepThreats toast
-    int _suppressedToasts; // non-urgent toasts held back during quiet hours / fullscreen, replayed grouped
+    readonly record struct DeferredToast(string Title, string Text, ToolTipIcon Icon, ToastAction Action, ScanItem? Threat);
+    readonly List<DeferredToast> _deferred = []; // held back during quiet hours / fullscreen, replayed with action intact
     readonly System.Windows.Forms.Timer _toastReplay = new() { Interval = 30000 };
     readonly System.Windows.Forms.Timer _periodicTimer = new(); // periodic background re-verdict / drift pass
 
-    /// <summary>True (and counts the toast for grouped replay) when a non-urgent toast must be held back.</summary>
+    /// <summary>True (and captures the toast's full state for action-preserving replay) when a toast must be
+    /// held back. Snapshots the already-set tray title/text/icon + action + threat payload.</summary>
     bool Gated()
     {
         if (!NotificationGate.ShouldSuppress()) return false;
-        _suppressedToasts++;
+        _deferred.Add(new DeferredToast(_tray.BalloonTipTitle, _tray.BalloonTipText, _tray.BalloonTipIcon, _toastAction, _toastAction == ToastAction.ShowThreat ? _lastThreat : null));
         _toastReplay.Start();
         return true;
     }
@@ -248,13 +250,32 @@ internal sealed partial class MainForm : Form
         {
             if (NotificationGate.ShouldSuppress()) return; // still quiet — keep waiting
             _toastReplay.Stop();
-            if (_suppressedToasts == 0) return;
-            int n = _suppressedToasts; _suppressedToasts = 0;
-            _toastAction = ToastAction.None;
-            _tray.BalloonTipTitle = "Ertelenen bildirimler";
-            _tray.BalloonTipText = $"Sessiz mod sırasında {n} bildirim ertelendi.";
-            _tray.BalloonTipIcon = ToolTipIcon.Info;
-            _tray.ShowBalloonTip(5000);
+            if (_deferred.Count == 0) return;
+            var batch = _deferred.ToList();
+            _deferred.Clear();
+            var threats = batch.Where(d => d.Action == ToastAction.ShowThreat && d.Threat != null).ToList();
+
+            if (threats.Count > 1)
+            {
+                // Several threats: one summary toast that still jumps to the most recent on click.
+                _lastThreat = threats[^1].Threat;
+                _toastAction = ToastAction.ShowThreat;
+                _tray.BalloonTipTitle = "Sessiz modda tehdit bulundu";
+                _tray.BalloonTipText = $"{threats.Count} tehdit bulundu — incelemek için tıkla.";
+                _tray.BalloonTipIcon = ToolTipIcon.Warning;
+                _tray.ShowBalloonTip(7000);
+                return;
+            }
+
+            // Otherwise re-raise the single most relevant held toast (a lone threat first) with its action
+            // intact, so clicking still acts — no information-losing bare count.
+            var one = threats.Count == 1 ? threats[0] : batch[^1];
+            _lastThreat = one.Threat;
+            _toastAction = one.Action;
+            _tray.BalloonTipTitle = one.Title;
+            _tray.BalloonTipText = one.Text;
+            _tray.BalloonTipIcon = one.Icon;
+            _tray.ShowBalloonTip(6000);
         };
     }
 
@@ -369,7 +390,7 @@ internal sealed partial class MainForm : Form
             _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
             _tray.BalloonTipText = $"{item.FileName}{OriginSuffix(item)}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
-            _tray.ShowBalloonTip(5000);
+            if (!Gated()) _tray.ShowBalloonTip(5000); // deferred during quiet hours → replayed with its action intact
         });
     }
 
