@@ -392,17 +392,21 @@ internal sealed class ScanQueueControl : UserControl
         var history = ScanHistoryStore.All();
         _recallLabel.ForeColor = Theme.Current.Text;
 
-        // Highest-priority signal: same PATH was scanned before, but the content (hash) has changed —
-        // exactly the "clean file swapped/trojanized in place" case the plain hash recall misses.
+        // Highest-priority signal: the content at this PATH changed since the last time it was scanned —
+        // the "clean file swapped/trojanized in place" case. Compare only against the immediately-prior
+        // scan at this path (not any older differing one), so a revert to earlier content isn't a false
+        // alarm, and exclude this scan's own just-recorded row.
         if (!string.IsNullOrEmpty(item.FilePath))
         {
-            var changed = history.LastOrDefault(e =>
-                string.Equals(e.Path, item.FilePath, StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrEmpty(e.Md5) && !string.Equals(e.Md5, md5, StringComparison.OrdinalIgnoreCase));
-            if (changed != null)
+            var atPath = history.Where(e =>
+                string.Equals(e.Path, item.FilePath, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(e.Md5)).ToList();
+            if (atPath.Count > 0 && string.Equals(atPath[^1].Md5, md5, StringComparison.OrdinalIgnoreCase))
+                atPath.RemoveAt(atPath.Count - 1); // drop this scan's own record
+            var priorAtPath = atPath.LastOrDefault();
+            if (priorAtPath != null && !string.Equals(priorAtPath.Md5, md5, StringComparison.OrdinalIgnoreCase))
             {
                 _recallBar.BackColor = RecallBlend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
-                _recallLabel.Text = $"⚠ Bu yolda daha önce FARKLI bir dosya taramıştın ({changed.WhenLocal:yyyy-MM-dd} — {changed.Verdict} {changed.Ratio}); içerik o zamandan beri DEĞİŞTİ.".TrimEnd();
+                _recallLabel.Text = $"⚠ Bu yolda en son FARKLI bir dosya taramıştın ({priorAtPath.WhenLocal:yyyy-MM-dd} — {priorAtPath.Verdict} {priorAtPath.Ratio}); içerik o zamandan beri DEĞİŞTİ.".TrimEnd();
                 _recallBar.Visible = true;
                 return;
             }
