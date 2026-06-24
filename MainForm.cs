@@ -325,11 +325,13 @@ internal sealed partial class MainForm : Form
         {
             _toastAction = ToastAction.ShowThreat;
             _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
-            _tray.BalloonTipText = $"{item.FileName}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
+            _tray.BalloonTipText = $"{item.FileName}{OriginSuffix(item)}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             _tray.ShowBalloonTip(5000);
         });
     }
+
+    static string OriginSuffix(ScanItem item) => string.IsNullOrEmpty(item.OriginNote) ? "" : " " + item.OriginNote;
 
     void AutoQuarantine(ScanItem item)
     {
@@ -338,7 +340,7 @@ internal sealed partial class MainForm : Form
             _lastQuarantine = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, item.FilePath, StringComparison.OrdinalIgnoreCase));
             _toastAction = ToastAction.UndoQuarantine;
             _tray.BalloonTipTitle = "Tehdit otomatik karantinaya alındı";
-            _tray.BalloonTipText = $"{item.FileName} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines}) — geri almak için tıkla.";
+            _tray.BalloonTipText = $"{item.FileName}{OriginSuffix(item)} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines}) — geri almak için tıkla.";
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             _tray.ShowBalloonTip(8000);
         }

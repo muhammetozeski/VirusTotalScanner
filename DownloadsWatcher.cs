@@ -68,25 +68,48 @@ internal sealed class DownloadsWatcher : IDisposable
             if (!await WaitStableAsync(path)) return;
             Interlocked.Increment(ref Seen);
 
-            // Same cheap-signal order as a normal scan: signed files clear silently, no quota.
-            var trust = TrustService.Evaluate(path);
-            if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
-            { Interlocked.Increment(ref Cleared); return; }
-
-            var (md5, sha) = await HashService.ComputeAsync(path);
-            var report = _cache.TryGet(md5, Settings.HashCacheDays)
-                ?? (GuiScrapeService.IsRuntimeAvailable ? await GuiScrapeService.LookupAsync(sha) : null);
-            if (report != null && report.TotalEngines > 0) _cache.Put(md5, report, path);
-
-            if (report?.IsMalicious == true)
+            // Most download-borne malware arrives zipped: expand archives and scan each member through the
+            // same pipeline, instead of hashing the container blob (whose hash never matches a VT report,
+            // so a packed payload was silently cleared).
+            if (ArchiveExpander.IsArchive(path) && ArchiveExpander.IsExpandable(path))
             {
-                Interlocked.Increment(ref Flagged);
-                ThreatFound?.Invoke(new ScanItem(path) { Report = report, Md5 = md5, Sha256 = sha });
+                string? tempDir = null;
+                try
+                {
+                    var members = ArchiveExpander.ExpandToTemp(path, out tempDir);
+                    foreach (var m in members)
+                        await VerdictOne(m, containerPath: path, originNote: "› " + Path.GetFileName(m));
+                }
+                finally { if (tempDir != null) ArchiveExpander.CleanupTemp(tempDir); }
+                return;
             }
-            else Interlocked.Increment(ref Cleared);
+
+            await VerdictOne(path, containerPath: path, originNote: null);
         }
         catch (Exception ex) { Log($"Downloads watch scan failed for {path}: {ex.Message}", LogLevel.Warning); }
         finally { lock (_lock) { _inflight.Remove(path); } }
+    }
+
+    /// <summary>Verdict for one file via the cheap-signal order (signed→cache→keyless). On a hit, the
+    /// threat is raised against <paramref name="containerPath"/> — the file the user actually downloaded
+    /// (so quarantine targets the .zip), labelled with the offending inner member via originNote.</summary>
+    async Task VerdictOne(string path, string containerPath, string? originNote)
+    {
+        var trust = TrustService.Evaluate(path);
+        if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
+        { Interlocked.Increment(ref Cleared); return; }
+
+        var (md5, sha) = await HashService.ComputeAsync(path);
+        var report = _cache.TryGet(md5, Settings.HashCacheDays)
+            ?? (GuiScrapeService.IsRuntimeAvailable ? await GuiScrapeService.LookupAsync(sha) : null);
+        if (report != null && report.TotalEngines > 0) _cache.Put(md5, report, path);
+
+        if (report?.IsMalicious == true)
+        {
+            Interlocked.Increment(ref Flagged);
+            ThreatFound?.Invoke(new ScanItem(containerPath) { Report = report, Md5 = md5, Sha256 = sha, OriginNote = originNote });
+        }
+        else Interlocked.Increment(ref Cleared);
     }
 
     /// <summary>Waits until the file stops growing and is readable (a download has finished), or gives up.</summary>

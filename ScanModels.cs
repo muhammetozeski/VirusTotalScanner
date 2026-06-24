@@ -28,6 +28,9 @@ internal sealed class ScanItem : INotifyPropertyChanged
 
     public string FilePath { get; }
     public string FileName => Path.GetFileName(FilePath);
+    /// <summary>Optional context shown next to the file name — e.g. the offending member of an archive
+    /// ("› setup.exe") when the threat was found inside a downloaded .zip.</summary>
+    public string? OriginNote { get; set; }
     public long SizeBytes { get; }
     public string SizeText => SizeBytes < 0 ? "?" : FormatBytes(SizeBytes);
 
