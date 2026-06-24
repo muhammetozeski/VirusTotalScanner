@@ -625,6 +625,11 @@ internal sealed class ScanQueueControl : UserControl
         const string exampleHash = "ab15a95de88ab0624307ae0e28e333756a2a522f650a0be78749901f7dc32ecf";
         string? input = Dialogs.InputBox(Strings.HashLookupPrompt, Strings.HashLookupTitle, exampleHash);
         if (string.IsNullOrWhiteSpace(input)) return;
+        await HashLookupAsync(input);
+    }
+
+    async Task HashLookupAsync(string input)
+    {
         input = input.Trim().ToLowerInvariant();
         if (!Regex.IsMatch(input, "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$"))
         {
@@ -645,6 +650,20 @@ internal sealed class ScanQueueControl : UserControl
             if (_grid.Rows.Count > 0) _grid.Rows[^1].Selected = true;
         }
         catch (Exception ex) { NativeMessageBox.Error(Strings.LookupFailedPrefix + ex.Message); }
+    }
+
+    /// <summary>Scan whatever is on the clipboard: a file/folder path → scan it; a bare MD5/SHA hash →
+    /// VT hash lookup. The fastest real flow: copy a file in Explorer (or a hash) and check it in one go.</summary>
+    public void ScanClipboard()
+    {
+        string text = "";
+        try { if (Clipboard.ContainsText()) text = (Clipboard.GetText() ?? "").Trim().Trim('"'); } catch { }
+        if (string.IsNullOrEmpty(text)) { NativeMessageBox.Info("Pano boş ya da metin içermiyor."); return; }
+        if (File.Exists(text)) { StartScan([text], recurse: false); return; }
+        if (Directory.Exists(text)) { StartScan([text], recurse: true); return; }
+        string hex = text.ToLowerInvariant();
+        if (Regex.IsMatch(hex, "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$")) { _ = HashLookupAsync(hex); return; }
+        NativeMessageBox.Info("Panodaki metin bir dosya yolu, klasör ya da hash değil:\n" + (text.Length > 100 ? text[..100] + "…" : text));
     }
 
     void TogglePause()
@@ -1062,6 +1081,7 @@ internal sealed class ScanQueueControl : UserControl
         new() { Name = "Dosya seç…", Desc = "Taranacak dosya(lar) seç", Run = SelectFiles },
         new() { Name = "Klasör seç…", Desc = "Bir klasörü alt klasörleriyle tara", Run = SelectFolder },
         new() { Name = "Hash sorgula…", Desc = "Bir MD5/SHA hash'ini VirusTotal'de ara", Run = () => _ = HashLookupAsync() },
+        new() { Name = "Panodaki yolu/hash'i tara", Desc = "Panodaki dosya yolunu, klasörü ya da MD5/SHA hash'ini denetle", Run = ScanClipboard },
         new() { Name = "Hash doğrula…", Desc = "Bir dosyayı beklenen hash ile karşılaştır", Run = () => _ = VerifyHashAsync() },
         new() { Name = "Çalışanları tara", Desc = "Çalışan tüm süreç imajlarını tara", Run = ScanRunning },
         new() { Name = "Bütünlük denetimi", Desc = "İzlenen dosyalarda değişiklik/drift ara", Run = () => _ = VerifyBaselineAsync() },

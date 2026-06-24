@@ -204,6 +204,7 @@ internal sealed partial class MainForm : Form
         _tray.Visible = true;
         var menu = new ContextMenuStrip();
         menu.Items.Add(Strings.TrayShow, null, (_, _) => RestoreFromTray());
+        menu.Items.Add("📋 Panodaki yolu tara", null, (_, _) => { RestoreFromTray(); _scan.ScanClipboard(); });
         menu.Items.Add(Strings.TrayExit, null, (_, _) => { _reallyExit = true; Close(); });
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => RestoreFromTray();
