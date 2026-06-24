@@ -116,6 +116,10 @@ internal static class Settings
     /// <summary>Permanently purge quarantined files older than this many days on startup (0 = keep forever).</summary>
     public static readonly Setting<int> QuarantineRetentionDays = new(0);
 
+    /// <summary>Re-run the watch-list re-verdict, due-cache re-check and baseline drift check every N hours
+    /// while the app sits in the tray (keyless, zero quota). 0 = only on startup.</summary>
+    public static readonly Setting<int> PeriodicRecheckHours = new(12);
+
     /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
     public static readonly Setting<string> WatchFolders = new("");
 

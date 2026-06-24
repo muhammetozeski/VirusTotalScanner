@@ -117,6 +117,7 @@ internal sealed partial class MainForm : Form
     string[] _sweepThreatPaths = []; // the paths for a LoadSweepThreats toast
     int _suppressedToasts; // non-urgent toasts held back during quiet hours / fullscreen, replayed grouped
     readonly System.Windows.Forms.Timer _toastReplay = new() { Interval = 30000 };
+    readonly System.Windows.Forms.Timer _periodicTimer = new(); // periodic background re-verdict / drift pass
 
     /// <summary>True (and counts the toast for grouped replay) when a non-urgent toast must be held back.</summary>
     bool Gated()
@@ -446,6 +447,43 @@ internal sealed partial class MainForm : Form
         CheckSweepResult();
         if (Settings.QuarantineRetentionDays > 0)
             try { QuarantineVault.PurgeOlderThan(Settings.QuarantineRetentionDays); } catch (Exception ex) { Log("Retention purge failed: " + ex.Message, LogLevel.Warning); }
+
+        int hrs = Settings.PeriodicRecheckHours;
+        if (hrs > 0)
+        {
+            _periodicTimer.Interval = (int)Math.Min(int.MaxValue, (long)hrs * 3600 * 1000);
+            _periodicTimer.Tick += (_, _) => _ = RunPeriodicChecksAsync();
+            _periodicTimer.Start();
+        }
+    }
+
+    /// <summary>Make the zero-quota re-verdict + the already-built tamper detection genuinely passive for a
+    /// tray session: re-run the watch list, the due-cache re-check and the baseline drift check on a timer
+    /// (skipped while a scan is running). Toasts go through the quiet-hours/fullscreen gate.</summary>
+    async Task RunPeriodicChecksAsync()
+    {
+        if (AppServices.Scheduler.IsRunning) return;
+        try
+        {
+            var esc = await WatchService.CheckAllAsync();
+            if (esc.Count > 0) SafeUi(() => ShowWatchEscalations(esc));
+
+            var due = RecheckService.DueForRecheck(AppServices.Cache, Settings.RecheckPeriodDays);
+            if (due.Count > 0) await RecheckService.RunAsync(AppServices.Cache, due, null, default);
+
+            var alarms = (await BaselineStore.VerifyAsync(null, default)).Where(d => d.IsAlarm).ToList();
+            if (alarms.Count > 0) SafeUi(() => ShowDriftAlarm(alarms));
+        }
+        catch (Exception ex) { Log("Periodic re-verdict failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    void ShowDriftAlarm(System.Collections.Generic.List<DriftResult> alarms)
+    {
+        _toastAction = ToastAction.None;
+        _tray.BalloonTipTitle = "Bütünlük uyarısı!";
+        _tray.BalloonTipText = $"{alarms.Count} izlenen dosya değişti ve güvenini kaybetti: {Path.GetFileName(alarms[0].Path)}";
+        _tray.BalloonTipIcon = ToolTipIcon.Warning;
+        if (!Gated()) _tray.ShowBalloonTip(8000);
     }
 
     /// <summary>Surface a scheduled sweep that found threats while the app was closed: a one-time attention

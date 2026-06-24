@@ -509,6 +509,12 @@ internal sealed class SettingsControl : UserControl
         retNum.ValueChanged += (_, _) => { Settings.QuarantineRetentionDays.Value = (int)retNum.Value; SettingsManager.SaveSettings(); };
         retRow.Controls.Add(retNum);
 
+        var perRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        perRow.Controls.Add(new Label { Text = "Tepside her N saatte arka planda yeniden denetle (izleme/önbellek/bütünlük, 0=sadece açılışta):", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        var perNum = new NumericUpDown { Minimum = 0, Maximum = 168, Value = Math.Max(0, Math.Min(168, Settings.PeriodicRecheckHours.Value)), Width = 70 };
+        perNum.ValueChanged += (_, _) => { Settings.PeriodicRecheckHours.Value = (int)perNum.Value; SettingsManager.SaveSettings(); };
+        perRow.Controls.Add(perNum);
+
         var logging = new CheckBox { Text = Strings.LoggingLabel, AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
@@ -553,6 +559,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(mute);
         body.Controls.Add(quietRow);
         body.Controls.Add(retRow);
+        body.Controls.Add(perRow);
         body.Controls.Add(ledgerRow);
         body.Controls.Add(logging);
         return card;
