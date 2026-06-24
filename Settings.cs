@@ -77,6 +77,9 @@ internal static class Settings
     /// <summary>Watch download folders and auto-scan new executable-class files as they land.</summary>
     public static readonly Setting<bool> WatchDownloads = new(false);
 
+    /// <summary>Offer to scan a removable drive (USB stick, SD card) when it is plugged in.</summary>
+    public static readonly Setting<bool> WatchUsb = new(true);
+
     /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
     public static readonly Setting<string> WatchFolders = new("");
 

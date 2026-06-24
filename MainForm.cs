@@ -22,6 +22,45 @@ internal sealed partial class MainForm : Form
         TaskbarProgress.Init(Handle);
     }
 
+    // ---- removable-drive (USB) auto-scan ----
+    const int WM_DEVICECHANGE = 0x0219;
+    const int DBT_DEVICEARRIVAL = 0x8000;
+    const int DBT_DEVTYP_VOLUME = 0x0002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct DevBroadcastVolume { public int Size; public int DeviceType; public int Reserved; public int UnitMask; public short Flags; }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg == WM_DEVICECHANGE && (int)m.WParam == DBT_DEVICEARRIVAL && m.LParam != IntPtr.Zero)
+        {
+            try
+            {
+                if (Marshal.ReadInt32(m.LParam, 4) == DBT_DEVTYP_VOLUME) // dbch_devicetype
+                {
+                    var vol = Marshal.PtrToStructure<DevBroadcastVolume>(m.LParam);
+                    for (int i = 0; i < 26; i++)
+                        if ((vol.UnitMask & (1 << i)) != 0) { OnRemovableInserted((char)('A' + i)); break; }
+                }
+            }
+            catch (Exception ex) { Log("Device-change handling failed: " + ex.Message, LogLevel.Warning); }
+        }
+    }
+
+    void OnRemovableInserted(char letter)
+    {
+        if (!Settings.WatchUsb) return;
+        try { if (new DriveInfo(letter + ":\\").DriveType != DriveType.Removable) return; }
+        catch { return; }
+
+        _pendingUsbDrive = letter + ":\\";
+        _tray.BalloonTipTitle = "USB sürücü takıldı";
+        _tray.BalloonTipText = $"{letter}: sürücüsünü taramak için bu bildirime tıkla.";
+        _tray.BalloonTipIcon = ToolTipIcon.Info;
+        _tray.ShowBalloonTip(6000);
+    }
+
     void ApplyDarkTitleBar()
     {
         try
@@ -45,6 +84,7 @@ internal sealed partial class MainForm : Form
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
     readonly bool _startHidden;
+    string? _pendingUsbDrive; // set when a removable drive is inserted; scanned if the toast is clicked
 
     public MainForm(bool startHidden = false)
     {
@@ -151,6 +191,19 @@ internal sealed partial class MainForm : Form
         menu.Items.Add(Strings.TrayExit, null, (_, _) => { _reallyExit = true; Close(); });
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => RestoreFromTray();
+        _tray.BalloonTipClicked += OnBalloonClicked;
+    }
+
+    void OnBalloonClicked(object? sender, EventArgs e)
+    {
+        if (_pendingUsbDrive is { } drive)
+        {
+            _pendingUsbDrive = null;
+            RestoreFromTray();
+            _tabs.SelectedIndex = 1; // Tarama
+            _scan.StartScan([drive], recurse: true);
+        }
+        else RestoreFromTray();
     }
 
     void TryLoadIcon()
@@ -206,6 +259,7 @@ internal sealed partial class MainForm : Form
 
     void OnThreatFound(ScanItem item)
     {
+        _pendingUsbDrive = null; // a threat toast click should restore the window, not scan a stale drive
         if (!Settings.NotifyOnThreat) return;
         SafeUi(() =>
         {

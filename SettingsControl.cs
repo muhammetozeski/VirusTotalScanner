@@ -310,7 +310,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card(Strings.CardGeneral, 450, out var body);
+        var card = Card(Strings.CardGeneral, 478, out var body);
 
         var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
@@ -355,6 +355,9 @@ internal sealed class SettingsControl : UserControl
             SettingsManager.SaveSettings();
             NativeMessageBox.Info(string.Format(Strings.WatchToggleFormat, watch.Checked ? Strings.WatchOn : Strings.WatchOff));
         };
+        var usb = new CheckBox { Text = "USB takıldığında taramayı öner", AutoSize = true, Checked = Settings.WatchUsb };
+        usb.CheckedChanged += (_, _) => { Settings.WatchUsb.Value = usb.Checked; SettingsManager.SaveSettings(); };
+
         var logging = new CheckBox { Text = Strings.LoggingLabel, AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
@@ -390,6 +393,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(notify);
         body.Controls.Add(votes);
         body.Controls.Add(watch);
+        body.Controls.Add(usb);
         body.Controls.Add(ledgerRow);
         body.Controls.Add(logging);
         return card;
