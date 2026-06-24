@@ -55,6 +55,7 @@ internal sealed partial class MainForm : Form
         catch { return; }
 
         _pendingUsbDrive = letter + ":\\";
+        _toastAction = ToastAction.ScanUsb;
         _tray.BalloonTipTitle = "USB sürücü takıldı";
         _tray.BalloonTipText = $"{letter}: sürücüsünü taramak için bu bildirime tıkla.";
         _tray.BalloonTipIcon = ToolTipIcon.Info;
@@ -84,8 +85,10 @@ internal sealed partial class MainForm : Form
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
     readonly bool _startHidden;
-    string? _pendingUsbDrive; // set when a removable drive is inserted; scanned if the toast is clicked
-    ScanItem? _lastThreat;    // last threat toast's item; jumped to if that toast is clicked
+    enum ToastAction { None, ScanUsb, ShowThreat }
+    ToastAction _toastAction;  // what clicking the CURRENT balloon should do (set right before each toast)
+    string? _pendingUsbDrive;  // the removable drive for a ScanUsb toast
+    ScanItem? _lastThreat;     // the item for a ShowThreat toast
 
     public MainForm(bool startHidden = false)
     {
@@ -200,17 +203,20 @@ internal sealed partial class MainForm : Form
 
     void OnBalloonClicked(object? sender, EventArgs e)
     {
+        var action = _toastAction; // act only on what THIS toast was tagged for
+        _toastAction = ToastAction.None;
         RestoreFromTray();
-        if (_pendingUsbDrive is { } drive)
+        switch (action)
         {
-            _pendingUsbDrive = null;
-            _tabs.SelectedIndex = 1; // Tarama
-            _scan.StartScan([drive], recurse: true);
-        }
-        else if (_lastThreat is { } threat)
-        {
-            _tabs.SelectedIndex = 1; // jump to the threat so the user can act (quarantine, open VT…)
-            _scan.FocusItem(threat);
+            case ToastAction.ScanUsb when _pendingUsbDrive is { } drive:
+                _pendingUsbDrive = null;
+                _tabs.SelectedIndex = 1; // Tarama
+                _scan.StartScan([drive], recurse: true);
+                break;
+            case ToastAction.ShowThreat when _lastThreat is { } threat:
+                _tabs.SelectedIndex = 1; // jump to the threat so the user can act (quarantine, open VT…)
+                _scan.FocusItem(threat);
+                break;
         }
     }
 
@@ -268,6 +274,7 @@ internal sealed partial class MainForm : Form
     void ShowScanSummaryToast(System.Collections.Generic.IList<ScanItem> items)
     {
         int mal = items.Count(i => i.Report?.IsMalicious == true);
+        _toastAction = ToastAction.None;
         _tray.BalloonTipTitle = mal > 0 ? "Tarama bitti — tehdit bulundu" : "Tarama bitti — temiz";
         _tray.BalloonTipText = $"{items.Count} dosya tarandı, {mal} tehdit.";
         _tray.BalloonTipIcon = mal > 0 ? ToolTipIcon.Warning : ToolTipIcon.Info;
@@ -282,6 +289,7 @@ internal sealed partial class MainForm : Form
         if (item.Report != null && item.Report.DetectionCount < Settings.NotifyMinDetections) return; // below the user's severity floor
         SafeUi(() =>
         {
+            _toastAction = ToastAction.ShowThreat;
             _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
             _tray.BalloonTipText = $"{item.FileName}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
@@ -297,6 +305,7 @@ internal sealed partial class MainForm : Form
         {
             e.Cancel = true;
             Hide();
+            _toastAction = ToastAction.None;
             _tray.BalloonTipTitle = AppConstants.AppTitle;
             _tray.BalloonTipText = Strings.TrayRunningText;
             _tray.ShowBalloonTip(2000);
@@ -372,6 +381,7 @@ internal sealed partial class MainForm : Form
     {
         if (!Settings.NotifyOnThreat || esc.Count == 0) return;
         var first = esc[0];
+        _toastAction = ToastAction.None;
         _tray.BalloonTipTitle = "İzlenen dosya artık daha tehlikeli!";
         _tray.BalloonTipText = esc.Count == 1
             ? $"{first.Entry.Name}: {first.Old} → {first.New} motor tespit ediyor."
