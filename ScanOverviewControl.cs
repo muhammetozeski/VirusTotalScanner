@@ -16,7 +16,7 @@ internal sealed class ScanOverviewControl : UserControl
     Action? _statusAction;
     readonly Panel _attention = new() { Dock = DockStyle.Top, Height = 40, Visible = false, Padding = new Padding(12, 0, 8, 0) };
     readonly Label _attentionLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
-    readonly Panel _drop = new() { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(0, 130), Margin = new Padding(8) };
+    readonly Panel _drop = new() { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(0, 4, 0, 10), Margin = new Padding(8) };
     readonly Label _tehditNum = new(), _supheliNum = new(), _temizNum = new();
     readonly FlowLayoutPanel _recent = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8, 4, 8, 8) };
     readonly Label _quota = new() { Dock = DockStyle.Bottom, Height = 26, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(12, 0, 0, 0), Tag = "subtle" };
@@ -150,9 +150,11 @@ internal sealed class ScanOverviewControl : UserControl
 
     Control CoverageRow(string label, bool on, Action? enable, Action? settings)
     {
-        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
-        row.Controls.Add(new Label { Text = on ? "✓" : "✗", AutoSize = true, ForeColor = on ? Theme.Current.Success : Theme.Current.Warning, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Margin = new Padding(2, 3, 6, 0) });
-        row.Controls.Add(new Label { Text = label, AutoSize = true, ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, Margin = new Padding(0, 4, 8, 0) });
+        // Fixed icon + label widths so every row's action button starts at the same x (aligned column),
+        // and a uniform row height so button/no-button rows have even vertical rhythm.
+        var row = new FlowLayoutPanel { AutoSize = true, MinimumSize = new Size(0, 30), WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
+        row.Controls.Add(new Label { Text = on ? "✓" : "✗", AutoSize = false, Width = 22, Height = 28, ForeColor = on ? Theme.Current.Success : Theme.Current.Warning, Font = new Font("Segoe UI", 10f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(2, 0, 4, 0) });
+        row.Controls.Add(new Label { Text = label, AutoSize = false, Width = 200, Height = 28, ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 0, 8, 0) });
         if (!on)
         {
             if (enable != null) row.Controls.Add(ThemeManager.MakeButton("Aç", (_, _) => enable()));

@@ -55,7 +55,7 @@ internal sealed class ScanDetailControl : UserControl
         hashPanel.Controls.Add(HashRow("MD5", _md5, () => _item?.Md5));
         hashPanel.Controls.Add(HashRow("SHA-256", _sha, () => _item?.Sha256));
 
-        var togglePanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
+        var togglePanel = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Margin = new Padding(0, 4, 0, 4) };
         _showAll.Text = Strings.ShowAllEngines;
         _showAll.AutoSize = true;
         _showAll.Checked = true; // default: show every engine's result, not just detections
