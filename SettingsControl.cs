@@ -126,7 +126,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildAllowlistCard()
     {
-        var card = Card("Beyaz liste (temiz olarak işaretledikleriniz)", 240, out var body);
+        var card = Card("Beyaz liste (temiz olarak işaretledikleriniz)", 280, out var body);
 
         _allowGrid.Dock = DockStyle.Top;
         _allowGrid.Height = 150;
@@ -136,15 +136,36 @@ internal sealed class SettingsControl : UserControl
         _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(AllowlistEntry.FileName), Width = 170 });
         _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Gerekçe", DataPropertyName = nameof(AllowlistEntry.Reason), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Hash", DataPropertyName = nameof(AllowlistEntry.Hash), Width = 110 });
-        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eklendi", DataPropertyName = nameof(AllowlistEntry.AddedLocal), Width = 130 });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eklendi", DataPropertyName = nameof(AllowlistEntry.AddedLocal), Width = 120 });
+        _allowGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Durum", DataPropertyName = nameof(AllowlistEntry.Health), Width = 120 });
         ThemeManager.StyleGrid(_allowGrid);
+        _allowGrid.CellFormatting += (_, e) =>
+        {
+            if (_allowGrid.Rows[e.RowIndex].DataBoundItem is AllowlistEntry a && a.IsStale) e.CellStyle!.ForeColor = Theme.Current.Danger;
+        };
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
         buttons.Controls.Add(ThemeManager.MakeButton("Listeden çıkar", (_, _) =>
         {
             if (_allowGrid.CurrentRow?.DataBoundItem is AllowlistEntry e) AllowlistStore.Remove(e.Hash);
         }));
-        var hint = ThemeManager.MakeLabel("'Temiz olarak işaretle' dediğiniz dosyalar burada listelenir; çıkarırsanız bir sonraki taramada yeniden denetlenir.", subtle: true);
+        buttons.Controls.Add(ThemeManager.MakeButton("Gözden geçir (temiz say)", (_, _) =>
+        {
+            if (_allowGrid.CurrentRow?.DataBoundItem is AllowlistEntry e) AllowlistStore.MarkReviewed(e.Hash);
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton("🩺  Sağlık denetimi", async (_, _) =>
+        {
+            var stale = await AllowlistStore.CheckHealthAsync();
+            NativeMessageBox.Info(stale.Count == 0
+                ? "Beyaz listedeki tüm dosyalar hâlâ temiz."
+                : $"{stale.Count} dosya artık işaretli! Kırmızı satırları gözden geçirin (çıkarın ya da temiz sayın).");
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton("Geçmişten içe aktar", (_, _) =>
+        {
+            int n = AllowlistStore.ImportCleanFromHistory();
+            NativeMessageBox.Info($"{n} temiz dosya geçmişten beyaz listeye eklendi.");
+        }));
+        var hint = ThemeManager.MakeLabel("'Temiz olarak işaretle' dediğiniz dosyalar burada; 'Sağlık denetimi' bunları kotasız yeniden sorgular ve sonradan tehdide dönüşenleri kırmızı işaretler.", subtle: true);
 
         body.Controls.Add(hint);
         body.Controls.Add(buttons);
