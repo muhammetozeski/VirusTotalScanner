@@ -482,6 +482,12 @@ internal sealed class SettingsControl : UserControl
         quietRow.Controls.Add(new Label { Text = "–", AutoSize = true, Margin = new Padding(4, 6, 4, 0) });
         quietRow.Controls.Add(qEnd);
 
+        var retRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        retRow.Controls.Add(new Label { Text = "Karantinayı şu günden eski kayıtlardan otomatik temizle (0=kapalı):", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        var retNum = new NumericUpDown { Minimum = 0, Maximum = 3650, Value = Math.Max(0, Math.Min(3650, Settings.QuarantineRetentionDays.Value)), Width = 70 };
+        retNum.ValueChanged += (_, _) => { Settings.QuarantineRetentionDays.Value = (int)retNum.Value; SettingsManager.SaveSettings(); };
+        retRow.Controls.Add(retNum);
+
         var logging = new CheckBox { Text = Strings.LoggingLabel, AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
@@ -525,6 +531,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(autoQRow);
         body.Controls.Add(mute);
         body.Controls.Add(quietRow);
+        body.Controls.Add(retRow);
         body.Controls.Add(ledgerRow);
         body.Controls.Add(logging);
         return card;

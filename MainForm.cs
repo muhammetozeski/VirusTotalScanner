@@ -444,6 +444,8 @@ internal sealed partial class MainForm : Form
         StartWatchCheck();
         RetryPendingOutbox();
         CheckSweepResult();
+        if (Settings.QuarantineRetentionDays > 0)
+            try { QuarantineVault.PurgeOlderThan(Settings.QuarantineRetentionDays); } catch (Exception ex) { Log("Retention purge failed: " + ex.Message, LogLevel.Warning); }
     }
 
     /// <summary>Surface a scheduled sweep that found threats while the app was closed: a one-time attention

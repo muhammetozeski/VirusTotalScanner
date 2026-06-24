@@ -113,6 +113,9 @@ internal static class Settings
     /// click the toast — high-detection finds are auto-quarantined via the background threat path.</summary>
     public static readonly Setting<bool> AutoScanUsb = new(false);
 
+    /// <summary>Permanently purge quarantined files older than this many days on startup (0 = keep forever).</summary>
+    public static readonly Setting<int> QuarantineRetentionDays = new(0);
+
     /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
     public static readonly Setting<string> WatchFolders = new("");
 
