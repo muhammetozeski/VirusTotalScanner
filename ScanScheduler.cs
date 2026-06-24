@@ -24,6 +24,8 @@ internal sealed class ScanScheduler
 
     CancellationTokenSource? _cts;
     SemaphoreSlim? _uploadGate; // limits how many files upload to VT in parallel (set per run)
+    SemaphoreSlim? _lookupGate; // limits concurrent VT network lookups to the conservative MaxConcurrency;
+                                // the local pipeline (hash/trust/cache) runs wider so all-local sweeps aren't throttled
     ConcurrentDictionary<string, SemaphoreSlim>? _md5Gates; // per-run: one lookup per identical content
 
     /// <summary>Marshals an action to the UI thread (set by the GUI; direct call by default/CLI).</summary>
@@ -112,8 +114,12 @@ internal sealed class ScanScheduler
             }
 
             _uploadGate = new SemaphoreSlim(Math.Max(1, opts.MaxUploads));
+            _lookupGate = new SemaphoreSlim(Math.Max(1, opts.MaxConcurrency));
             _md5Gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
-            var po = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, opts.MaxConcurrency), CancellationToken = ct };
+            // Local stage (hash/trust/cache) is CPU/disk-bound — run it at core count; the VT network calls
+            // stay gated to the conservative MaxConcurrency by _lookupGate, so no added rate-limit risk.
+            int localDegree = Math.Max(Math.Max(1, opts.MaxConcurrency), Environment.ProcessorCount);
+            var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
             await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
         }
         catch (OperationCanceledException)
@@ -222,7 +228,13 @@ internal sealed class ScanScheduler
             {
                 var dup = (opts.UseCache && !opts.BypassTrust) ? _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays) : null;
                 if (dup != null) { UiPost(() => item.FromCache = true); report = dup; }
-                else report = await DoLookupAsync(item, md5, sha256, opts, ct);
+                else
+                {
+                    // Only the actual VT network call is gated to MaxConcurrency; everything above ran wide.
+                    await _lookupGate!.WaitAsync(ct);
+                    try { report = await DoLookupAsync(item, md5, sha256, opts, ct); }
+                    finally { _lookupGate.Release(); }
+                }
             }
             finally { dedupGate.Release(); }
 
