@@ -505,6 +505,7 @@ internal sealed class ScanQueueControl : UserControl
         menu.Items.Add(new ToolStripSeparator());
         var miQuarantine = (ToolStripMenuItem)menu.Items.Add(Strings.MenuQuarantine, null, (_, _) => QuarantineSelected());
         var miMarkClean = (ToolStripMenuItem)menu.Items.Add("✓  Temiz olarak işaretle", null, (_, _) => MarkCleanSelected());
+        var miSuppressFolder = (ToolStripMenuItem)menu.Items.Add("🔇  Bu klasörü sessizleştir", null, (_, _) => SuppressFolder());
 
         // Context-aware: disable actions that don't apply to the selected row's current state.
         menu.Opening += (_, e) =>
@@ -525,6 +526,7 @@ internal sealed class ScanQueueControl : UserControl
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;
             miMarkClean.Enabled = !string.IsNullOrEmpty(i?.Sha256) || !string.IsNullOrEmpty(i?.Md5);
+            miSuppressFolder.Enabled = !string.IsNullOrEmpty(i?.FilePath);
 
             // Count-aware labels when several rows are selected (batch actions).
             int n = SelectedItems().Count;
@@ -766,6 +768,16 @@ internal sealed class ScanQueueControl : UserControl
         item.SkipReason = "Kullanıcı temiz dedi";
         item.Status = ScanStatus.TrustedSkipped;
         _detail.Show(item);
+    }
+
+    void SuppressFolder()
+    {
+        var i = SelectedItem();
+        string? folder = string.IsNullOrEmpty(i?.FilePath) ? null : Path.GetDirectoryName(i!.FilePath);
+        if (string.IsNullOrEmpty(folder)) return;
+        if (!NativeMessageBox.Confirm($"Bu klasör ve altındaki tüm dosyalar bundan sonra taramada atlanacak:\n{folder}\n\nDevam edilsin mi?")) return;
+        if (FolderSuppressionStore.Add(folder)) NativeMessageBox.Info($"Klasör sessizleştirildi:\n{folder}");
+        else NativeMessageBox.Info("Bu klasör zaten listede.");
     }
 
     void MarkCleanSelected()
