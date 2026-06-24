@@ -557,6 +557,7 @@ internal sealed class ScanQueueControl : UserControl
         });
         menu.Items.Add(new ToolStripSeparator());
         var miRescan = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescan, null, (_, _) => RescanSelected());
+        menu.Items.Add("🔁  Yalnızca hatalıları yeniden tara", null, (_, _) => RescanFailed());
         var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescanNoTrust, null, (_, _) => RescanIgnoringTrust());
         menu.Items.Add(new ToolStripSeparator());
         var miQuarantine = (ToolStripMenuItem)menu.Items.Add(Strings.MenuQuarantine, null, (_, _) => QuarantineSelected());
@@ -768,6 +769,16 @@ internal sealed class ScanQueueControl : UserControl
     {
         var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
         if (paths.Length > 0) StartScan(paths, recurse: false, bypassTrust: true);
+    }
+
+    /// <summary>Re-run exactly the rows that failed (transient 429s / network blips) — one-click post-sweep
+    /// cleanup instead of hand-multiselecting every red 'Hata' row.</summary>
+    void RescanFailed()
+    {
+        var paths = _scheduler.Items.Where(i => BucketOf(i) == Bucket.Error && File.Exists(i.FilePath))
+            .Select(i => i.FilePath).Distinct().ToArray();
+        if (paths.Length == 0) { NativeMessageBox.Info("Yeniden taranacak hatalı satır yok."); return; }
+        StartScan(paths, recurse: false);
     }
 
     /// <summary>Quarantine one specific item (from the detail-pane action strip), with the undo bar.</summary>
@@ -1283,6 +1294,7 @@ internal sealed class ScanQueueControl : UserControl
         new() { Name = "Dosya seç…", Desc = "Taranacak dosya(lar) seç", Run = SelectFiles },
         new() { Name = "Klasör seç…", Desc = "Bir klasörü alt klasörleriyle tara", Run = SelectFolder },
         new() { Name = "Hash sorgula…", Desc = "Bir MD5/SHA hash'ini VirusTotal'de ara", Run = () => _ = HashLookupAsync() },
+        new() { Name = "Yalnızca hatalıları yeniden tara", Desc = "Başarısız (Hata) satırların hepsini yeniden tara", Run = RescanFailed },
         new() { Name = "Panodaki yolu/hash'i tara", Desc = "Panodaki dosya yolunu, klasörü ya da MD5/SHA hash'ini denetle", Run = ScanClipboard },
         new() { Name = "Hash doğrula…", Desc = "Bir dosyayı beklenen hash ile karşılaştır", Run = () => _ = VerifyHashAsync() },
         new() { Name = "Çalışanları tara", Desc = "Çalışan tüm süreç imajlarını tara", Run = ScanRunning },
