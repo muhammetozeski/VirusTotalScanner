@@ -67,14 +67,14 @@ internal sealed class ScanDetailControl : UserControl
         {
             string? sha = _item?.Sha256;
             if (string.IsNullOrWhiteSpace(sha)) return;
-            if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) { NativeMessageBox.Warn("Topluluk yorumları için anahtarsız (GUI) mod gerekli."); return; }
+            if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) { NativeMessageBox.Warn(Strings.CommentsNeedKeyless); return; }
             commentsBtn.Enabled = false;
             string old = commentsBtn.Text;
-            commentsBtn.Text = "💬  Getiriliyor…";
+            commentsBtn.Text = Strings.CommentsFetching;
             try
             {
                 var comments = await GuiScrapeService.FetchCommentsAsync(sha);
-                if (comments.Count == 0) { NativeMessageBox.Info("Topluluk yorumu bulunamadı."); return; }
+                if (comments.Count == 0) { NativeMessageBox.Info(Strings.CommentsNone); return; }
                 var sb = new System.Text.StringBuilder();
                 foreach (var c in comments.Take(20))
                 {
@@ -84,7 +84,7 @@ internal sealed class ScanDetailControl : UserControl
                 }
                 NativeMessageBox.Info(sb.ToString());
             }
-            catch (Exception ex) { NativeMessageBox.Error("Yorumlar alınamadı: " + ex.Message); }
+            catch (Exception ex) { NativeMessageBox.Error(Strings.CommentsFailedPrefix + ex.Message); }
             finally { commentsBtn.Enabled = true; commentsBtn.Text = old; }
         };
         ThemeManager.StyleButton(commentsBtn);
@@ -94,14 +94,14 @@ internal sealed class ScanDetailControl : UserControl
         {
             string? sha = _item?.Sha256;
             if (string.IsNullOrWhiteSpace(sha)) return;
-            if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) { NativeMessageBox.Warn("Sandbox davranışı için anahtarsız (GUI) mod gerekli."); return; }
+            if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) { NativeMessageBox.Warn(Strings.BehaviourNeedKeyless); return; }
             behaviourBtn.Enabled = false;
             string old = behaviourBtn.Text;
-            behaviourBtn.Text = "🔬  Getiriliyor…";
+            behaviourBtn.Text = Strings.BehaviourFetching;
             try
             {
                 var b = await GuiScrapeService.FetchBehaviourAsync(sha);
-                if (!b.Any) { NativeMessageBox.Info("Sandbox davranış verisi bulunamadı."); return; }
+                if (!b.Any) { NativeMessageBox.Info(Strings.BehaviourNone); return; }
                 var sb = new System.Text.StringBuilder();
                 void Section(string title, List<string> items)
                 {
@@ -110,10 +110,10 @@ internal sealed class ScanDetailControl : UserControl
                     foreach (var x in items.Take(20)) sb.AppendLine("   " + x);
                     sb.AppendLine();
                 }
-                Section("🌐 Ağ", b.Network);
-                Section("📁 Yazılan/bırakılan dosyalar", b.FilesWritten);
-                Section("🗝 Kayıt defteri", b.Registry);
-                Section("⚙ Süreçler", b.Processes);
+                Section(Strings.SecNetwork, b.Network);
+                Section(Strings.SecFilesWritten, b.FilesWritten);
+                Section(Strings.SecRegistry, b.Registry);
+                Section(Strings.SecProcesses, b.Processes);
                 Section("🎯 MITRE ATT&CK", b.Mitre);
 
                 // Persist + correlate network IOCs across files (shared C2 = same campaign).
@@ -122,8 +122,8 @@ internal sealed class ScanDetailControl : UserControl
                 var conns = IocStore.Connections(sha, iocs);
                 if (conns.Count > 0)
                 {
-                    sb.AppendLine($"🔗 Bağlantılı tehditler: {conns.Count} dosya ortak IOC paylaşıyor" + (conns.Any(c => c.Malicious) ? " (bazıları ZARARLI!)" : "") + ":");
-                    foreach (var c in conns.Take(8)) sb.AppendLine($"   {(c.Malicious ? "🔴" : "•")} {Path.GetFileName(c.Path ?? c.Sha256)} — ortak: {string.Join(", ", c.Shared.Take(3))}");
+                    sb.AppendLine(string.Format(Strings.ConnectedThreatsFormat, conns.Count) + (conns.Any(c => c.Malicious) ? Strings.ConnectedThreatsMaliciousSuffix : "") + ":");
+                    foreach (var c in conns.Take(8)) sb.AppendLine($"   {(c.Malicious ? "🔴" : "•")} {Path.GetFileName(c.Path ?? c.Sha256)}{Strings.ConnectedShared}{string.Join(", ", c.Shared.Take(3))}");
                 }
 
                 NativeMessageBox.Info(sb.ToString());
@@ -198,7 +198,7 @@ internal sealed class ScanDetailControl : UserControl
 
         // Right-click an engine row: copy the engine name, its result, or search the result online.
         var menu = new ContextMenuStrip();
-        menu.Items.Add("📋  Motor adını kopyala", null, (_, _) => CopyEngine(r => r.EngineName));
+        menu.Items.Add(Strings.MenuCopyEngineName, null, (_, _) => CopyEngine(r => r.EngineName));
         menu.Items.Add("📋  Sonucu kopyala", null, (_, _) => CopyEngine(r => r.Result));
         menu.Items.Add("🔎  Sonucu internette ara", null, (_, _) => SearchEngineResult());
         _engines.ContextMenuStrip = menu;

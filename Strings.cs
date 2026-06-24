@@ -157,6 +157,24 @@ internal static class Strings
     public static string ColProgress = "İlerleme";
     public static string StatusReady = "Hazır.";
 
+    // ---- detail pane: comments + behaviour ----
+    public static string CommentsNeedKeyless = "Topluluk yorumları için anahtarsız (GUI) mod gerekli.";
+    public static string CommentsFetching = "💬  Getiriliyor…";
+    public static string CommentsNone = "Topluluk yorumu bulunamadı.";
+    public static string CommentsFailedPrefix = "Yorumlar alınamadı: ";
+    public static string BehaviourNeedKeyless = "Sandbox davranışı için anahtarsız (GUI) mod gerekli.";
+    public static string BehaviourFetching = "🔬  Getiriliyor…";
+    public static string BehaviourNone = "Sandbox davranış verisi bulunamadı.";
+    public static string BehaviourFailedPrefix = "Davranış alınamadı: ";
+    public static string SecNetwork = "🌐 Ağ";
+    public static string SecFilesWritten = "📁 Yazılan/bırakılan dosyalar";
+    public static string SecRegistry = "🗝 Kayıt defteri";
+    public static string SecProcesses = "⚙ Süreçler";
+    public static string ConnectedThreatsFormat = "🔗 Bağlantılı tehditler: {0} dosya ortak IOC paylaşıyor";
+    public static string ConnectedThreatsMaliciousSuffix = " (bazıları ZARARLI!)";
+    public static string ConnectedShared = " — ortak: ";
+    public static string MenuCopyEngineName = "📋  Motor adını kopyala";
+
     // ---- detail pane: body rendering ----
     public static string DetailEmptyHint = "Ayrıntıları görmek için soldan bir dosya seçin.";
     public static string BannerSigned = "İMZALI  —  VirusTotal taraması atlandı";
