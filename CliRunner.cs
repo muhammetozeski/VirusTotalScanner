@@ -86,6 +86,12 @@ internal static class CliRunner
             catch (Exception ex) { Console.Error.WriteLine(Strings.ReportWriteErrorPrefix + ex.Message); }
         }
 
+        if (opts.SweepResultPath != null)
+        {
+            try { SweepResultStore.Write(opts.SweepResultPath, scheduler.Items); }
+            catch (Exception ex) { Console.Error.WriteLine("Sweep result write error: " + ex.Message); }
+        }
+
         // Verdict-delta gate: compare against a prior --report json baseline (keyed by sha256).
         bool diffFail = false;
         if (opts.DiffBaseline != null)

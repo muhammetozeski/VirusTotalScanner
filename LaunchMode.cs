@@ -44,6 +44,7 @@ internal sealed class CliOptions
     public string? ExpectedHash;
     public string? SnapshotPath;
     public string? ReportPath;
+    public string? SweepResultPath; // machine-readable sweep outcome for the GUI to pick up
     public int FailOn = -1; // -1 = use verdict categories; >=0 = fail when any file hits >= N detections
     public string? DiffBaseline; // prior --report json to diff the current scan against
     public bool FailOnNew;
@@ -86,6 +87,7 @@ internal static class ArgumentDef
     static readonly CmdArg Expect = new("--expect", "--verify-hash");
     static readonly CmdArg Snapshot = new("--snapshot", "--snapshot");
     static readonly CmdArg Report = new("--report", "--report");
+    static readonly CmdArg SweepResult = new("--sweep-result", "--sweep-result");
     static readonly CmdArg FailOn = new("--fail-on", "--failon");
     static readonly CmdArg Diff = new("--diff", "--diff");
     static readonly CmdArg FailOnNew = new("--fail-on-new", "--failonnew");
@@ -129,6 +131,7 @@ internal static class ArgumentDef
             else if (Expect.IsMatch(a)) { if (i + 1 < args.Length) o.ExpectedHash = args[++i]; o.NoGui = true; }
             else if (Snapshot.IsMatch(a)) { if (i + 1 < args.Length) o.SnapshotPath = args[++i]; }
             else if (Report.IsMatch(a)) { if (i + 1 < args.Length) o.ReportPath = args[++i]; o.NoGui = true; }
+            else if (SweepResult.IsMatch(a)) { if (i + 1 < args.Length) o.SweepResultPath = args[++i]; o.NoGui = true; }
             else if (FailOn.IsMatch(a)) { if (i + 1 < args.Length && int.TryParse(args[++i], out var n)) o.FailOn = n; o.NoGui = true; }
             else if (Diff.IsMatch(a)) { if (i + 1 < args.Length) o.DiffBaseline = args[++i]; o.NoGui = true; }
             else if (FailOnNew.IsMatch(a)) { o.FailOnNew = true; o.NoGui = true; }

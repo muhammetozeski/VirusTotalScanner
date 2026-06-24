@@ -12,6 +12,7 @@ internal static class SweepScheduler
     const string TaskName = "VirusTotalScanner Sweep";
 
     public static string ReportPath => Path.Combine(ConfigPathResolver.DataFolder, "sweep-report.html");
+    public static string ResultPath => Path.Combine(ConfigPathResolver.DataFolder, "sweep-result.json");
 
     public static bool IsInstalled()
     {
@@ -27,7 +28,7 @@ internal static class SweepScheduler
         try
         {
             // The whole run command is one argument; ArgumentList escapes the embedded quotes for us.
-            string tr = $"\"{AppConstants.ThisExePath}\" --cli --recurse --quiet --report \"{ReportPath}\" \"{folder}\"";
+            string tr = $"\"{AppConstants.ThisExePath}\" --cli --recurse --quiet --report \"{ReportPath}\" --sweep-result \"{ResultPath}\" \"{folder}\"";
             var args = new List<string> { "/Create", "/TN", TaskName };
             args.AddRange(schedule);
             args.AddRange(["/TR", tr, "/F", "/RL", "LIMITED"]);
