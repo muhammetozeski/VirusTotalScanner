@@ -11,7 +11,8 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class PersistenceHunter
 {
-    public sealed record Hook(string Location, string Name, string Command);
+    public enum HookKind { RunKey, Startup, Task }
+    public sealed record Hook(string Location, string Name, string Command, HookKind Kind = HookKind.RunKey, bool Hklm = false, string? RegSub = null);
 
     public static List<Hook> Find(string filePath, IEnumerable<string>? alsoMatch = null)
     {
@@ -21,10 +22,10 @@ internal static class PersistenceHunter
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var hooks = new List<Hook>();
-        ScanRunKey(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Run", "HKCU\\Run", needles, hooks);
-        ScanRunKey(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\RunOnce", "HKCU\\RunOnce", needles, hooks);
-        ScanRunKey(Registry.LocalMachine, @"Software\Microsoft\Windows\CurrentVersion\Run", "HKLM\\Run", needles, hooks);
-        ScanRunKey(Registry.LocalMachine, @"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run", "HKLM\\Run (WOW64)", needles, hooks);
+        ScanRunKey(Registry.CurrentUser, false, @"Software\Microsoft\Windows\CurrentVersion\Run", "HKCU\\Run", needles, hooks);
+        ScanRunKey(Registry.CurrentUser, false, @"Software\Microsoft\Windows\CurrentVersion\RunOnce", "HKCU\\RunOnce", needles, hooks);
+        ScanRunKey(Registry.LocalMachine, true, @"Software\Microsoft\Windows\CurrentVersion\Run", "HKLM\\Run", needles, hooks);
+        ScanRunKey(Registry.LocalMachine, true, @"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run", "HKLM\\Run (WOW64)", needles, hooks);
         ScanStartup(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Başlangıç (kullanıcı)", needles, hooks);
         ScanStartup(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup), "Başlangıç (ortak)", needles, hooks);
         ScanTasks(needles, hooks);
@@ -34,7 +35,7 @@ internal static class PersistenceHunter
     static bool Matches(string text, List<string> needles) =>
         !string.IsNullOrEmpty(text) && needles.Any(n => text.Contains(n, StringComparison.OrdinalIgnoreCase));
 
-    static void ScanRunKey(RegistryKey root, string subPath, string label, List<string> needles, List<Hook> hooks)
+    static void ScanRunKey(RegistryKey root, bool hklm, string subPath, string label, List<string> needles, List<Hook> hooks)
     {
         try
         {
@@ -43,7 +44,7 @@ internal static class PersistenceHunter
             foreach (var name in k.GetValueNames())
             {
                 string cmd = k.GetValue(name)?.ToString() ?? "";
-                if (Matches(cmd, needles)) hooks.Add(new Hook(label, name, cmd));
+                if (Matches(cmd, needles)) hooks.Add(new Hook(label, name, cmd, HookKind.RunKey, hklm, subPath));
             }
         }
         catch (Exception ex) { Log($"Persistence scan failed ({label}): {ex.Message}", LogLevel.Warning); }
@@ -60,7 +61,7 @@ internal static class PersistenceHunter
                 string blob;
                 try { blob = File.ReadAllText(f); } catch { blob = Path.GetFileName(f); }
                 if (Matches(Path.GetFileName(f), needles) || Matches(blob, needles))
-                    hooks.Add(new Hook(label, Path.GetFileName(f), f));
+                    hooks.Add(new Hook(label, Path.GetFileName(f), f, HookKind.Startup));
             }
         }
         catch (Exception ex) { Log($"Persistence scan failed ({label}): {ex.Message}", LogLevel.Warning); }
@@ -84,7 +85,7 @@ internal static class PersistenceHunter
                 var fields = SplitCsv(line);
                 string name = fields.Count > 1 ? fields[1] : "(görev)";
                 string cmd = fields.Count > 8 ? fields[8] : line;
-                hooks.Add(new Hook("Zamanlanmış görev", name, cmd));
+                hooks.Add(new Hook("Zamanlanmış görev", name, cmd, HookKind.Task));
             }
             p.WaitForExit(15000);
         }
@@ -104,5 +105,70 @@ internal static class PersistenceHunter
         }
         fields.Add(cur.ToString());
         return fields;
+    }
+
+    /// <summary>Reversibly cut an autostart hook: a Run/RunOnce value is logged to a restore file in the
+    /// quarantine folder then deleted; a Startup .lnk is moved into the vault; a scheduled task is deleted
+    /// via schtasks. Returns false (with an error) if it couldn't — e.g. an HKLM value needs admin.</summary>
+    public static bool Remove(Hook h, out string? error)
+    {
+        error = null;
+        try
+        {
+            switch (h.Kind)
+            {
+                case HookKind.RunKey:
+                {
+                    var root = h.Hklm ? Registry.LocalMachine : Registry.CurrentUser;
+                    BackupRunValue(h);
+                    using var k = root.OpenSubKey(h.RegSub!, writable: true);
+                    k?.DeleteValue(h.Name, throwOnMissingValue: false);
+                    return true;
+                }
+                case HookKind.Startup:
+                {
+                    Directory.CreateDirectory(ConfigPathResolver.QuarantineFolder);
+                    string dest = Path.Combine(ConfigPathResolver.QuarantineFolder, "startup-" + Path.GetFileName(h.Command));
+                    File.Move(h.Command, dest, overwrite: true); // reversible: the .lnk now lives in the vault
+                    return true;
+                }
+                case HookKind.Task:
+                    return DeleteTask(h.Name, out error);
+            }
+            return false;
+        }
+        catch (Exception ex) { error = ex.Message; return false; }
+    }
+
+    static void BackupRunValue(Hook h)
+    {
+        try
+        {
+            Directory.CreateDirectory(ConfigPathResolver.QuarantineFolder);
+            string path = Path.Combine(ConfigPathResolver.QuarantineFolder, "autostart-restore.log");
+            string root = h.Hklm ? "HKLM" : "HKCU";
+            File.AppendAllText(path, $"{DateTime.Now:o}\t{root}\\{h.RegSub}\t{h.Name}\t{h.Command}{Environment.NewLine}");
+        }
+        catch { /* backup is best-effort */ }
+    }
+
+    static bool DeleteTask(string name, out string? error)
+    {
+        error = null;
+        try
+        {
+            using var p = new Process();
+            p.StartInfo.FileName = "schtasks.exe";
+            foreach (var a in new[] { "/delete", "/tn", name, "/f" }) p.StartInfo.ArgumentList.Add(a);
+            p.StartInfo.UseShellExecute = false;
+            p.StartInfo.RedirectStandardError = true;
+            p.StartInfo.CreateNoWindow = true;
+            p.Start();
+            string err = p.StandardError.ReadToEnd();
+            p.WaitForExit(15000);
+            if (p.ExitCode != 0) { error = string.IsNullOrWhiteSpace(err) ? $"schtasks çıkış {p.ExitCode}" : err.Trim(); return false; }
+            return true;
+        }
+        catch (Exception ex) { error = ex.Message; return false; }
     }
 }
