@@ -41,7 +41,7 @@ internal static class IocStore
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(_byHash.Values.ToList()));
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_byHash.Values.ToList()));
         }
         catch (Exception ex) { Log("IOC index save failed: " + ex.Message, LogLevel.Warning); }
     }

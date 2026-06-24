@@ -35,7 +35,7 @@ internal static class ProductSignerRegistry
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(_map));
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_map));
         }
         catch (Exception ex) { Log("Product-signer registry save failed: " + ex.Message, LogLevel.Warning); }
     }

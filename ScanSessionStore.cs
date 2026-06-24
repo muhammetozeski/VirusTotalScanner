@@ -27,7 +27,7 @@ internal static class ScanSessionStore
         {
             var s = new ScanSession { Paths = paths.ToArray(), Recurse = recurse, BypassTrust = bypassTrust, StartedUtc = DateTime.UtcNow };
             Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(s, Opts));
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(s, Opts));
         }
         catch (Exception ex) { Log("Scan session save failed: " + ex.Message, LogLevel.Warning); }
     }

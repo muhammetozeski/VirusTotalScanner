@@ -51,7 +51,7 @@ internal static class QuarantineVault
         try
         {
             Directory.CreateDirectory(Folder);
-            File.WriteAllText(ManifestPath, JsonSerializer.Serialize(_entries, JsonOpts));
+            AtomicFile.WriteAllText(ManifestPath, JsonSerializer.Serialize(_entries, JsonOpts));
         }
         catch (Exception ex) { Log("Quarantine manifest save failed: " + ex.Message, LogLevel.Warning); }
     }

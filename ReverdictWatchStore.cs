@@ -76,7 +76,7 @@ internal static class ReverdictWatchStore
 
     static void Save()
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); File.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts)); }
         catch (Exception ex) { Log("Watch save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

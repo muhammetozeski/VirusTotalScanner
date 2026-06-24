@@ -53,7 +53,7 @@ internal static class LedgerService
             .ToList();
 
         var ledger = new Ledger { Machine = Environment.MachineName, Entries = entries, Integrity = Integrity(entries) };
-        File.WriteAllText(path, JsonSerializer.Serialize(ledger, JsonOpts));
+        AtomicFile.WriteAllText(path, JsonSerializer.Serialize(ledger, JsonOpts));
         return entries.Count;
     }
 

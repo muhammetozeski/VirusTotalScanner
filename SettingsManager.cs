@@ -70,7 +70,7 @@ internal static class SettingsManager
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-            File.WriteAllText(ConfigPathResolver.ConfigPath, sb.ToString());
+            AtomicFile.WriteAllText(ConfigPathResolver.ConfigPath, sb.ToString());
         }
         catch (Exception ex)
         {

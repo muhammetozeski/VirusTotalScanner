@@ -55,7 +55,7 @@ internal static class BaselineStore
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(_records.Values.ToList(), JsonOpts));
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_records.Values.ToList(), JsonOpts));
         }
         catch (Exception ex) { Log("Baseline save failed: " + ex.Message, LogLevel.Warning); }
     }

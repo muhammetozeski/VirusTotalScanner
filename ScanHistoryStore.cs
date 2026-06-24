@@ -114,7 +114,7 @@ internal static class ScanHistoryStore
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.DataFolder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
         }
         catch (Exception ex) { Log("History save failed: " + ex.Message, LogLevel.Warning); }
     }

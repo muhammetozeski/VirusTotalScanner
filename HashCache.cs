@@ -158,7 +158,7 @@ internal sealed class HashCache
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-            File.WriteAllText(ConfigPathResolver.HashCachePath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
+            AtomicFile.WriteAllText(ConfigPathResolver.HashCachePath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
             _lastSaveUtc = DateTime.UtcNow;
             _dirty = false;
         }
