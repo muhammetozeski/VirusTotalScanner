@@ -105,6 +105,7 @@ internal sealed partial class MainForm : Form
     readonly SettingsControl _settings = new();
     readonly NotifyIcon _tray = new();
     readonly DownloadsWatcher _downloadsWatcher = new(AppServices.Cache);
+    readonly ProcessStartGuard _processGuard = new(AppServices.Cache);
     readonly StatusStrip _status = new();
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
@@ -168,6 +169,8 @@ internal sealed partial class MainForm : Form
         _overview.GoToHistoryFiltered += cat => { _tabs.SelectedIndex = 4; _history.ApplyExternalFilter(cat); }; // Geçmiş
         _overview.WatchDownloadsToggled += () => SafeUi(StartDownloadsWatchIfEnabled);
         _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
+        _processGuard.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
+        if (Settings.WatchProcessLaunches) _processGuard.Start();
         StartDownloadsWatchIfEnabled();
 
         AppServices.Scheduler.Started += () => SafeUi(TaskbarProgress.Indeterminate);
@@ -433,6 +436,7 @@ internal sealed partial class MainForm : Form
             return;
         }
         _downloadsWatcher.Dispose();
+        _processGuard.Dispose();
         ScanHistoryStore.Flush(); // don't lose the last throttled history rows on exit
         AppServices.Shutdown();
         _tray.Visible = false;

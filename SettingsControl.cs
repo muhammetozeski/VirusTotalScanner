@@ -482,6 +482,8 @@ internal sealed class SettingsControl : UserControl
         usb.CheckedChanged += (_, _) => { Settings.WatchUsb.Value = usb.Checked; SettingsManager.SaveSettings(); };
         var autoUsb = new CheckBox { Text = "USB takılınca tıklamadan hemen otomatik tara (arka planda)", AutoSize = true, Checked = Settings.AutoScanUsb };
         autoUsb.CheckedChanged += (_, _) => { Settings.AutoScanUsb.Value = autoUsb.Checked; SettingsManager.SaveSettings(); };
+        var procGuard = new CheckBox { Text = "Çalıştırılan her exe'yi başlarken denetle (gerçek-zamanlı, yönetici gerekir)", AutoSize = true, Checked = Settings.WatchProcessLaunches };
+        procGuard.CheckedChanged += (_, _) => { Settings.WatchProcessLaunches.Value = procGuard.Checked; SettingsManager.SaveSettings(); if (procGuard.Checked) NativeMessageBox.Info("Bu koruma bir sonraki açılışta etkinleşir (WMI izleme yönetici hakları gerektirir)."); };
 
         var autoQ = new CheckBox { Text = "Arka plan gözcüleri yüksek-tespitli tehditleri otomatik karantinaya alsın (geri alınabilir)", AutoSize = true, Checked = Settings.AutoQuarantineWatchers };
         autoQ.CheckedChanged += (_, _) => { Settings.AutoQuarantineWatchers.Value = autoQ.Checked; SettingsManager.SaveSettings(); };
@@ -554,6 +556,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(watch);
         body.Controls.Add(usb);
         body.Controls.Add(autoUsb);
+        body.Controls.Add(procGuard);
         body.Controls.Add(autoQ);
         body.Controls.Add(autoQRow);
         body.Controls.Add(mute);
