@@ -34,14 +34,18 @@ internal sealed class ScanOverviewControl : UserControl
     public event Action? WatchDownloadsToggled;
 
     readonly FlowLayoutPanel _coverageRows = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0) };
+    Control? _onboardCard;
+    readonly FlowLayoutPanel _onboardRows = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0) };
+    bool _onboardDismissed;
 
     public ScanOverviewControl()
     {
         Dock = DockStyle.Fill;
         AllowDrop = true;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 1, RowCount = 6, Padding = new Padding(8) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 1, RowCount = 7, Padding = new Padding(8) };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // full-width column, no horizontal scroll
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // onboarding card (first-run only)
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // status banner
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // coverage card
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // attention
@@ -53,12 +57,13 @@ internal sealed class ScanOverviewControl : UserControl
         BuildDropZone();
         BuildStatusBanner();
 
-        root.Controls.Add(_statusBanner, 0, 0);
-        root.Controls.Add(BuildCoverageCard(), 0, 1);
-        root.Controls.Add(_attention, 0, 2);
-        root.Controls.Add(_drop, 0, 3);
-        root.Controls.Add(BuildTiles(), 0, 4);
-        root.Controls.Add(BuildRecent(), 0, 5);
+        root.Controls.Add(BuildOnboardCard(), 0, 0);
+        root.Controls.Add(_statusBanner, 0, 1);
+        root.Controls.Add(BuildCoverageCard(), 0, 2);
+        root.Controls.Add(_attention, 0, 3);
+        root.Controls.Add(_drop, 0, 4);
+        root.Controls.Add(BuildTiles(), 0, 5);
+        root.Controls.Add(BuildRecent(), 0, 6);
         Controls.Add(root);
 
         DragEnter += (_, e) => { if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true) e.Effect = DragDropEffects.Copy; };
@@ -121,6 +126,39 @@ internal sealed class ScanOverviewControl : UserControl
         return host;
     }
 
+    Control BuildOnboardCard()
+    {
+        var card = ThemeManager.MakeCard();
+        card.Dock = DockStyle.Top; card.AutoSize = true; card.Margin = new Padding(8, 8, 8, 2); card.Visible = false;
+        var header = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false };
+        header.Controls.Add(ThemeManager.MakeTitle("🚀 Başlangıç — kurulumu tamamla", 10.5f));
+        header.Controls.Add(ThemeManager.MakeButton("Gizle", (_, _) => { _onboardDismissed = true; if (_onboardCard != null) _onboardCard.Visible = false; }));
+        card.Controls.Add(_onboardRows);
+        card.Controls.Add(header);
+        _onboardCard = card;
+        RefreshOnboard();
+        return card;
+    }
+
+    /// <summary>First-run checklist: live ✓/✗ setup steps with one-click actions, shown until every step is
+    /// done or the user dismisses it — replacing the old blocking yes/no dialog chain.</summary>
+    void RefreshOnboard()
+    {
+        if (_onboardCard == null) return;
+        bool keyOk = AppServices.Vault.UsableKeyCount > 0 || Settings.KeylessGuiLookup;
+        bool menuOk = Settings.ContextMenuInstalled;
+        bool watchOk = Settings.WatchDownloads;
+        bool scannedOk = ScanHistoryStore.Count > 0;
+        if (_onboardDismissed || (keyOk && menuOk && watchOk && scannedOk)) { _onboardCard.Visible = false; return; }
+
+        _onboardRows.Controls.Clear();
+        _onboardRows.Controls.Add(CoverageRow("API anahtarı / anahtarsız mod", keyOk, null, () => GoToTab?.Invoke(5), "Ayarlar →"));
+        _onboardRows.Controls.Add(CoverageRow("Sağ-tık menüsünü kur", menuOk, null, () => GoToTab?.Invoke(5), "Ayarlar →"));
+        _onboardRows.Controls.Add(CoverageRow("İndirilenleri izlemeyi aç", watchOk, () => { Settings.WatchDownloads.Value = true; SettingsManager.SaveSettings(); WatchDownloadsToggled?.Invoke(); Refresh2(); }, null, "Aç"));
+        _onboardRows.Controls.Add(CoverageRow("İlk taramanı yap", scannedOk, () => ScanDownloadsRequested?.Invoke(), null, "İndirilenleri tara"));
+        _onboardCard.Visible = true;
+    }
+
     Control BuildCoverageCard()
     {
         var card = ThemeManager.MakeCard();
@@ -148,17 +186,17 @@ internal sealed class ScanOverviewControl : UserControl
         _coverageRows.Controls.Add(CoverageRow("Sağ-tık menüsü", Settings.ContextMenuInstalled, enable: null, settings: () => GoToTab?.Invoke(5)));
     }
 
-    Control CoverageRow(string label, bool on, Action? enable, Action? settings)
+    Control CoverageRow(string label, bool on, Action? enable, Action? settings, string? actionLabel = null)
     {
         // Fixed icon + label widths so every row's action button starts at the same x (aligned column),
         // and a uniform row height so button/no-button rows have even vertical rhythm.
         var row = new FlowLayoutPanel { AutoSize = true, MinimumSize = new Size(0, 30), WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
         row.Controls.Add(new Label { Text = on ? "✓" : "✗", AutoSize = false, Width = 22, Height = 28, ForeColor = on ? Theme.Current.Success : Theme.Current.Warning, Font = new Font("Segoe UI", 10f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(2, 0, 4, 0) });
-        row.Controls.Add(new Label { Text = label, AutoSize = false, Width = 200, Height = 28, ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 0, 8, 0) });
+        row.Controls.Add(new Label { Text = label, AutoSize = false, Width = 240, Height = 28, ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 0, 8, 0) });
         if (!on)
         {
-            if (enable != null) row.Controls.Add(ThemeManager.MakeButton("Aç", (_, _) => enable()));
-            else if (settings != null) row.Controls.Add(ThemeManager.MakeButton("Ayarlar →", (_, _) => settings()));
+            if (enable != null) row.Controls.Add(ThemeManager.MakeButton(actionLabel ?? "Aç", (_, _) => enable()));
+            else if (settings != null) row.Controls.Add(ThemeManager.MakeButton(actionLabel ?? "Ayarlar →", (_, _) => settings()));
         }
         return row;
     }
@@ -252,6 +290,7 @@ internal sealed class ScanOverviewControl : UserControl
         UpdateAttention(tehdit);
         UpdateStatusBanner();
         RefreshCoverage();
+        RefreshOnboard();
     }
 
     Control RecentRow(HistoryEntry e)
