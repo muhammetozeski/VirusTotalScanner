@@ -77,4 +77,42 @@ internal static class SettingsManager
             Log("Failed to save settings: " + ex, LogLevel.Error);
         }
     }
+
+    // The DPAPI-bound encrypted API-key blob: never exported/imported (it's machine-bound and sensitive).
+    static readonly HashSet<string> PortableOmit = new(StringComparer.OrdinalIgnoreCase) { nameof(Settings.EncryptedKeyVault) };
+
+    /// <summary>Reset every registered setting to its shipped default and persist.</summary>
+    public static void ResetAllToDefaults()
+    {
+        foreach (var s in iSettings.Values) s.ResetToDefault();
+        SaveSettings();
+    }
+
+    /// <summary>Write the portable config (all key=value lines except the encrypted key vault) to a file.</summary>
+    public static void ExportSettings(string path)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"{AppConstants.CommentPrefix} {AppConstants.AppTitle} settings export — {DateTime.Now:yyyy-MM-dd}");
+        foreach (var setting in iSettingSetups.Values)
+            if (!PortableOmit.Contains(setting.Key))
+                sb.AppendLine($"{setting.Key} {AppConstants.KeyValueSeparator} {setting.Serialize()}");
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+    }
+
+    /// <summary>Apply a previously-exported config file (skipping the encrypted vault). Returns keys applied.</summary>
+    public static int ImportSettings(string path)
+    {
+        int n = 0;
+        foreach (var line in File.ReadAllLines(path))
+        {
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith(AppConstants.CommentPrefix)) continue;
+            var parts = line.Split(AppConstants.KeyValueSeparator, 2);
+            if (parts.Length != 2) continue;
+            string key = parts[0].Trim(), value = parts[1].Trim();
+            if (PortableOmit.Contains(key)) continue;
+            if (iSettingSetups.TryGetValue(key, out var s)) { s.LoadFromStr(value); n++; }
+        }
+        if (n > 0) SaveSettings();
+        return n;
+    }
 }
