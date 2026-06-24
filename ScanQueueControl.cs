@@ -274,6 +274,24 @@ internal sealed class ScanQueueControl : UserControl
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == (Keys.Control | Keys.F)) { _search.Focus(); _search.SelectAll(); return true; }
+        if (_search.Focused) return base.ProcessCmdKey(ref msg, keyData); // typing — don't hijack keys
+
+        switch (keyData)
+        {
+            case Keys.Control | Keys.C:
+                CopySafe(string.Join("\n", SelectedItems().Select(i => i.Sha256).Where(s => !string.IsNullOrEmpty(s))));
+                return true;
+            case Keys.Control | Keys.R: RescanSelected(); return true;
+            case Keys.Control | Keys.Q: QuarantineSelected(); return true;
+            case Keys.F5: _ = RunRecheckAsync(); return true;
+        }
+
+        // Enter/Space only when the grid itself has focus (so buttons keep their normal behavior).
+        if (_grid.Focused)
+        {
+            if (keyData == Keys.Enter) { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); return true; }
+            if (keyData == Keys.Space && _scheduler.IsRunning) { TogglePause(); return true; }
+        }
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
@@ -393,6 +411,9 @@ internal sealed class ScanQueueControl : UserControl
             miRescan.Text = n > 1 ? $"🔄  {n} dosyayı yeniden tara" : Strings.MenuRescan;
             miQuarantine.Text = n > 1 ? $"⚠  {n} dosyayı karantinaya al (.VIRUS)" : Strings.MenuQuarantine;
         };
+        miOpenVt.ShortcutKeyDisplayString = "Enter";
+        miRescan.ShortcutKeyDisplayString = "Ctrl+R";
+        miQuarantine.ShortcutKeyDisplayString = "Ctrl+Q";
         _grid.ContextMenuStrip = menu;
 
         // Double-click a row -> jump to the file in Explorer.
