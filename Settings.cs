@@ -92,6 +92,14 @@ internal static class Settings
     /// sweep's findings are announced once on next launch and not repeated.</summary>
     public static readonly Setting<string> LastSeenSweepUtc = new("");
 
+    /// <summary>Quiet-hours window (local hour 0–23) during which non-urgent toasts are held back and
+    /// replayed grouped afterward. Start==End disables the window.</summary>
+    public static readonly Setting<int> QuietHoursStart = new(0);
+    public static readonly Setting<int> QuietHoursEnd = new(0);
+
+    /// <summary>Hold back non-urgent toasts while a fullscreen app (game/presentation) is foreground.</summary>
+    public static readonly Setting<bool> MuteInFullscreen = new(true);
+
     /// <summary>Show VirusTotal community votes in the detail pane.</summary>
     public static readonly Setting<bool> ShowCommunityVotes = new(true);
 
