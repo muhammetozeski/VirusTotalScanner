@@ -21,14 +21,21 @@ internal sealed class ZoneInfo
         _ => "bilinmiyor",
     };
 
-    /// <summary>One-line summary for the detail pane, or null if there is no zone mark.</summary>
+    /// <summary>Provenance summary for the detail pane, or null if there is no zone mark. When the download
+    /// CDN/host and the referring page are both known and differ, both are shown on their own lines — the
+    /// real origin evidence is the page the user clicked, not the CDN it was served from.</summary>
     public string? Summary
     {
         get
         {
+            string warn = FromInternet ? "  ⚠ internetten indirildi" : "";
+            bool bothDiffer = !string.IsNullOrEmpty(HostUrl) && !string.IsNullOrEmpty(ReferrerUrl)
+                && !string.Equals(HostUrl, ReferrerUrl, StringComparison.OrdinalIgnoreCase);
+            if (bothDiffer)
+                return $"📥 Kaynak bölgesi: {ZoneName}{warn}\n   Kaynak (CDN/host): {HostUrl}\n   Yönlendiren sayfa: {ReferrerUrl}";
+
             string src = HostUrl ?? ReferrerUrl ?? "";
             string where = src.Length > 0 ? $" — {src}" : "";
-            string warn = FromInternet ? "  ⚠ internetten indirildi" : "";
             return $"📥 Kaynak bölgesi: {ZoneName}{where}{warn}";
         }
     }
