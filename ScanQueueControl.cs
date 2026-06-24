@@ -33,6 +33,9 @@ internal sealed class ScanQueueControl : UserControl
     readonly System.Windows.Forms.Timer _filterTimer = new() { Interval = 200 }; // debounce search keystrokes
     string _lastFilterQuery = "";
     Bucket _lastFilterBucket = Bucket.All;
+    int _sortCol = -1;          // active header-sort column (-1 = arrival order)
+    bool _sortAsc = true;
+    string[] _colHeaders = [];  // base header texts (without the ▲/▼ glyph)
     Bucket _bucket = Bucket.All;
 
     // ---- "have I scanned this before?" recall bar ----
@@ -136,7 +139,7 @@ internal sealed class ScanQueueControl : UserControl
         AppServices.Rotator.OnAllExhausted += t => SafeUi(() => OnAllKeysExhausted(t));
         AppServices.Rotator.OnResumed += () => SafeUi(() => _exhaustPromptShown = false);
 
-        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { _grid.Invalidate(); UpdateChipCounts(); } };
+        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { if (_sortCol >= 0) ApplySort(); _grid.Invalidate(); UpdateChipCounts(); } };
 
         UpdateRunningState(false);
     }
@@ -224,8 +227,52 @@ internal sealed class ScanQueueControl : UserControl
         return true;
     }
 
+    // Header-click sort. Routes through _view (a sorted snapshot) so the live Items order — which the
+    // running Parallel loop + BulkAdd mutate — is never reordered underneath.
+    void OnHeaderClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.ColumnIndex < 0) return;
+        if (e.ColumnIndex == _sortCol) _sortAsc = !_sortAsc;
+        else { _sortCol = e.ColumnIndex; _sortAsc = true; }
+        ApplySort();
+    }
+
+    void ApplySort()
+    {
+        if (_sortCol < 0) return;
+        _view ??= [];
+        var keep = SelectedItem();
+        var src = _scheduler.Items.Where(Passes); // respect the active filter chips/search
+        List<ScanItem> list = _sortCol switch
+        {
+            0 => src.OrderBy(i => i.FileName, StringComparer.OrdinalIgnoreCase).ToList(),
+            1 => src.OrderBy(i => i.SizeBytes).ToList(),
+            2 => src.OrderBy(SeverityKey).ToList(),
+            _ => src.OrderBy(i => (int)i.Status).ToList(),
+        };
+        if (!_sortAsc) list.Reverse();
+        _view.RaiseListChangedEvents = false;
+        _view.Clear();
+        foreach (var it in list) _view.Add(it);
+        _view.RaiseListChangedEvents = true;
+        _view.ResetBindings();
+        if (!ReferenceEquals(_grid.DataSource, _view)) _grid.DataSource = _view;
+        PaintSortGlyph();
+        Reselect(keep);
+    }
+
+    // Worst-first when ascending: a malicious / high-detection row floats to the top on the first Durum click.
+    static int SeverityKey(ScanItem i) => -((i.Report?.IsMalicious == true ? 100_000 : 0) + (i.Report?.DetectionCount ?? -1));
+
+    void PaintSortGlyph()
+    {
+        for (int c = 0; c < _grid.Columns.Count && c < _colHeaders.Length; c++)
+            _grid.Columns[c].HeaderText = c == _sortCol ? _colHeaders[c] + (_sortAsc ? "  ▲" : "  ▼") : _colHeaders[c];
+    }
+
     void ApplyFilter()
     {
+        if (_sortCol >= 0) { ApplySort(); return; } // an active sort owns _view (it already filters too)
         var keep = SelectedItem();
         if (!FilterActive)
         {
@@ -465,6 +512,8 @@ internal sealed class ScanQueueControl : UserControl
         _grid.DataSource = _scheduler.Items;
         _grid.CellPainting += Grid_CellPainting;
         _grid.CellFormatting += Grid_CellFormatting;
+        _colHeaders = _grid.Columns.Cast<DataGridViewColumn>().Select(c => c.HeaderText).ToArray();
+        _grid.ColumnHeaderMouseClick += OnHeaderClick;
 
         var menu = new ContextMenuStrip();
         var miOpenVt = (ToolStripMenuItem)menu.Items.Add(Strings.MenuOpenVt, null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
