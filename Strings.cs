@@ -116,6 +116,22 @@ internal static class Strings
 
     public static string ProgressSummaryFormat = "Toplam {0} • Tamamlanan {1} • Zararlı {2} • Şüpheli {3} • Temiz {4} • İmzalı↷atlandı {5} • Hata {6}";
 
+    // ---- scan queue control: quarantine + find-copies messages ----
+    public static string NeedVtResultInfo = "Önce dosyanın VT sonucu olmalı.";
+    public static string QuarantineConfirmFormat = "'{0}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)";
+    public static string QuarantineDoneInfo = "Dosya karantinaya alındı (çalıştırılamaz). Karantina kasasından geri yüklenebilir.";
+    public static string QuarantineFailedPrefix = "Karantina başarısız: ";
+    public static string FindCopiesConfirmFormat = "'{0}' ile birebir aynı (SHA-256) diğer kopyalar diskte aranacak (kotasız). Devam edilsin mi?";
+    public static string FindingCopiesFormat = "🔁 Kopya aranıyor… {0}/{1}";
+    public static string FindCopiesErrorPrefix = "Kopya arama hatası: ";
+    public static string FileSizeUnknown = "Dosya boyutu bilinmiyor.";
+    public static string NoCopiesFound = "Başka birebir kopya bulunamadı.";
+    public static string CopiesFoundFormat = "{0} birebir kopya bulundu:\n";
+    public static string MorePlusFormat = "… (+{0})";
+    public static string QuarantineAllConfirm = "\nHepsi karantinaya alınsın mı? (.VIRUS)";
+    public static string CopiesQuarantinedFormat = "{0}/{1} kopya karantinaya alındı.";
+    public static string ErrorsHeader = "\n\nHatalar:\n";
+
     // ---- quarantine vault dialog ----
     public static string DlgVaultTitle = "🗄 Karantina kasası";
     public static string ColDate = "Tarih (UTC)";

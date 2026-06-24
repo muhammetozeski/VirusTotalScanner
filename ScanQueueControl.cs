@@ -319,11 +319,11 @@ internal sealed class ScanQueueControl : UserControl
     {
         var i = SelectedItem();
         if (i == null || !File.Exists(i.FilePath)) return;
-        if (!ConfirmGates.Quarantine.Ask(this, $"'{i.FileName}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)")) return;
+        if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.QuarantineConfirmFormat, i.FileName))) return;
         if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err))
-            NativeMessageBox.Info("Dosya karantinaya alındı (çalıştırılamaz). Karantina kasasından geri yüklenebilir.");
+            NativeMessageBox.Info(Strings.QuarantineDoneInfo);
         else
-            NativeMessageBox.Error("Karantina başarısız: " + err);
+            NativeMessageBox.Error(Strings.QuarantineFailedPrefix + err);
     }
 
     /// <summary>Moves one file into the reversible quarantine vault (used by the batch copy-finder).</summary>
@@ -339,10 +339,10 @@ internal sealed class ScanQueueControl : UserControl
     async Task FindCopiesAsync()
     {
         var i = SelectedItem();
-        if (i?.Report == null || string.IsNullOrEmpty(i.Sha256)) { NativeMessageBox.Info("Önce dosyanın VT sonucu olmalı."); return; }
+        if (i?.Report == null || string.IsNullOrEmpty(i.Sha256)) { NativeMessageBox.Info(Strings.NeedVtResultInfo); return; }
         long size = i.Report.Size > 0 ? i.Report.Size : (File.Exists(i.FilePath) ? new FileInfo(i.FilePath).Length : 0);
-        if (size <= 0) { NativeMessageBox.Warn("Dosya boyutu bilinmiyor."); return; }
-        if (!NativeMessageBox.Confirm($"'{i.FileName}' ile birebir aynı (SHA-256) diğer kopyalar diskte aranacak (kotasız). Devam edilsin mi?")) return;
+        if (size <= 0) { NativeMessageBox.Warn(Strings.FileSizeUnknown); return; }
+        if (!NativeMessageBox.Confirm(string.Format(Strings.FindCopiesConfirmFormat, i.FileName))) return;
 
         using var cts = new CancellationTokenSource();
         string old = _summary.Text;
@@ -350,25 +350,25 @@ internal sealed class ScanQueueControl : UserControl
         try
         {
             matches = await CopyFinderService.FindCopiesAsync(i.FilePath, i.Sha256!, size,
-                (d, t) => { try { BeginInvoke(() => _summary.Text = $"🔁 Kopya aranıyor… {d}/{t}"); } catch { } }, cts.Token);
+                (d, t) => { try { BeginInvoke(() => _summary.Text = string.Format(Strings.FindingCopiesFormat, d, t)); } catch { } }, cts.Token);
         }
         catch (OperationCanceledException) { return; }
-        catch (Exception ex) { NativeMessageBox.Error("Kopya arama hatası: " + ex.Message); return; }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.FindCopiesErrorPrefix + ex.Message); return; }
         finally { try { _summary.Text = old; } catch { } }
 
-        if (matches.Count == 0) { NativeMessageBox.Info("Başka birebir kopya bulunamadı."); return; }
+        if (matches.Count == 0) { NativeMessageBox.Info(Strings.NoCopiesFound); return; }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"{matches.Count} birebir kopya bulundu:\n");
+        sb.AppendLine(string.Format(Strings.CopiesFoundFormat, matches.Count));
         foreach (var m in matches.Take(30)) sb.AppendLine(m);
-        if (matches.Count > 30) sb.AppendLine($"… (+{matches.Count - 30})");
-        sb.AppendLine("\nHepsi karantinaya alınsın mı? (.VIRUS)");
+        if (matches.Count > 30) sb.AppendLine(string.Format(Strings.MorePlusFormat, matches.Count - 30));
+        sb.AppendLine(Strings.QuarantineAllConfirm);
         if (!ConfirmGates.Quarantine.Ask(this, sb.ToString())) return;
 
         int ok = 0; var errors = new List<string>();
         foreach (var m in matches)
             if (QuarantinePath(m, out var err)) ok++; else errors.Add(Path.GetFileName(m) + ": " + err);
-        NativeMessageBox.Info($"{ok}/{matches.Count} kopya karantinaya alındı." + (errors.Count > 0 ? "\n\nHatalar:\n" + string.Join("\n", errors.Take(10)) : ""));
+        NativeMessageBox.Info(string.Format(Strings.CopiesQuarantinedFormat, ok, matches.Count) + (errors.Count > 0 ? Strings.ErrorsHeader + string.Join("\n", errors.Take(10)) : ""));
     }
 
     void ExportCsv()
