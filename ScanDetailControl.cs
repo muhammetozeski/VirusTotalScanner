@@ -23,6 +23,7 @@ internal sealed class ScanDetailControl : UserControl
     readonly Label _sha = new();
     readonly LinkLabel _link = new();
     readonly CheckBox _showAll = new();
+    readonly CheckBox _majorOnly = new() { Text = "Yalnızca büyük motorlar", AutoSize = true, Margin = new Padding(10, 4, 0, 0) };
     readonly DataGridView _engines = new();
     readonly Label _empty = new();
 
@@ -60,6 +61,7 @@ internal sealed class ScanDetailControl : UserControl
         _showAll.AutoSize = true;
         _showAll.Checked = true; // default: show every engine's result, not just detections
         _showAll.CheckedChanged += (_, _) => Populate();
+        _majorOnly.CheckedChanged += (_, _) => Populate();
         _link.Text = Strings.OpenVtReport;
         _link.AutoSize = true;
         _link.Margin = new Padding(16, 3, 0, 0);
@@ -126,6 +128,7 @@ internal sealed class ScanDetailControl : UserControl
         ThemeManager.StyleButton(behaviourBtn);
 
         togglePanel.Controls.Add(_showAll);
+        togglePanel.Controls.Add(_majorOnly);
         togglePanel.Controls.Add(_link);
         togglePanel.Controls.Add(commentsBtn);
         togglePanel.Controls.Add(behaviourBtn);
@@ -217,12 +220,30 @@ internal sealed class ScanDetailControl : UserControl
             OpenUrlInBrowser("https://www.google.com/search?q=" + Uri.EscapeDataString(res + " malware"));
     }
 
+    static bool IsStaleSig(VtEngineResult r)
+    {
+        int days = Settings.StaleSignatureDays;
+        return days > 0 && r.UpdatedUtc is { } u && u < DateTime.UtcNow.AddDays(-days);
+    }
+
     void Engines_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        if (_engines.Rows[e.RowIndex].DataBoundItem is VtEngineResult r && r.IsDetection)
+        if (_engines.Rows[e.RowIndex].DataBoundItem is not VtEngineResult r) return;
+        bool major = MajorEngines.IsMajor(r.EngineName);
+        bool stale = r.IsDetection && IsStaleSig(r);
+
+        if (r.IsDetection)
         {
-            e.CellStyle!.ForeColor = Theme.Current.Danger;
+            // A stale-signature detection is greyed (less alarming) vs a fresh red hit.
+            e.CellStyle!.ForeColor = stale ? Color.FromArgb(150, 150, 150) : Theme.Current.Danger;
             e.CellStyle.Font = new Font(_engines.Font, FontStyle.Bold);
+        }
+        // Engine-name column: ★ + bold for the engines that matter, 🕒 for stale-signature detections.
+        if (e.ColumnIndex == 0 && e.Value is string name)
+        {
+            if (stale) e.Value = "🕒 " + name;
+            else if (major) e.Value = "★ " + name;
+            if (major) e.CellStyle!.Font = new Font(_engines.Font, FontStyle.Bold);
         }
     }
 
@@ -307,6 +328,7 @@ internal sealed class ScanDetailControl : UserControl
         _ratioBar.Invalidate();
 
         var list = _showAll.Checked ? report.Engines : report.Detections.ToList();
+        if (_majorOnly.Checked) list = list.Where(x => MajorEngines.IsMajor(x.EngineName)).ToList();
         _engines.DataSource = null;
         _engines.DataSource = new List<VtEngineResult>(list);
         // Cached entries keep only the summary (no per-engine list) to stay small.
