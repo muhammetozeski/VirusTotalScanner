@@ -84,7 +84,31 @@ internal static class QuarantineVault
             try { origin = ZoneIdentifier.Read(path)?.HostUrl; } catch { }
 
             string id = Guid.NewGuid().ToString("N")[..12];
-            File.Move(path, VaultFile(id), overwrite: true);
+            string dest = VaultFile(id);
+
+            // Preflight 1 — free space: never start a move that can't finish (it would leave the confirmed
+            // threat in limbo). Bail with a clear message and the original untouched.
+            try
+            {
+                long need = new FileInfo(path).Length;
+                var drive = new DriveInfo(Path.GetPathRoot(Folder)!);
+                if (drive.IsReady && drive.AvailableFreeSpace < need + 8L * 1024 * 1024)
+                { error = $"Kasada yer yok — en az {(need / (1024 * 1024)) + 8} MB boşaltın."; return false; }
+            }
+            catch { /* can't measure → let the move attempt decide */ }
+
+            // Preflight 2 — a cross-volume File.Move is a non-atomic copy+delete; do it explicitly so a
+            // disk-full / USB-yank mid-copy never leaves a half .VIRUS or a deleted-but-uncopied original.
+            if (!string.Equals(Path.GetPathRoot(path), Path.GetPathRoot(dest), StringComparison.OrdinalIgnoreCase))
+            {
+                try { File.Copy(path, dest, overwrite: true); }
+                catch (Exception ex) { try { if (File.Exists(dest)) File.Delete(dest); } catch { } error = ex.Message; return false; }
+                File.Delete(path); // copy completed → now drop the original
+            }
+            else
+            {
+                File.Move(path, dest, overwrite: true); // same volume → atomic rename
+            }
 
             _entries.Add(new QuarantineEntry
             {
@@ -97,7 +121,7 @@ internal static class QuarantineVault
                 Total = report?.TotalEngines ?? 0,
                 QuarantinedUtc = DateTime.UtcNow,
                 Origin = origin,
-                VaultSha = HashFile(VaultFile(id)), // integrity baseline for the restore tamper-check
+                VaultSha = HashFile(dest), // integrity baseline for the restore tamper-check
             });
             Save();
             Log($"Quarantined to vault: {path} -> {id}.VIRUS", LogLevel.Warning);
