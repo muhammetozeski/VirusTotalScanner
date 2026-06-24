@@ -95,6 +95,25 @@ internal static class ShareCard
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>A Markdown rendering of the same fields as <see cref="Text"/> — heading, inline-code hashes
+    /// and a clickable report link — so a pasted summary renders cleanly in GitHub/Discord/PR descriptions.</summary>
+    public static string Markdown(ScanItem item)
+    {
+        var r = item.Report;
+        var sb = new StringBuilder();
+        string verdict = item.Verdict.Length > 0 ? item.Verdict : (r?.Verdict ?? "?");
+        string ratio = r != null && r.TotalEngines > 0 ? $" {r.DetectionCount}/{r.TotalEngines}" : "";
+        sb.AppendLine($"### [{verdict}{ratio}] {item.FileName}");
+        sb.AppendLine();
+        if (r?.ThreatLabel is { Length: > 0 } tl) sb.AppendLine("- **Tür:** " + tl);
+        else if (r?.Family is { Length: > 0 } fam) sb.AppendLine("- **Aile:** " + fam);
+        if (r?.FirstSeenText is { } fs) sb.AppendLine("- " + fs);
+        if (item.Md5 is { Length: > 0 } md5) sb.AppendLine("- **MD5:** `" + md5 + "`");
+        if ((item.Sha256 ?? r?.Sha256) is { Length: > 0 } sha) sb.AppendLine("- **SHA-256:** `" + sha + "`");
+        if (r != null && !string.IsNullOrEmpty(r.ReportUrl)) sb.AppendLine("- [VirusTotal raporu](" + r.ReportUrl + ")");
+        return sb.ToString().TrimEnd();
+    }
+
     static List<string> BodyLines(ScanItem item)
     {
         var r = item.Report;

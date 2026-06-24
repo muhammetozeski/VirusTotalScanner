@@ -541,6 +541,7 @@ internal sealed class ScanQueueControl : UserControl
             catch (Exception ex) { NativeMessageBox.Error("Kopyalanamadı: " + ex.Message); }
         });
         shareMenu.DropDownItems.Add("📝  Özet metin (panoya)", null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(ShareCard.Text(i)); });
+        shareMenu.DropDownItems.Add("⬇  Markdown özet (panoya)", null, (_, _) => { var i = SelectedItem(); if (i != null) { CopySafe(ShareCard.Markdown(i)); _summary.Text = "📋 Markdown özet panoya kopyalandı."; } });
         shareMenu.DropDownItems.Add("💾  Kart resmi kaydet…", null, (_, _) => SaveShareCard());
         menu.Items.Add(shareMenu);
 
