@@ -16,11 +16,11 @@ internal static class CliRunner
         if (opts.ShowHelp) { PrintHelp(); return 0; }
         if (opts.ShowVersion) { Console.WriteLine($"{AppConstants.AppTitle} v{AppConstants.Version}"); return 0; }
 
-        if (opts.InstallMenu) return MenuCmd(ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e1), e1, "Sağ tuş menüsü kuruldu.");
-        if (opts.UninstallMenu) return MenuCmd(ContextMenuInstaller.Uninstall(out var e2), e2, "Sağ tuş menüsü kaldırıldı.");
-        if (opts.RepairMenu) return MenuCmd(ContextMenuInstaller.Repair(out var e3), e3, "Sağ tuş menüsü onarıldı.");
+        if (opts.InstallMenu) return MenuCmd(ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e1), e1, Strings.CliMenuInstalled);
+        if (opts.UninstallMenu) return MenuCmd(ContextMenuInstaller.Uninstall(out var e2), e2, Strings.CliMenuRemoved);
+        if (opts.RepairMenu) return MenuCmd(ContextMenuInstaller.Repair(out var e3), e3, Strings.CliMenuRepaired);
 
-        if (opts.AddKeyValue != null) { AppServices.Vault.Add("CLI", opts.AddKeyValue); Console.WriteLine("Anahtar eklendi."); return 0; }
+        if (opts.AddKeyValue != null) { AppServices.Vault.Add("CLI", opts.AddKeyValue); Console.WriteLine(Strings.CliKeyAdded); return 0; }
         if (opts.RemoveKeyValue != null) return RemoveKey(opts.RemoveKeyValue);
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
@@ -29,9 +29,9 @@ internal static class CliRunner
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
         if (opts.VerifyBaseline) return await VerifyBaselineCmd();
         if (opts.DriftReport != null) return await DriftReportCmd(opts.DriftReport);
-        if (opts.ExportLedger != null) { int n = LedgerService.Export(AppServices.Cache, opts.ExportLedger); Console.WriteLine($"{n} kayıt ledger'a yazıldı: {opts.ExportLedger}"); return 0; }
-        if (opts.ImportLedger != null) { var (add, conf, ok) = LedgerService.Import(AppServices.Cache, opts.ImportLedger); Console.WriteLine($"{add} yeni kayıt eklendi, {conf} çakışma. Bütünlük: {(ok ? "OK" : "UYUŞMUYOR")}"); return 0; }
-        if (opts.LedgerDiff != null) { var (nw, cf) = LedgerService.Diff(AppServices.Cache, opts.LedgerDiff); Console.WriteLine($"Sende olmayan {nw.Count}, çakışma {cf.Count}:"); foreach (var x in nw.Take(20)) Console.WriteLine("  [YENİ] " + x); foreach (var x in cf.Take(20)) Console.WriteLine("  [ÇAKIŞMA] " + x); return 0; }
+        if (opts.ExportLedger != null) { int n = LedgerService.Export(AppServices.Cache, opts.ExportLedger); Console.WriteLine(string.Format(Strings.CliLedgerExportedFormat, n, opts.ExportLedger)); return 0; }
+        if (opts.ImportLedger != null) { var (add, conf, ok) = LedgerService.Import(AppServices.Cache, opts.ImportLedger); Console.WriteLine(string.Format(Strings.CliLedgerImportedFormat, add, conf, ok ? Strings.CliLedgerOk : Strings.CliLedgerBad)); return 0; }
+        if (opts.LedgerDiff != null) { var (nw, cf) = LedgerService.Diff(AppServices.Cache, opts.LedgerDiff); Console.WriteLine(string.Format(Strings.CliLedgerDiffFormat, nw.Count, cf.Count)); foreach (var x in nw.Take(20)) Console.WriteLine("  " + Strings.CliTagNew + " " + x); foreach (var x in cf.Take(20)) Console.WriteLine("  " + Strings.CliTagConflict + " " + x); return 0; }
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;
@@ -39,7 +39,7 @@ internal static class CliRunner
         {
             var (rp, unreadable) = RunningProcesses.ImagePaths();
             scanPaths = rp;
-            if (!opts.Json && !opts.Quiet) Console.WriteLine($"Çalışan süreçler: {rp.Count} imaj taranacak ({unreadable} okunamadı/atlandı).");
+            if (!opts.Json && !opts.Quiet) Console.WriteLine(string.Format(Strings.CliRunningProcessesFormat, rp.Count, unreadable));
         }
         if (scanPaths.Count == 0) { PrintHelp(); return 2; }
 
@@ -47,19 +47,19 @@ internal static class CliRunner
 
         if (!AppServices.Rotator.HasUsableKeys && !Settings.TrustSkipSigned && !keyless)
         {
-            Console.Error.WriteLine("HATA: API anahtarı yok, imza-atlama kapalı ve anahtarsız (GUI) mod açık değil.");
+            Console.Error.WriteLine(Strings.CliErrNoMeans);
             return 3;
         }
         if (!AppServices.Rotator.HasUsableKeys && !keyless)
-            Console.Error.WriteLine("(Uyarı: anahtar yok — yalnızca imzalı dosyalar değerlendirilebilir, imzasızlar atlanır.)");
+            Console.Error.WriteLine(Strings.CliWarnNoKey);
         if (keyless && !opts.Json && !opts.Quiet)
-            Console.WriteLine("(Anahtarsız GUI modu açık — sorgular WebView2 üzerinden, kotasız ama yavaş.)");
+            Console.WriteLine(Strings.CliKeylessNote);
 
         var scheduler = AppServices.Scheduler;
         scheduler.UiPost = a => a(); // run inline (no UI thread)
 
         if (!opts.Json && !opts.Quiet)
-            Console.WriteLine($"{AppConstants.AppTitle} — tarama başlıyor…\n");
+            Console.WriteLine(string.Format(Strings.CliScanStartingFormat, AppConstants.AppTitle));
 
         scheduler.ItemFinished += item =>
         {
@@ -78,9 +78,9 @@ internal static class CliRunner
             try
             {
                 ReportWriter.Write(opts.ReportPath, scheduler.Items.ToList());
-                if (!opts.Quiet && !opts.Json) Console.WriteLine($"Rapor yazıldı: {opts.ReportPath}");
+                if (!opts.Quiet && !opts.Json) Console.WriteLine(string.Format(Strings.CliReportWrittenFormat, opts.ReportPath));
             }
-            catch (Exception ex) { Console.Error.WriteLine("Rapor yazılamadı: " + ex.Message); }
+            catch (Exception ex) { Console.Error.WriteLine(Strings.ReportWriteErrorPrefix + ex.Message); }
         }
 
         // Verdict-delta gate: compare against a prior --report json baseline (keyed by sha256).
@@ -88,14 +88,14 @@ internal static class CliRunner
         if (opts.DiffBaseline != null)
         {
             var delta = DiffService.Compare(scheduler.Items.ToList(), opts.DiffBaseline);
-            if (delta == null) Console.Error.WriteLine("Diff: baseline okunamadı: " + opts.DiffBaseline);
+            if (delta == null) Console.Error.WriteLine(Strings.CliDiffBaselineErrPrefix + opts.DiffBaseline);
             else
             {
                 if (!opts.Json)
                 {
-                    Console.WriteLine($"\nDelta: {delta.New} yeni, {delta.Regressed} kötüleşti, {delta.Unchanged} değişmedi.");
-                    foreach (var f in delta.NewFiles.Take(20)) Console.WriteLine("  [YENİ] " + f);
-                    foreach (var f in delta.RegressedFiles.Take(20)) Console.WriteLine("  [KÖTÜLEŞTİ] " + f);
+                    Console.WriteLine(string.Format(Strings.CliDeltaFormat, delta.New, delta.Regressed, delta.Unchanged));
+                    foreach (var f in delta.NewFiles.Take(20)) Console.WriteLine("  " + Strings.CliTagNew + " " + f);
+                    foreach (var f in delta.RegressedFiles.Take(20)) Console.WriteLine("  " + Strings.CliTagRegressed + " " + f);
                 }
                 if ((opts.FailOnNew && delta.New > 0) || (opts.FailOnRegression && delta.Regressed > 0)) diffFail = true;
             }
@@ -113,7 +113,7 @@ internal static class CliRunner
         {
             int mal = scheduler.Items.Count(i => i.Report?.IsMalicious == true);
             int total = scheduler.Items.Count;
-            Console.WriteLine($"\nBitti. {total} dosya tarandı, {mal} tehdit bulundu.");
+            Console.WriteLine(string.Format(Strings.CliDoneFormat, total, mal));
         }
         return threat ? 1 : 0;
     }

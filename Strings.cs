@@ -177,6 +177,29 @@ internal static class Strings
     public static string GateNo = "Hayır";
     public static string GateAsking = "  —  soruluyor";
 
+    // ---- CLI: menu / ledger / scan-flow messages ----
+    public static string CliMenuInstalled = "Sağ tuş menüsü kuruldu.";
+    public static string CliMenuRemoved = "Sağ tuş menüsü kaldırıldı.";
+    public static string CliMenuRepaired = "Sağ tuş menüsü onarıldı.";
+    public static string CliKeyAdded = "Anahtar eklendi.";
+    public static string CliLedgerExportedFormat = "{0} kayıt ledger'a yazıldı: {1}";
+    public static string CliLedgerImportedFormat = "{0} yeni kayıt eklendi, {1} çakışma. Bütünlük: {2}";
+    public static string CliLedgerOk = "OK";
+    public static string CliLedgerBad = "UYUŞMUYOR";
+    public static string CliLedgerDiffFormat = "Sende olmayan {0}, çakışma {1}:";
+    public static string CliTagNew = "[YENİ]";
+    public static string CliTagConflict = "[ÇAKIŞMA]";
+    public static string CliTagRegressed = "[KÖTÜLEŞTİ]";
+    public static string CliRunningProcessesFormat = "Çalışan süreçler: {0} imaj taranacak ({1} okunamadı/atlandı).";
+    public static string CliErrNoMeans = "HATA: API anahtarı yok, imza-atlama kapalı ve anahtarsız (GUI) mod açık değil.";
+    public static string CliWarnNoKey = "(Uyarı: anahtar yok — yalnızca imzalı dosyalar değerlendirilebilir, imzasızlar atlanır.)";
+    public static string CliKeylessNote = "(Anahtarsız GUI modu açık — sorgular WebView2 üzerinden, kotasız ama yavaş.)";
+    public static string CliScanStartingFormat = "{0} — tarama başlıyor…\n";
+    public static string CliReportWrittenFormat = "Rapor yazıldı: {0}";
+    public static string CliDiffBaselineErrPrefix = "Diff: baseline okunamadı: ";
+    public static string CliDeltaFormat = "\nDelta: {0} yeni, {1} kötüleşti, {2} değişmedi.";
+    public static string CliDoneFormat = "\nBitti. {0} dosya tarandı, {1} tehdit bulundu.";
+
     // ---- context-menu installer ----
     public static string AdminDenied = "Yönetici izni verilmedi.";
     public static string MenuStateOk = "Kurulu ✓ (tüm kullanıcılar)";
