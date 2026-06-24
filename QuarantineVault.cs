@@ -14,6 +14,10 @@ internal sealed class QuarantineEntry
     public DateTime QuarantinedUtc { get; set; }
     public string? Origin { get; set; }
 
+    /// <summary>SHA-256 of the file as it sits in the vault, captured at quarantine time (works even when
+    /// the VT Sha256 is null). Re-checked before restore so a swapped/edited .VIRUS is never re-armed.</summary>
+    public string? VaultSha { get; set; }
+
     public string FileName => Path.GetFileName(OriginalPath);
 }
 
@@ -32,6 +36,18 @@ internal static class QuarantineVault
     static string Folder => ConfigPathResolver.QuarantineFolder;
     static string ManifestPath => Path.Combine(Folder, "manifest.json");
     static string VaultFile(string id) => Path.Combine(Folder, id + ".VIRUS");
+
+    /// <summary>Synchronous SHA-256 of a file as a lowercase hex string, or null if it can't be read.</summary>
+    static string? HashFile(string path)
+    {
+        try
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            using var fs = File.OpenRead(path);
+            return Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+        }
+        catch { return null; }
+    }
 
     static void Load()
     {
@@ -81,6 +97,7 @@ internal static class QuarantineVault
                 Total = report?.TotalEngines ?? 0,
                 QuarantinedUtc = DateTime.UtcNow,
                 Origin = origin,
+                VaultSha = HashFile(VaultFile(id)), // integrity baseline for the restore tamper-check
             });
             Save();
             Log($"Quarantined to vault: {path} -> {id}.VIRUS", LogLevel.Warning);
@@ -104,6 +121,19 @@ internal static class QuarantineVault
         {
             string src = VaultFile(e.Id);
             if (!File.Exists(src)) { error = "Kasa dosyası bulunamadı."; return false; }
+
+            // Anti-tamper: if the held file changed since quarantine, something swapped/edited it — refuse to
+            // re-arm a tampered binary at a trusted path. Older entries (null VaultSha) skip the check.
+            if (!string.IsNullOrEmpty(e.VaultSha))
+            {
+                var now = HashFile(src);
+                if (now != null && !string.Equals(now, e.VaultSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    error = "Kasa dosyası karantinaya alındığından beri değişmiş — geri yükleme güvenli değil. Bunun yerine 'Kalıcı sil' kullanın.";
+                    return false;
+                }
+            }
+
             if (File.Exists(e.OriginalPath)) { error = "Orijinal konumda zaten bir dosya var."; return false; }
 
             string? dir = Path.GetDirectoryName(e.OriginalPath);
