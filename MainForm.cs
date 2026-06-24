@@ -67,7 +67,7 @@ internal sealed partial class MainForm : Form
         _tray.BalloonTipTitle = "USB sürücü takıldı";
         _tray.BalloonTipText = $"{letter}: sürücüsünü taramak için bu bildirime tıkla.";
         _tray.BalloonTipIcon = ToolTipIcon.Info;
-        _tray.ShowBalloonTip(6000);
+        if (!Gated()) _tray.ShowBalloonTip(6000);
     }
 
     void ApplyDarkTitleBar()
@@ -99,6 +99,17 @@ internal sealed partial class MainForm : Form
     ScanItem? _lastThreat;     // the item for a ShowThreat toast
     QuarantineEntry? _lastQuarantine; // the entry for an UndoQuarantine toast
     string[] _sweepThreatPaths = []; // the paths for a LoadSweepThreats toast
+    int _suppressedToasts; // non-urgent toasts held back during quiet hours / fullscreen, replayed grouped
+    readonly System.Windows.Forms.Timer _toastReplay = new() { Interval = 30000 };
+
+    /// <summary>True (and counts the toast for grouped replay) when a non-urgent toast must be held back.</summary>
+    bool Gated()
+    {
+        if (!NotificationGate.ShouldSuppress()) return false;
+        _suppressedToasts++;
+        _toastReplay.Start();
+        return true;
+    }
 
     public MainForm(bool startHidden = false)
     {
@@ -214,6 +225,20 @@ internal sealed partial class MainForm : Form
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => RestoreFromTray();
         _tray.BalloonTipClicked += OnBalloonClicked;
+
+        // When the quiet window / fullscreen ends, replay what was held back as one grouped toast.
+        _toastReplay.Tick += (_, _) =>
+        {
+            if (NotificationGate.ShouldSuppress()) return; // still quiet — keep waiting
+            _toastReplay.Stop();
+            if (_suppressedToasts == 0) return;
+            int n = _suppressedToasts; _suppressedToasts = 0;
+            _toastAction = ToastAction.None;
+            _tray.BalloonTipTitle = "Ertelenen bildirimler";
+            _tray.BalloonTipText = $"Sessiz mod sırasında {n} bildirim ertelendi.";
+            _tray.BalloonTipIcon = ToolTipIcon.Info;
+            _tray.ShowBalloonTip(5000);
+        };
     }
 
     void OnBalloonClicked(object? sender, EventArgs e)
@@ -301,7 +326,7 @@ internal sealed partial class MainForm : Form
         _tray.BalloonTipTitle = mal > 0 ? "Tarama bitti — tehdit bulundu" : "Tarama bitti — temiz";
         _tray.BalloonTipText = $"{items.Count} dosya tarandı, {mal} tehdit.";
         _tray.BalloonTipIcon = mal > 0 ? ToolTipIcon.Warning : ToolTipIcon.Info;
-        _tray.ShowBalloonTip(5000);
+        if (!Gated()) _tray.ShowBalloonTip(5000);
     }
 
     void OnThreatFound(ScanItem item, bool background = false)
@@ -427,7 +452,7 @@ internal sealed partial class MainForm : Form
                 _tray.BalloonTipTitle = "Zamanlı tarama tehdit buldu";
                 _tray.BalloonTipText = $"{r.Threats} tehdit bulundu. Kuyruğa yüklemek için tıkla.";
                 _tray.BalloonTipIcon = ToolTipIcon.Warning;
-                _tray.ShowBalloonTip(8000);
+                if (!Gated()) _tray.ShowBalloonTip(8000);
             }
         }
         catch (Exception ex) { Log("Sweep result check failed: " + ex.Message, LogLevel.Warning); }
@@ -475,7 +500,7 @@ internal sealed partial class MainForm : Form
             ? $"{first.Entry.Name}: {first.Old} → {first.New} motor tespit ediyor."
             : $"{esc.Count} izlenen dosyanın tespiti arttı (ör. {first.Entry.Name}).";
         _tray.BalloonTipIcon = ToolTipIcon.Warning;
-        _tray.ShowBalloonTip(7000);
+        if (!Gated()) _tray.ShowBalloonTip(7000);
     }
 
     void OfferResume()

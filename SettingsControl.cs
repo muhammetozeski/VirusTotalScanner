@@ -430,6 +430,18 @@ internal sealed class SettingsControl : UserControl
         autoQNum.ValueChanged += (_, _) => { Settings.AutoQuarantineThreshold.Value = (int)autoQNum.Value; SettingsManager.SaveSettings(); };
         autoQRow.Controls.Add(autoQNum);
 
+        var mute = new CheckBox { Text = "Tam ekran uygulamada (oyun/sunum) bildirimleri sustur", AutoSize = true, Checked = Settings.MuteInFullscreen };
+        mute.CheckedChanged += (_, _) => { Settings.MuteInFullscreen.Value = mute.Checked; SettingsManager.SaveSettings(); };
+        var quietRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        quietRow.Controls.Add(new Label { Text = "Sessiz saatler (başlangıç–bitiş, eşitse kapalı):", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        var qStart = new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursStart.Value)), Width = 55 };
+        qStart.ValueChanged += (_, _) => { Settings.QuietHoursStart.Value = (int)qStart.Value; SettingsManager.SaveSettings(); };
+        var qEnd = new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursEnd.Value)), Width = 55 };
+        qEnd.ValueChanged += (_, _) => { Settings.QuietHoursEnd.Value = (int)qEnd.Value; SettingsManager.SaveSettings(); };
+        quietRow.Controls.Add(qStart);
+        quietRow.Controls.Add(new Label { Text = "–", AutoSize = true, Margin = new Padding(4, 6, 4, 0) });
+        quietRow.Controls.Add(qEnd);
+
         var logging = new CheckBox { Text = Strings.LoggingLabel, AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
@@ -470,6 +482,8 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(usb);
         body.Controls.Add(autoQ);
         body.Controls.Add(autoQRow);
+        body.Controls.Add(mute);
+        body.Controls.Add(quietRow);
         body.Controls.Add(ledgerRow);
         body.Controls.Add(logging);
         return card;
