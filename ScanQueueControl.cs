@@ -1336,8 +1336,10 @@ internal sealed class ScanQueueControl : UserControl
         palette.ShowDialog(FindForm());
     }
 
-    public List<CommandRecord> Commands() =>
-    [
+    public List<CommandRecord> Commands()
+    {
+        List<CommandRecord> list =
+        [
         new() { Name = "Dosya seç…", Desc = "Taranacak dosya(lar) seç", Run = SelectFiles },
         new() { Name = "Klasör seç…", Desc = "Bir klasörü alt klasörleriyle tara", Run = SelectFolder },
         new() { Name = "Hash sorgula…", Desc = "Bir MD5/SHA hash'ini VirusTotal'de ara", Run = () => _ = HashLookupAsync() },
@@ -1357,7 +1359,32 @@ internal sealed class ScanQueueControl : UserControl
         new() { Name = "Diğer kopyaları bul (disk)", Desc = "Seçili dosyanın birebir kopyalarını diskte ara", Run = () => _ = FindCopiesAsync() },
         new() { Name = "Autostart kancalarını bul", Desc = "Seçili dosya için kalıcılık kayıtlarını ara", Run = HuntPersistence },
         new() { Name = "Klasör komşuları", Desc = "Seçili dosyanın klasöründeki diğer dosyalar", Run = ShowNeighbors },
-    ];
+        ];
+
+        // Named scan profiles: save the current scan settings, or switch to a saved profile in one keystroke.
+        list.Add(new() { Name = "Profil kaydet… (tarama ayarları)", Desc = "Şu anki tarama ayarlarını adlandırılmış profil olarak kaydet", Run = SaveScanProfile });
+        foreach (var p in ScanProfileStore.All())
+        {
+            string name = p.Name;
+            list.Add(new() { Name = $"Profil uygula: {name}", Desc = "Bu profilin tarama ayarlarını uygula", Run = () => ApplyScanProfile(name) });
+            list.Add(new() { Name = $"Profil sil: {name}", Desc = "Bu tarama profilini sil", Run = () => { ScanProfileStore.Delete(name); _summary.Text = $"Profil silindi: {name}"; } });
+        }
+        return list;
+    }
+
+    void SaveScanProfile()
+    {
+        string? name = Dialogs.InputBox("Profil adı:", "Tarama profili kaydet", "");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        ScanProfileStore.Save(name);
+        _summary.Text = $"Profil kaydedildi: {name}";
+    }
+
+    void ApplyScanProfile(string name)
+    {
+        int n = ScanProfileStore.Apply(name);
+        _summary.Text = n > 0 ? $"Profil uygulandı: {name} ({n} ayar)" : $"Profil bulunamadı: {name}";
+    }
 
     // ---- entry points used by the landing-tab launchpad ----
     public void ScanRunningProcesses() => ScanRunning();

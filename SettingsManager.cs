@@ -99,6 +99,26 @@ internal static class SettingsManager
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
     }
 
+    /// <summary>Capture the current serialized values of just the given setting keys (for scan profiles).</summary>
+    public static Dictionary<string, string> CaptureSubset(IEnumerable<string> keys)
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var k in keys)
+            if (iSettingSetups.TryGetValue(k, out var s)) map[k] = s.Serialize();
+        return map;
+    }
+
+    /// <summary>Apply a captured key→value subset onto the live settings (its own keys only), then persist.
+    /// Returns the number of keys applied.</summary>
+    public static int ApplySubset(IReadOnlyDictionary<string, string> values)
+    {
+        int n = 0;
+        foreach (var (k, v) in values)
+            if (!PortableOmit.Contains(k) && iSettingSetups.TryGetValue(k, out var s)) { s.LoadFromStr(v); n++; }
+        if (n > 0) SaveSettings();
+        return n;
+    }
+
     /// <summary>Apply a previously-exported config file (skipping the encrypted vault). Returns keys applied.</summary>
     public static int ImportSettings(string path)
     {
