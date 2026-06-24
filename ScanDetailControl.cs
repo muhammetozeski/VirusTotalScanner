@@ -264,6 +264,8 @@ internal sealed class ScanDetailControl : UserControl
                 $"Durum: {item.SkipReason ?? "İmzalı"}" +
                 (item.Publisher != null ? $"\nYayıncı: {item.Publisher}" : "") +
                 (ZoneIdentifier.Read(item.FilePath)?.Summary is { } z ? $"\n{z}" : "") +
+                (OverlayDetector.OverlayBytes(item.FilePath) is var ov && ov > 65536
+                    ? $"\n📎 İmza sonrası {FormatBytes(ov)} eklenmiş — kurulumcu olabilir, ama doldurulmuş/trojanlı da olabilir" : "") +
                 "\n\nGeçerli bir kod imzası bulundu; kota harcamamak için VirusTotal'e gönderilmedi.\n" +
                 "Not: imza güveni = yayıncının doğrulanması demektir, \"temiz\" garantisi değildir.\n" +
                 "Yine de VT'ye göndermek için kuyrukta satıra sağ tıklayıp \"Güveni yok say, VT ile tara\".";
