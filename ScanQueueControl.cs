@@ -21,6 +21,14 @@ internal sealed class ScanQueueControl : UserControl
     int _progressCol;
     bool _exhaustPromptShown; // show the quota-exhausted choice dialog once per exhaustion episode
 
+    // ---- live search + verdict-filter chips ----
+    enum Bucket { All, Clean, Suspicious, Malicious, Skipped, Error }
+    readonly TextBox _search = new() { Width = 200 };
+    readonly Dictionary<Bucket, Button> _chips = [];
+    readonly Label _filterCount = new() { AutoSize = true, Margin = new Padding(10, 8, 0, 0) };
+    System.ComponentModel.BindingList<ScanItem>? _view;
+    Bucket _bucket = Bucket.All;
+
     /// <summary>Raised when a scan is requested but no API key is configured.</summary>
     public event Action? NeedApiKey;
     /// <summary>Raised when a threat is found (for tray notifications).</summary>
@@ -30,8 +38,9 @@ internal sealed class ScanQueueControl : UserControl
     {
         Dock = DockStyle.Fill;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // action bar
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // filter strip
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // split
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // overall
 
@@ -88,8 +97,9 @@ internal sealed class ScanQueueControl : UserControl
         bottom.Controls.Add(_summary, 0, 1);
 
         root.Controls.Add(bar, 0, 0);
-        root.Controls.Add(split, 0, 1);
-        root.Controls.Add(bottom, 0, 2);
+        root.Controls.Add(BuildFilterBar(), 0, 1);
+        root.Controls.Add(split, 0, 2);
+        root.Controls.Add(bottom, 0, 3);
         Controls.Add(root);
 
         _grid.SelectionChanged += (_, _) => _detail.Show(SelectedItem());
@@ -98,13 +108,165 @@ internal sealed class ScanQueueControl : UserControl
         _scheduler.ProgressChanged += OnProgress;
         _scheduler.ItemFinished += OnItemFinished;
         _scheduler.Started += () => SafeUi(() => { _exhaustPromptShown = false; UpdateRunningState(true); });
-        _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); });
+        _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); });
         AppServices.Rotator.OnAllExhausted += t => SafeUi(() => OnAllKeysExhausted(t));
         AppServices.Rotator.OnResumed += () => SafeUi(() => _exhaustPromptShown = false);
 
-        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) _grid.Invalidate(); };
+        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { _grid.Invalidate(); UpdateChipCounts(); } };
 
         UpdateRunningState(false);
+    }
+
+    // ---- live search + verdict-filter chips ----
+
+    FlowLayoutPanel BuildFilterBar()
+    {
+        var strip = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(8, 2, 6, 4) };
+
+        _search.PlaceholderText = "🔎  Ara (ad/yol)…";
+        _search.Margin = new Padding(0, 4, 8, 4);
+        _search.TextChanged += (_, _) => ApplyFilter();
+        _search.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { _search.Clear(); e.Handled = true; } };
+        strip.Controls.Add(_search);
+
+        AddChip(strip, Bucket.All, "Tümü", null);
+        AddChip(strip, Bucket.Clean, "Temiz", Theme.Current.Success);
+        AddChip(strip, Bucket.Suspicious, "Şüpheli", Theme.Current.Warning);
+        AddChip(strip, Bucket.Malicious, "Zararlı", Theme.Current.Danger);
+        AddChip(strip, Bucket.Skipped, "Atlandı", null);
+        AddChip(strip, Bucket.Error, "Hata", null);
+
+        _filterCount.Tag = "subtle";
+        strip.Controls.Add(_filterCount);
+        SetBucket(Bucket.All);
+        return strip;
+    }
+
+    void AddChip(FlowLayoutPanel strip, Bucket b, string label, Color? color)
+    {
+        var chip = new Button
+        {
+            Text = label,
+            AutoSize = true,
+            FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 4, 6, 4),
+            Padding = new Padding(8, 2, 8, 2),
+            Tag = color,
+            Cursor = Cursors.Hand,
+        };
+        chip.FlatAppearance.BorderSize = 1;
+        chip.Click += (_, _) => SetBucket(b);
+        _chips[b] = chip;
+        strip.Controls.Add(chip);
+    }
+
+    void SetBucket(Bucket b)
+    {
+        _bucket = b;
+        foreach (var (key, chip) in _chips)
+        {
+            bool active = key == b;
+            var color = chip.Tag as Color? ?? Theme.Current.Accent;
+            chip.FlatAppearance.BorderColor = color;
+            chip.BackColor = active ? color : Theme.Current.Panel;
+            chip.ForeColor = active ? Color.White : Theme.Current.Text;
+            chip.Font = new Font(chip.Font, active ? FontStyle.Bold : FontStyle.Regular);
+        }
+        ApplyFilter();
+    }
+
+    static Bucket BucketOf(ScanItem i)
+    {
+        if (i.Status == ScanStatus.Failed) return Bucket.Error;
+        if (i.Status is ScanStatus.TrustedSkipped or ScanStatus.Skipped or ScanStatus.Cancelled) return Bucket.Skipped;
+        var r = i.Report;
+        if (r == null) return Bucket.All; // in-progress / no verdict yet → only under "Tümü"
+        if (r.IsMalicious) return Bucket.Malicious;
+        if (r.DetectionCount > 0) return Bucket.Suspicious;
+        return Bucket.Clean;
+    }
+
+    bool FilterActive => _bucket != Bucket.All || _search.Text.Trim().Length > 0;
+
+    bool Passes(ScanItem i)
+    {
+        if (_bucket != Bucket.All && BucketOf(i) != _bucket) return false;
+        string q = _search.Text.Trim();
+        if (q.Length > 0 &&
+            (i.FileName?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0 &&
+            (i.FilePath?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0)
+            return false;
+        return true;
+    }
+
+    void ApplyFilter()
+    {
+        var keep = SelectedItem();
+        if (!FilterActive)
+        {
+            if (!ReferenceEquals(_grid.DataSource, _scheduler.Items)) _grid.DataSource = _scheduler.Items;
+        }
+        else
+        {
+            _view ??= [];
+            _view.RaiseListChangedEvents = false;
+            _view.Clear();
+            foreach (var it in _scheduler.Items) if (Passes(it)) _view.Add(it);
+            _view.RaiseListChangedEvents = true;
+            _view.ResetBindings();
+            if (!ReferenceEquals(_grid.DataSource, _view)) _grid.DataSource = _view;
+        }
+        Reselect(keep);
+        UpdateChipCounts();
+    }
+
+    void Reselect(ScanItem? item)
+    {
+        if (item == null) return;
+        _grid.ClearSelection();
+        foreach (DataGridViewRow row in _grid.Rows)
+            if (ReferenceEquals(row.DataBoundItem, item)) { row.Selected = true; return; }
+    }
+
+    void UpdateChipCounts()
+    {
+        int all = 0, clean = 0, susp = 0, mal = 0, skip = 0, err = 0;
+        foreach (var i in _scheduler.Items)
+        {
+            all++;
+            switch (BucketOf(i))
+            {
+                case Bucket.Clean: clean++; break;
+                case Bucket.Suspicious: susp++; break;
+                case Bucket.Malicious: mal++; break;
+                case Bucket.Skipped: skip++; break;
+                case Bucket.Error: err++; break;
+            }
+        }
+        SetChip(Bucket.All, "Tümü", all);
+        SetChip(Bucket.Clean, "Temiz", clean);
+        SetChip(Bucket.Suspicious, "Şüpheli", susp);
+        SetChip(Bucket.Malicious, "Zararlı", mal);
+        SetChip(Bucket.Skipped, "Atlandı", skip);
+        SetChip(Bucket.Error, "Hata", err);
+        _filterCount.Text = FilterActive ? $"gösterilen {_grid.Rows.Count} / toplam {all}" : "";
+    }
+
+    void SetChip(Bucket b, string label, int count) { if (_chips.TryGetValue(b, out var c)) c.Text = $"{label} ({count})"; }
+
+    /// <summary>An item just got a verdict: keep counts live and slot it into the active filtered view
+    /// without a full rebuild (so scroll position / selection survive during a running scan).</summary>
+    void OnFilterItemFinished(ScanItem item)
+    {
+        UpdateChipCounts();
+        if (FilterActive && _view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item) && !_view.Contains(item))
+            _view.Add(item);
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.F)) { _search.Focus(); _search.SelectAll(); return true; }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     void ConfigureGrid()
@@ -572,6 +734,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (ReferenceEquals(item, SelectedItem())) _detail.Show(item);
         if (item.Report?.IsMalicious == true) ThreatFound?.Invoke(item);
+        OnFilterItemFinished(item);
     }
 
     void UpdateRunningState(bool running)
@@ -602,6 +765,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         ThemeManager.StyleGrid(_grid);
         _detail.ApplyTheme();
+        if (_chips.Count > 0) SetBucket(_bucket); // re-tint chips for the new theme
         _grid.Invalidate();
     }
 }
