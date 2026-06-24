@@ -10,6 +10,10 @@ namespace VirusTotalScanner;
 /// </summary>
 internal sealed class ScanOverviewControl : UserControl
 {
+    readonly Panel _statusBanner = new() { Dock = DockStyle.Top, Height = 56, Margin = new Padding(8, 8, 8, 2) };
+    readonly Label _statusLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Padding = new Padding(14, 0, 0, 0), Font = new Font("Segoe UI", 11f, FontStyle.Bold) };
+    readonly Button _statusBtn = new() { Dock = DockStyle.Right, Width = 160, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Visible = false };
+    Action? _statusAction;
     readonly Panel _attention = new() { Dock = DockStyle.Top, Height = 40, Visible = false, Padding = new Padding(12, 0, 8, 0) };
     readonly Label _attentionLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
     readonly Panel _drop = new() { Dock = DockStyle.Top, Height = 150, Margin = new Padding(8) };
@@ -21,13 +25,16 @@ internal sealed class ScanOverviewControl : UserControl
     public event Action<string[]>? ScanRequested;
     /// <summary>Quick-action launchpad verbs, dispatched to the scan control by the host.</summary>
     public event Action? ScanRunningRequested, ScanDownloadsRequested, RecheckRequested;
+    /// <summary>Status-banner "go to the relevant tab" — the host switches to the given tab index.</summary>
+    public event Action<int>? GoToTab;
 
     public ScanOverviewControl()
     {
         Dock = DockStyle.Fill;
         AllowDrop = true;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(8) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(8) };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // status banner
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // attention
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166)); // drop-zone
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));  // count tiles
@@ -35,11 +42,13 @@ internal sealed class ScanOverviewControl : UserControl
 
         _attention.Controls.Add(_attentionLabel);
         BuildDropZone();
+        BuildStatusBanner();
 
-        root.Controls.Add(_attention, 0, 0);
-        root.Controls.Add(_drop, 0, 1);
-        root.Controls.Add(BuildTiles(), 0, 2);
-        root.Controls.Add(BuildRecent(), 0, 3);
+        root.Controls.Add(_statusBanner, 0, 0);
+        root.Controls.Add(_attention, 0, 1);
+        root.Controls.Add(_drop, 0, 2);
+        root.Controls.Add(BuildTiles(), 0, 3);
+        root.Controls.Add(BuildRecent(), 0, 4);
         Controls.Add(root);
 
         DragEnter += (_, e) => { if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true) e.Effect = DragDropEffects.Copy; };
@@ -166,6 +175,7 @@ internal sealed class ScanOverviewControl : UserControl
             + (watching > 0 ? $"  •  👁 {watching} dosya izleniyor" : "");
 
         UpdateAttention(tehdit);
+        UpdateStatusBanner();
     }
 
     Control RecentRow(HistoryEntry e)
@@ -203,6 +213,65 @@ internal sealed class ScanOverviewControl : UserControl
         var item = new ScanItem(e.Path ?? e.Name) { Report = report, Status = ScanStatus.Completed, Md5 = e.Md5, Sha256 = e.Sha256 };
         using var dlg = new DetailDialog(item);
         dlg.ShowDialog(FindForm());
+    }
+
+    void BuildStatusBanner()
+    {
+        _statusBtn.FlatAppearance.BorderSize = 0;
+        _statusBtn.Click += (_, _) => _statusAction?.Invoke();
+        _statusBanner.Controls.Add(_statusBtn);   // docked edge first
+        _statusBanner.Controls.Add(_statusLabel); // fill last
+    }
+
+    void SetBanner(string title, string rationale, Color accent, string btnText, Action? action)
+    {
+        _statusBanner.BackColor = Blend(accent, Theme.Current.Panel, 0.22f);
+        _statusLabel.ForeColor = Theme.Current.Text;
+        _statusLabel.Text = title + "  —  " + rationale;
+        _statusAction = action;
+        if (action != null && btnText.Length > 0)
+        {
+            _statusBtn.Text = btnText;
+            _statusBtn.BackColor = accent;
+            _statusBtn.ForeColor = Color.White;
+            _statusBtn.Visible = true;
+        }
+        else _statusBtn.Visible = false;
+    }
+
+    /// <summary>The one live security answer the lifetime tiles can't give: is a known-malicious file
+    /// still sitting on this disk right now? Red if so; amber for pending housekeeping; green otherwise.</summary>
+    void UpdateStatusBanner()
+    {
+        HistoryEntry? liveThreat = null;
+        try
+        {
+            liveThreat = ScanHistoryStore.All().FirstOrDefault(e =>
+                VerdictCategories.IsThreat(e.Detections) && !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path!));
+        }
+        catch { }
+
+        if (liveThreat != null)
+        {
+            SetBanner("🔴  Dikkat gerek", $"Bilinen zararlı bir dosya hâlâ diskte: {liveThreat.Name}", Theme.Current.Danger, "Geçmişi aç →", () => GoToTab?.Invoke(4));
+            return;
+        }
+        if (AppServices.Vault.UsableKeyCount == 0 && !Settings.KeylessGuiLookup)
+        {
+            SetBanner("🟡  Beklemede", "Kullanılabilir anahtar yok ve anahtarsız mod kapalı — tarama yapılamıyor.", Theme.Current.Warning, "Ayarlar →", () => GoToTab?.Invoke(5));
+            return;
+        }
+        int quar = SafeQuarantineCount(), pending = PendingOutbox.Count, watch = ReverdictWatchStore.Count;
+        if (quar > 0 || pending > 0 || watch > 0)
+        {
+            var bits = new List<string>();
+            if (quar > 0) bits.Add($"{quar} dosya karantinada");
+            if (pending > 0) bits.Add($"{pending} dosya çevrimdışı sırada");
+            if (watch > 0) bits.Add($"{watch} dosya izlemede");
+            SetBanner("🟡  Beklemede", string.Join(" · ", bits), Theme.Current.Warning, "Yeniden denetle", () => RecheckRequested?.Invoke());
+            return;
+        }
+        SetBanner("🟢  Korunuyorsun", "Diskte bilinen canlı tehdit yok.", Theme.Current.Success, "", null);
     }
 
     void UpdateAttention(int tehditCount)

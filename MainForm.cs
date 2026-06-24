@@ -132,6 +132,7 @@ internal sealed partial class MainForm : Form
         _overview.ScanRunningRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanRunningProcesses(); };
         _overview.ScanDownloadsRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanDownloadsFolder(); };
         _overview.RecheckRequested += () => { _tabs.SelectedIndex = 1; _scan.RescanSweep(); };
+        _overview.GoToTab += i => { if (i >= 0 && i < _tabs.TabCount) _tabs.SelectedIndex = i; };
         _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item));
         StartDownloadsWatchIfEnabled();
 
