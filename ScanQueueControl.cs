@@ -803,4 +803,26 @@ internal sealed class ScanQueueControl : UserControl
         if (_chips.Count > 0) SetBucket(_bucket); // re-tint chips for the new theme
         _grid.Invalidate();
     }
+
+    /// <summary>Every action, by Turkish name, for the Ctrl+K command palette.</summary>
+    public List<CommandRecord> Commands() =>
+    [
+        new() { Name = "Dosya seç…", Desc = "Taranacak dosya(lar) seç", Run = SelectFiles },
+        new() { Name = "Klasör seç…", Desc = "Bir klasörü alt klasörleriyle tara", Run = SelectFolder },
+        new() { Name = "Hash sorgula…", Desc = "Bir MD5/SHA hash'ini VirusTotal'de ara", Run = () => _ = HashLookupAsync() },
+        new() { Name = "Hash doğrula…", Desc = "Bir dosyayı beklenen hash ile karşılaştır", Run = () => _ = VerifyHashAsync() },
+        new() { Name = "Çalışanları tara", Desc = "Çalışan tüm süreç imajlarını tara", Run = ScanRunning },
+        new() { Name = "Bütünlük denetimi", Desc = "İzlenen dosyalarda değişiklik/drift ara", Run = () => _ = VerifyBaselineAsync() },
+        new() { Name = "Aile kümeleri", Desc = "Aynı zararlı ailesini paylaşan dosyaları grupla", Run = () => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); } },
+        new() { Name = "Karantina kasası", Desc = "Karantinaya alınanları görüntüle / geri yükle", Run = ShowQuarantineVault },
+        new() { Name = "Olay zaman çizelgesi", Desc = "Gelen çalıştırılabilirleri varış zamanına göre kümele", Run = () => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); } },
+        new() { Name = "Verdikt yeniden denetle", Desc = "Eski önbellek kayıtlarını kotasız yeniden sorgula", Run = () => _ = RunRecheckAsync() },
+        new() { Name = "Klasör özeti", Desc = "Taranan klasörleri tehdit sayısıyla özetle", Run = ShowFolderRollup },
+        new() { Name = "Rapor (HTML)", Desc = "Sonuçları HTML/CSV/JSON/metin rapora yaz", Run = ExportReport },
+        new() { Name = "Dışa aktar (CSV)", Desc = "Sonuçları CSV olarak kaydet", Run = ExportCsv },
+        new() { Name = "Önbelleği temizle", Desc = "Yerel hash önbelleğini sil", Run = ClearCache },
+        new() { Name = "Diğer kopyaları bul (disk)", Desc = "Seçili dosyanın birebir kopyalarını diskte ara", Run = () => _ = FindCopiesAsync() },
+        new() { Name = "Autostart kancalarını bul", Desc = "Seçili dosya için kalıcılık kayıtlarını ara", Run = HuntPersistence },
+        new() { Name = "Klasör komşuları", Desc = "Seçili dosyanın klasöründeki diğer dosyalar", Run = ShowNeighbors },
+    ];
 }
