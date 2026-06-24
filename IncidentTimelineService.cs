@@ -49,6 +49,7 @@ internal static class IncidentTimelineService
         var paths = Enumerate(sinceUtc);
         if (paths.Count == 0) paths = ScopedWalk(sinceUtc, ct);
 
+        var cachedSizes = cache.CachedSizes(); // size pre-filter: skip hashing files that can't be cache hits
         var files = new List<TimelineFile>(paths.Count);
         int done = 0, total = paths.Count;
         foreach (var p in paths)
@@ -68,12 +69,13 @@ internal static class IncidentTimelineService
                     FromInternet = zone?.FromInternet == true,
                 };
 
-                // Verdict from the cache only (free). Hashing is the cost, so skip oversized files.
-                if (fi.Length <= MaxHashBytes)
+                // Verdict from the cache only (free). Hashing is the cost, so skip oversized files and
+                // any whose size matches no cached entry (can't be a hit) — most files on a big sweep.
+                if (fi.Length <= MaxHashBytes && cachedSizes.Contains(fi.Length))
                 {
                     try
                     {
-                        var (md5, _) = await HashService.ComputeAsync(p, ct);
+                        var md5 = await HashService.ComputeMd5Async(p, ct);
                         var report = cache.TryGet(md5, int.MaxValue);
                         if (report != null) { tf.Verdict = report.Verdict; tf.Detections = report.DetectionCount; }
                     }

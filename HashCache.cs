@@ -125,6 +125,16 @@ internal sealed class HashCache
     /// <summary>A point-in-time copy of all cache entries (for the verdict re-check sweep).</summary>
     public IReadOnlyList<HashCacheEntry> Snapshot() => _entries.Values.ToList();
 
+    /// <summary>The distinct file sizes recorded in the cache. A cheap pre-filter for cache-peek callers:
+    /// a file whose byte length matches none of these can never be a cache hit, so it needn't be hashed.</summary>
+    public HashSet<long> CachedSizes()
+    {
+        var set = new HashSet<long>();
+        foreach (var e in _entries.Values)
+            if (e.Report is { Size: > 0 }) set.Add(e.Report.Size);
+        return set;
+    }
+
     public void Clear()
     {
         _entries.Clear();

@@ -59,6 +59,7 @@ internal static class DownloadsTriageService
             .OrderByDescending(p => { try { return new FileInfo(p).CreationTime; } catch { return DateTime.MinValue; } })
             .ToList();
 
+        var cachedSizes = cache.CachedSizes(); // size pre-filter: skip hashing files that can't be cache hits
         var list = new List<DownloadItem>(paths.Count);
         int done = 0;
         foreach (var p in paths)
@@ -76,11 +77,11 @@ internal static class DownloadsTriageService
                     Host = zone?.HostUrl,
                     Signature = trust.Trusted ? "✓ " + (trust.Publisher ?? "imzalı") : "imzasız",
                 };
-                if (fi.Length <= MaxHashBytes)
+                if (fi.Length <= MaxHashBytes && cachedSizes.Contains(fi.Length))
                 {
                     try
                     {
-                        var (md5, _) = await HashService.ComputeAsync(p, ct);
+                        var md5 = await HashService.ComputeMd5Async(p, ct);
                         var r = cache.TryGet(md5, int.MaxValue);
                         if (r != null) { di.Verdict = r.Verdict; di.Detections = r.DetectionCount; }
                     }

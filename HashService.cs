@@ -24,6 +24,21 @@ internal static class HashService
         return (md5Hex, shaHex);
     }
 
+    /// <summary>MD5 only, single pass — for cache-existence peeks (timeline / downloads triage) where
+    /// the SHA-256 from <see cref="ComputeAsync"/> would be computed and immediately thrown away.</summary>
+    public static async Task<string> ComputeMd5Async(string path, CancellationToken ct = default)
+    {
+        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 20, useAsync: true);
+
+        byte[] buffer = new byte[1 << 20];
+        int read;
+        while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+            md5.AppendData(buffer, 0, read);
+
+        return Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant();
+    }
+
     public readonly record struct HashCheck(bool Matched, string Algorithm, string Actual, string Expected);
 
     /// <summary>
