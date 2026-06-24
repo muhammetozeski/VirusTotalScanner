@@ -37,6 +37,9 @@ internal sealed class CliOptions
     public string? SnapshotPath;
     public string? ReportPath;
     public int FailOn = -1; // -1 = use verdict categories; >=0 = fail when any file hits >= N detections
+    public string? DiffBaseline; // prior --report json to diff the current scan against
+    public bool FailOnNew;
+    public bool FailOnRegression;
     public List<string> Paths { get; } = [];
 }
 
@@ -68,6 +71,9 @@ internal static class ArgumentDef
     static readonly CmdArg Snapshot = new("--snapshot", "--snapshot");
     static readonly CmdArg Report = new("--report", "--report");
     static readonly CmdArg FailOn = new("--fail-on", "--failon");
+    static readonly CmdArg Diff = new("--diff", "--diff");
+    static readonly CmdArg FailOnNew = new("--fail-on-new", "--failonnew");
+    static readonly CmdArg FailOnRegression = new("--fail-on-regression", "--failonreg");
 
     public static CliOptions Parse(string[] args)
     {
@@ -100,6 +106,9 @@ internal static class ArgumentDef
             else if (Snapshot.IsMatch(a)) { if (i + 1 < args.Length) o.SnapshotPath = args[++i]; }
             else if (Report.IsMatch(a)) { if (i + 1 < args.Length) o.ReportPath = args[++i]; o.NoGui = true; }
             else if (FailOn.IsMatch(a)) { if (i + 1 < args.Length && int.TryParse(args[++i], out var n)) o.FailOn = n; o.NoGui = true; }
+            else if (Diff.IsMatch(a)) { if (i + 1 < args.Length) o.DiffBaseline = args[++i]; o.NoGui = true; }
+            else if (FailOnNew.IsMatch(a)) { o.FailOnNew = true; o.NoGui = true; }
+            else if (FailOnRegression.IsMatch(a)) { o.FailOnRegression = true; o.NoGui = true; }
             else if (!a.StartsWith('-')) o.Paths.Add(a.Trim('"'));
         }
         return o;

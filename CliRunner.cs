@@ -77,13 +77,32 @@ internal static class CliRunner
             catch (Exception ex) { Console.Error.WriteLine("Rapor yazılamadı: " + ex.Message); }
         }
 
+        // Verdict-delta gate: compare against a prior --report json baseline (keyed by sha256).
+        bool diffFail = false;
+        if (opts.DiffBaseline != null)
+        {
+            var delta = DiffService.Compare(scheduler.Items.ToList(), opts.DiffBaseline);
+            if (delta == null) Console.Error.WriteLine("Diff: baseline okunamadı: " + opts.DiffBaseline);
+            else
+            {
+                if (!opts.Json)
+                {
+                    Console.WriteLine($"\nDelta: {delta.New} yeni, {delta.Regressed} kötüleşti, {delta.Unchanged} değişmedi.");
+                    foreach (var f in delta.NewFiles.Take(20)) Console.WriteLine("  [YENİ] " + f);
+                    foreach (var f in delta.RegressedFiles.Take(20)) Console.WriteLine("  [KÖTÜLEŞTİ] " + f);
+                }
+                if ((opts.FailOnNew && delta.New > 0) || (opts.FailOnRegression && delta.Regressed > 0)) diffFail = true;
+            }
+        }
+
         AppServices.Shutdown();
 
         // Gate: --fail-on N flips the exit code on any file with >= N detections; otherwise the
-        // verdict categories decide what counts as a threat.
+        // verdict categories decide what counts as a threat. --diff gates add new/regression fails.
         bool threat = opts.FailOn >= 0
             ? scheduler.Items.Any(i => (i.Report?.DetectionCount ?? 0) >= opts.FailOn)
             : scheduler.Items.Any(i => i.Report?.IsMalicious == true);
+        threat = threat || diffFail;
         if (!opts.Json && !opts.Quiet)
         {
             int mal = scheduler.Items.Count(i => i.Report?.IsMalicious == true);
@@ -267,6 +286,8 @@ internal static class CliRunner
           -j, --json          Sonuçları JSON olarak yaz (stdout)
               --report <yol>  Rapor dosyası yaz (.html/.json/.txt — uzantıdan biçim seçilir)
               --fail-on <N>   N+ tespit olan dosyada çıkış kodu 1 (CI kapısı)
+              --diff <json>   Önceki --report json ile karşılaştır (sha256); delta yaz
+              --fail-on-new / --fail-on-regression  yeni/kötüleşen verdiktte çıkış 1
           -q, --quiet         Yalın çıktı (yalnızca verdict satırları)
               --install       Sağ tuş menüsüne ekle
               --uninstall     Sağ tuş menüsünden kaldır
