@@ -400,6 +400,14 @@ internal sealed class SettingsControl : UserControl
         var usb = new CheckBox { Text = "USB takıldığında taramayı öner", AutoSize = true, Checked = Settings.WatchUsb };
         usb.CheckedChanged += (_, _) => { Settings.WatchUsb.Value = usb.Checked; SettingsManager.SaveSettings(); };
 
+        var autoQ = new CheckBox { Text = "Arka plan gözcüleri yüksek-tespitli tehditleri otomatik karantinaya alsın (geri alınabilir)", AutoSize = true, Checked = Settings.AutoQuarantineWatchers };
+        autoQ.CheckedChanged += (_, _) => { Settings.AutoQuarantineWatchers.Value = autoQ.Checked; SettingsManager.SaveSettings(); };
+        var autoQRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
+        autoQRow.Controls.Add(new Label { Text = "Otomatik karantina eşiği (tespit sayısı):", AutoSize = true, Margin = new Padding(20, 6, 6, 0) });
+        var autoQNum = new NumericUpDown { Minimum = 0, Maximum = 70, Value = Math.Max(0, Math.Min(70, Settings.AutoQuarantineThreshold.Value)), Width = 60 };
+        autoQNum.ValueChanged += (_, _) => { Settings.AutoQuarantineThreshold.Value = (int)autoQNum.Value; SettingsManager.SaveSettings(); };
+        autoQRow.Controls.Add(autoQNum);
+
         var logging = new CheckBox { Text = Strings.LoggingLabel, AutoSize = true, Checked = LoggerHost.IsEnabled };
         logging.CheckedChanged += (_, _) => LoggerHost.SetEnabled(logging.Checked);
 
@@ -438,6 +446,8 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(votes);
         body.Controls.Add(watch);
         body.Controls.Add(usb);
+        body.Controls.Add(autoQ);
+        body.Controls.Add(autoQRow);
         body.Controls.Add(ledgerRow);
         body.Controls.Add(logging);
         return card;
