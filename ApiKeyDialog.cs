@@ -15,24 +15,24 @@ internal sealed class ApiKeyDialog : Form
 
     public ApiKeyDialog(string? label = null, string? key = null)
     {
-        Text = key == null ? "API anahtarı ekle" : "API anahtarını düzenle";
+        Text = key == null ? Strings.DlgApiKeyAddTitle : Strings.DlgApiKeyEditTitle;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         MaximizeBox = false;
         ClientSize = new Size(500, 220);
 
-        var l1 = new Label { Text = "Etiket (isteğe bağlı):", Left = 14, Top = 16, AutoSize = true };
+        var l1 = new Label { Text = Strings.ApiKeyLabelLabel, Left = 14, Top = 16, AutoSize = true };
         _label.SetBounds(14, 38, 472, 24);
         _label.Text = label ?? "";
 
-        var l2 = new Label { Text = "VirusTotal API anahtarı:", Left = 14, Top = 72, AutoSize = true };
+        var l2 = new Label { Text = Strings.ApiKeyKeyLabel, Left = 14, Top = 72, AutoSize = true };
         _key.SetBounds(14, 94, 472, 24);
         _key.UseSystemPasswordChar = true;
         _key.Font = new Font("Consolas", 9.5f);
         _key.Text = key ?? "";
 
-        _show.Text = "Göster";
+        _show.Text = Strings.ApiKeyShow;
         _show.SetBounds(14, 124, 80, 22);
         _show.CheckedChanged += (_, _) => _key.UseSystemPasswordChar = !_show.Checked;
 
@@ -40,14 +40,14 @@ internal sealed class ApiKeyDialog : Form
         _status.AutoEllipsis = true;
         _status.Tag = "subtle";
 
-        var validate = ThemeManager.MakeButton("Doğrula", async (_, _) => await ValidateAsync());
+        var validate = ThemeManager.MakeButton(Strings.ApiKeyValidate, async (_, _) => await ValidateAsync());
         validate.SetBounds(14, 160, 110, 32);
 
-        var ok = new Button { Text = "Kaydet", DialogResult = DialogResult.OK, Left = 320, Top = 160, Width = 80, Height = 32 };
-        var cancel = new Button { Text = "İptal", DialogResult = DialogResult.Cancel, Left = 406, Top = 160, Width = 80, Height = 32 };
+        var ok = new Button { Text = Strings.BtnSave, DialogResult = DialogResult.OK, Left = 320, Top = 160, Width = 80, Height = 32 };
+        var cancel = new Button { Text = Strings.DlgCancel, DialogResult = DialogResult.Cancel, Left = 406, Top = 160, Width = 80, Height = 32 };
         ok.Click += (_, _) =>
         {
-            if (string.IsNullOrWhiteSpace(_key.Text)) { DialogResult = DialogResult.None; NativeMessageBox.Warn("Anahtar boş olamaz."); }
+            if (string.IsNullOrWhiteSpace(_key.Text)) { DialogResult = DialogResult.None; NativeMessageBox.Warn(Strings.ApiKeyEmptyWarn); }
         };
 
         Controls.AddRange([l1, _label, l2, _key, _show, _status, validate, ok, cancel]);
@@ -61,17 +61,17 @@ internal sealed class ApiKeyDialog : Form
     async Task ValidateAsync()
     {
         string key = _key.Text.Trim();
-        if (string.IsNullOrWhiteSpace(key)) { _status.Text = "Önce anahtarı girin."; return; }
+        if (string.IsNullOrWhiteSpace(key)) { _status.Text = Strings.ApiKeyEnterFirst; return; }
         _status.ForeColor = Theme.Current.SubtleText;
-        _status.Text = "Doğrulanıyor…";
+        _status.Text = Strings.ApiKeyValidating;
         try
         {
             var q = await AppServices.Api.GetUserQuotaAsync(key);
-            if (q == null) { _status.ForeColor = Theme.Current.Warning; _status.Text = "Yanıt alındı ama kota okunamadı (anahtar yine de çalışabilir)."; return; }
+            if (q == null) { _status.ForeColor = Theme.Current.Warning; _status.Text = Strings.ApiKeyQuotaUnreadable; return; }
             _status.ForeColor = Theme.Current.Success;
-            _status.Text = $"Geçerli ✓  Günlük {q.Daily.Used}/{q.Daily.Allowed} • Aylık {q.Monthly.Used}/{q.Monthly.Allowed}";
+            _status.Text = string.Format(Strings.ApiKeyValidFormat, q.Daily.Used, q.Daily.Allowed, q.Monthly.Used, q.Monthly.Allowed);
         }
-        catch (VtAuthException) { _status.ForeColor = Theme.Current.Danger; _status.Text = "Geçersiz anahtar (401/403)."; }
-        catch (Exception ex) { _status.ForeColor = Theme.Current.Danger; _status.Text = "Hata: " + ex.Message; }
+        catch (VtAuthException) { _status.ForeColor = Theme.Current.Danger; _status.Text = Strings.ApiKeyInvalid; }
+        catch (Exception ex) { _status.ForeColor = Theme.Current.Danger; _status.Text = Strings.ApiKeyErrorPrefix + ex.Message; }
     }
 }

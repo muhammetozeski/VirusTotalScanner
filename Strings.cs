@@ -62,6 +62,22 @@ internal static class Strings
     public static string BtnClose = "Kapat";
     public static string BtnOk = "Tamam";
     public static string DlgCancel = "İptal";
+    public static string BtnSave = "Kaydet";
+
+    // ---- API key dialog ----
+    public static string DlgApiKeyAddTitle = "API anahtarı ekle";
+    public static string DlgApiKeyEditTitle = "API anahtarını düzenle";
+    public static string ApiKeyLabelLabel = "Etiket (isteğe bağlı):";
+    public static string ApiKeyKeyLabel = "VirusTotal API anahtarı:";
+    public static string ApiKeyShow = "Göster";
+    public static string ApiKeyValidate = "Doğrula";
+    public static string ApiKeyEmptyWarn = "Anahtar boş olamaz.";
+    public static string ApiKeyEnterFirst = "Önce anahtarı girin.";
+    public static string ApiKeyValidating = "Doğrulanıyor…";
+    public static string ApiKeyQuotaUnreadable = "Yanıt alındı ama kota okunamadı (anahtar yine de çalışabilir).";
+    public static string ApiKeyValidFormat = "Geçerli ✓  Günlük {0}/{1} • Aylık {2}/{3}";
+    public static string ApiKeyInvalid = "Geçersiz anahtar (401/403).";
+    public static string ApiKeyErrorPrefix = "Hata: ";
     public static string ColThreat = "Tehdit";
     public static string ColSuspicious = "Şüpheli";
     public static string ColClean = "Temiz";
