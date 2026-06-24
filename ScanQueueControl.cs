@@ -18,6 +18,7 @@ internal sealed class ScanQueueControl : UserControl
     readonly Button _pauseBtn;
     readonly Button _cancelBtn;
     readonly System.Windows.Forms.Timer _repaintTimer = new() { Interval = 250 };
+    readonly ToolTip _tips = new() { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 100 };
     int _progressCol;
     bool _exhaustPromptShown; // show the quota-exhausted choice dialog once per exhaustion episode
 
@@ -68,8 +69,10 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton("🕓  Olay zaman çizelgesi", (_, _) => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); }));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
+        bar.Controls.Add(ThemeManager.MakeButton("❓  Yardım", (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
         var hint = ThemeManager.MakeLabel(Strings.DropHint, subtle: true);
         bar.Controls.Add(hint);
+        AttachBarTooltips(bar);
 
         // ---- split ----
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
@@ -272,6 +275,33 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (keyData == (Keys.Control | Keys.F)) { _search.Focus(); _search.SelectAll(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    /// <summary>Plain-Turkish hover help on every action-bar button — teaches the deep features
+    /// where the user meets them, matched by the button's text so no per-button wiring is needed.</summary>
+    void AttachBarTooltips(Control bar)
+    {
+        var tips = new Dictionary<string, string>
+        {
+            [Strings.BtnSelectFiles] = "Taranacak dosya(lar) seç.",
+            [Strings.BtnSelectFolder] = "Bir klasörü, alt klasörleriyle birlikte tara.",
+            [Strings.BtnHashLookup] = "Elindeki bir MD5/SHA hash'ini VirusTotal'de ara (dosya gerekmez).",
+            [Strings.BtnVerifyHash] = "Bir dosyanın beklenen hash ile birebir aynı olduğunu doğrula.",
+            [Strings.BtnScanRunning] = "Şu an çalışan tüm süreçlerin imajlarını tara — 'şu an virüslü müyüm?'.",
+            [Strings.BtnIntegrityCheck] = "İzlemeye aldığın dosyaların değişip değişmediğini (drift) denetle.",
+            [Strings.BtnExportCsv] = "Sonuçları CSV tablosu olarak kaydet.",
+            [Strings.BtnExportReport] = "Sonuçları HTML/CSV/JSON/metin rapora yaz.",
+            [Strings.BtnFolderRollup] = "Taranan klasörleri tehdit/temiz sayılarıyla özetle.",
+            [Strings.BtnFamilyClusters] = "Aynı zararlı ailesini paylaşan farklı dosyaları grupla.",
+            [Strings.BtnQuarantineVault] = "Karantinaya alınanları gör; güvenliyse geri yükle.",
+            [Strings.BtnRecheck] = "Eski önbellek kayıtlarını kotasız (GUI) yeniden sorgula.",
+            [Strings.BtnClearCache] = "Yerel hash önbelleğini temizle (verdiktler tekrar VT'den alınır).",
+            ["🕓  Olay zaman çizelgesi"] = "Diske gelen çalıştırılabilirleri varış gününe göre kümele.",
+            [Strings.BtnPause] = "Devam eden taramayı duraklat / sürdür.",
+            [Strings.BtnCancel] = "Devam eden taramayı iptal et.",
+        };
+        foreach (Control c in bar.Controls)
+            if (c is Button b && tips.TryGetValue(b.Text, out var tip)) _tips.SetToolTip(b, tip);
     }
 
     // ---- "have I scanned this before?" recall bar ----
