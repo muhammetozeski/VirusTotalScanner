@@ -93,10 +93,11 @@ internal sealed partial class MainForm : Form
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
     readonly bool _startHidden;
-    enum ToastAction { None, ScanUsb, ShowThreat }
+    enum ToastAction { None, ScanUsb, ShowThreat, UndoQuarantine }
     ToastAction _toastAction;  // what clicking the CURRENT balloon should do (set right before each toast)
     string? _pendingUsbDrive;  // the removable drive for a ScanUsb toast
     ScanItem? _lastThreat;     // the item for a ShowThreat toast
+    QuarantineEntry? _lastQuarantine; // the entry for an UndoQuarantine toast
 
     public MainForm(bool startHidden = false)
     {
@@ -126,14 +127,14 @@ internal sealed partial class MainForm : Form
         Controls.Add(_status);
 
         _scan.NeedApiKey += () => _tabs.SelectedIndex = 5; // Ayarlar tab
-        _scan.ThreatFound += OnThreatFound;
+        _scan.ThreatFound += item => OnThreatFound(item, _scan.IsBackgroundScan);
         _history.RescanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: false); };
         _overview.ScanRequested += paths => { _tabs.SelectedIndex = 1; _scan.StartScan(paths, recurse: true); };
         _overview.ScanRunningRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanRunningProcesses(); };
         _overview.ScanDownloadsRequested += () => { _tabs.SelectedIndex = 1; _scan.ScanDownloadsFolder(); };
         _overview.RecheckRequested += () => { _tabs.SelectedIndex = 1; _scan.RescanSweep(); };
         _overview.GoToTab += i => { if (i >= 0 && i < _tabs.TabCount) _tabs.SelectedIndex = i; };
-        _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item));
+        _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
         StartDownloadsWatchIfEnabled();
 
         AppServices.Scheduler.Started += () => SafeUi(TaskbarProgress.Indeterminate);
@@ -222,11 +223,15 @@ internal sealed partial class MainForm : Form
             case ToastAction.ScanUsb when _pendingUsbDrive is { } drive:
                 _pendingUsbDrive = null;
                 _tabs.SelectedIndex = 1; // Tarama
-                _scan.StartScan([drive], recurse: true);
+                _scan.StartScan([drive], recurse: true, background: true); // unattended USB sweep → auto-quarantine eligible
                 break;
             case ToastAction.ShowThreat when _lastThreat is { } threat:
                 _tabs.SelectedIndex = 1; // jump to the threat so the user can act (quarantine, open VT…)
                 _scan.FocusItem(threat);
+                break;
+            case ToastAction.UndoQuarantine when _lastQuarantine is { } qe:
+                if (QuarantineVault.Restore(qe, out _)) NativeMessageBox.Info("Dosya geri yüklendi.");
+                _lastQuarantine = null;
                 break;
         }
     }
@@ -292,10 +297,21 @@ internal sealed partial class MainForm : Form
         _tray.ShowBalloonTip(5000);
     }
 
-    void OnThreatFound(ScanItem item)
+    void OnThreatFound(ScanItem item, bool background = false)
     {
         _pendingUsbDrive = null; // a threat toast click should restore the window, not scan a stale drive
         _lastThreat = item;
+
+        // A passive background catch (watcher / unattended USB sweep) of obvious malware: quarantine it
+        // immediately with an undo toast, so a live threat isn't left runnable while the user is away.
+        if (background && Settings.AutoQuarantineWatchers && Settings.AutoQuarantineThreshold > 0
+            && item.Report != null && item.Report.DetectionCount >= Settings.AutoQuarantineThreshold
+            && File.Exists(item.FilePath))
+        {
+            SafeUi(() => AutoQuarantine(item));
+            return;
+        }
+
         if (!Settings.NotifyOnThreat) return;
         if (item.Report != null && item.Report.DetectionCount < Settings.NotifyMinDetections) return; // below the user's severity floor
         SafeUi(() =>
@@ -306,6 +322,28 @@ internal sealed partial class MainForm : Form
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             _tray.ShowBalloonTip(5000);
         });
+    }
+
+    void AutoQuarantine(ScanItem item)
+    {
+        if (QuarantineVault.Quarantine(item.FilePath, item.Report, item.Sha256, item.Md5, out _))
+        {
+            _lastQuarantine = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, item.FilePath, StringComparison.OrdinalIgnoreCase));
+            _toastAction = ToastAction.UndoQuarantine;
+            _tray.BalloonTipTitle = "Tehdit otomatik karantinaya alındı";
+            _tray.BalloonTipText = $"{item.FileName} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines}) — geri almak için tıkla.";
+            _tray.BalloonTipIcon = ToolTipIcon.Warning;
+            _tray.ShowBalloonTip(8000);
+        }
+        else
+        {
+            // Couldn't move it (locked/permission) — fall back to the normal alert so the user can act.
+            _toastAction = ToastAction.ShowThreat;
+            _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
+            _tray.BalloonTipText = $"{item.FileName}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
+            _tray.BalloonTipIcon = ToolTipIcon.Warning;
+            _tray.ShowBalloonTip(5000);
+        }
     }
 
     // ---- tray / closing ----

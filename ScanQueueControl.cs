@@ -583,8 +583,13 @@ internal sealed class ScanQueueControl : UserControl
             StartScan([dlg.SelectedPath], recurse: true);
     }
 
-    public void StartScan(IEnumerable<string> paths, bool recurse, bool bypassTrust = false)
+    /// <summary>True while the most recently started scan came from a passive background trigger
+    /// (USB auto-scan, watcher, sweep) rather than the user picking files — gates auto-quarantine.</summary>
+    public bool IsBackgroundScan { get; private set; }
+
+    public void StartScan(IEnumerable<string> paths, bool recurse, bool bypassTrust = false, bool background = false)
     {
+        IsBackgroundScan = background;
         bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         if (!_scheduler.IsRunning && !AppServices.Rotator.HasUsableKeys && !Settings.TrustSkipSigned && !keyless)
         {

@@ -80,6 +80,14 @@ internal static class Settings
     /// <summary>Show one summary toast (clean/suspect/threat tally) when a scan finishes.</summary>
     public static readonly Setting<bool> NotifyScanSummary = new(false);
 
+    /// <summary>Auto-quarantine high-confidence threats caught by a BACKGROUND source (download watcher,
+    /// USB auto-scan) without waiting for the user to click — only when enabled below.</summary>
+    public static readonly Setting<bool> AutoQuarantineWatchers = new(false);
+
+    /// <summary>Detection count at/above which a background threat is auto-quarantined (0 = off). Set high
+    /// (e.g. 10) so only obvious malware is touched; the .VIRUS vault + an undo toast cover false positives.</summary>
+    public static readonly Setting<int> AutoQuarantineThreshold = new(10);
+
     /// <summary>Show VirusTotal community votes in the detail pane.</summary>
     public static readonly Setting<bool> ShowCommunityVotes = new(true);
 
