@@ -591,12 +591,35 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildAboutCard()
     {
-        var card = Card(Strings.CardAbout, 110, out var body);
+        var card = Card(Strings.CardAbout, 170, out var body);
         body.Controls.Add(ThemeManager.MakeLabel($"{AppConstants.AppTitle} v{AppConstants.Version}", subtle: true));
         var link = new LinkLabel { Text = Strings.AboutGetKeyLink, AutoSize = true };
         link.LinkClicked += (_, _) => OpenUrlInBrowser("https://www.virustotal.com/gui/my-apikey");
         body.Controls.Add(link);
         body.Controls.Add(ThemeManager.MakeLabel(Strings.AboutConfigFilePrefix + ConfigPathResolver.ConfigPath, subtle: true));
+
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(0, 6, 0, 0) };
+        actions.Controls.Add(ThemeManager.MakeButton("↺  Tüm ayarları varsayılana döndür", (_, _) =>
+        {
+            if (!NativeMessageBox.Confirm("Tüm ayarlar varsayılan değerlerine döndürülsün mü? (API anahtarları etkilenmez)")) return;
+            SettingsManager.ResetAllToDefaults();
+            NativeMessageBox.Info("Ayarlar varsayılana döndürüldü. Görünmesi için Ayarlar sekmesini yeniden açın.");
+        }));
+        actions.Controls.Add(ThemeManager.MakeButton("Ayarları dışa aktar", (_, _) =>
+        {
+            using var dlg = new SaveFileDialog { Filter = "Ayar dosyası|*.txt|Tümü|*.*", FileName = "vts-ayarlar.txt" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            try { SettingsManager.ExportSettings(dlg.FileName); NativeMessageBox.Info("Ayarlar dışa aktarıldı (API anahtarları hariç, paylaşıma uygun)."); }
+            catch (Exception ex) { NativeMessageBox.Error("Dışa aktarılamadı: " + ex.Message); }
+        }));
+        actions.Controls.Add(ThemeManager.MakeButton("Ayarları içe aktar", (_, _) =>
+        {
+            using var dlg = new OpenFileDialog { Filter = "Ayar dosyası|*.txt|Tümü|*.*" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            try { int n = SettingsManager.ImportSettings(dlg.FileName); NativeMessageBox.Info($"{n} ayar içe aktarıldı. Görünmesi için Ayarlar sekmesini yeniden açın."); }
+            catch (Exception ex) { NativeMessageBox.Error("İçe aktarılamadı: " + ex.Message); }
+        }));
+        body.Controls.Add(actions);
         return card;
     }
 
