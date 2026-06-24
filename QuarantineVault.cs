@@ -112,6 +112,46 @@ internal static class QuarantineVault
         return _entries.OrderByDescending(e => e.QuarantinedUtc).ToList();
     }
 
+    static bool _reconciled;
+
+    /// <summary>Heal the gap between Quarantine's File.Move and Save: a crash/kill/disk-full in between can
+    /// leave an orphan .VIRUS with no manifest record (invisible, unrecoverable, leaking space) or a manifest
+    /// record whose .VIRUS is gone. Run once when the vault opens: surface orphans as recoverable rows (so
+    /// they can be Purged) and drop dead records. Returns the number of orphans recovered.</summary>
+    public static int Reconcile()
+    {
+        Load();
+        if (_reconciled) return 0;
+        _reconciled = true;
+        int recovered = 0;
+        try
+        {
+            int dropped = _entries.RemoveAll(e => !File.Exists(VaultFile(e.Id))); // record but no bytes → dead
+            if (Directory.Exists(Folder))
+            {
+                var known = _entries.Select(e => e.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var f in Directory.EnumerateFiles(Folder, "*.VIRUS"))
+                {
+                    string id = Path.GetFileNameWithoutExtension(f);
+                    if (!known.Add(id)) continue; // already in manifest
+                    _entries.Add(new QuarantineEntry
+                    {
+                        Id = id,
+                        OriginalPath = f, // the held file itself: Restore is a natural no-op, Purge works
+                        Verdict = "kurtarıldı",
+                        QuarantinedUtc = SafeWriteTime(f),
+                    });
+                    recovered++;
+                }
+            }
+            if (dropped > 0 || recovered > 0) { Save(); Log($"Vault reconcile: {recovered} orphan(s) recovered, {dropped} dead record(s) dropped.", LogLevel.Info); }
+        }
+        catch (Exception ex) { Log("Vault reconcile failed: " + ex.Message, LogLevel.Warning); }
+        return recovered;
+    }
+
+    static DateTime SafeWriteTime(string f) { try { return File.GetLastWriteTimeUtc(f); } catch { return DateTime.UtcNow; } }
+
     /// <summary>Moves a held file back to its exact original path and drops the manifest entry.</summary>
     public static bool Restore(QuarantineEntry e, out string? error)
     {

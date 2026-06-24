@@ -55,14 +55,18 @@ internal sealed class QuarantineVaultDialog : Form
         ThemeManager.StyleButton(purgeAll);
         ThemeManager.StyleButton(cleanup);
         ThemeManager.StyleButton(close);
+        _recovered = QuarantineVault.Reconcile(); // heal crash-orphaned .VIRUS files before the first listing
         Refresh2();
     }
+
+    int _recovered;
 
     void Refresh2()
     {
         var list = QuarantineVault.List().ToList();
         _grid.DataSource = list;
-        _sizeLabel.Text = $"{list.Count} dosya  •  geri kazanılabilir {FormatBytes(QuarantineVault.ReclaimableBytes())}";
+        string recovered = _recovered > 0 ? $"  •  {_recovered} kurtarılan" : "";
+        _sizeLabel.Text = $"{list.Count} dosya  •  geri kazanılabilir {FormatBytes(QuarantineVault.ReclaimableBytes())}{recovered}";
     }
 
     List<QuarantineEntry> SelectedEntries() =>
