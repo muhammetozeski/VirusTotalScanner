@@ -46,6 +46,7 @@ internal sealed class SettingsControl : UserControl
         _flow.Controls.Add(BuildContextMenuCard());
         _flow.Controls.Add(BuildTrustCard());
         _flow.Controls.Add(BuildAllowlistCard());
+        _flow.Controls.Add(BuildFolderSuppressionCard());
         _flow.Controls.Add(BuildVerdictCard());
         _flow.Controls.Add(BuildScanCard());
         _flow.Controls.Add(BuildSweepCard());
@@ -154,6 +155,43 @@ internal sealed class SettingsControl : UserControl
     }
 
     void RefreshAllowlist() => _allowGrid.DataSource = AllowlistStore.All().ToList();
+
+    readonly DataGridView _folderGrid = new();
+
+    Panel BuildFolderSuppressionCard()
+    {
+        var card = Card("Klasör bazlı sessizleştirme (geliştirme/build klasörleri)", 230, out var body);
+
+        _folderGrid.Dock = DockStyle.Top;
+        _folderGrid.Height = 130;
+        _folderGrid.AutoGenerateColumns = false;
+        _folderGrid.ReadOnly = true;
+        _folderGrid.AllowUserToAddRows = false;
+        _folderGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Klasör", DataPropertyName = nameof(FolderRule.Folder), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _folderGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eklendi", DataPropertyName = nameof(FolderRule.AddedLocal), Width = 130 });
+        ThemeManager.StyleGrid(_folderGrid);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
+        buttons.Controls.Add(ThemeManager.MakeButton("Klasör ekle…", (_, _) =>
+        {
+            using var dlg = new FolderBrowserDialog();
+            if (dlg.ShowDialog() == DialogResult.OK) FolderSuppressionStore.Add(dlg.SelectedPath);
+        }, accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton("Listeden çıkar", (_, _) =>
+        {
+            if (_folderGrid.CurrentRow?.DataBoundItem is FolderRule r) FolderSuppressionStore.Remove(r.Folder);
+        }));
+        var hint = ThemeManager.MakeLabel("Bu klasörlerin altındaki dosyalar taramada atlanır — her derlemede hash'i değişen build çıktısı için (hash listesi bunu kapsayamaz).", subtle: true);
+
+        body.Controls.Add(hint);
+        body.Controls.Add(buttons);
+        body.Controls.Add(_folderGrid);
+        FolderSuppressionStore.Changed += () => SafeUi(RefreshFolders);
+        RefreshFolders();
+        return card;
+    }
+
+    void RefreshFolders() => _folderGrid.DataSource = FolderSuppressionStore.All().ToList();
 
     Panel BuildTrustCard()
     {
