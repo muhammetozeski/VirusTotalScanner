@@ -14,6 +14,9 @@ internal sealed class ScanDetailControl : UserControl
 
     /// <summary>The user chose the recommended action from the detail pane's guided strip.</summary>
     public event Action<ScanItem>? QuarantineRequested, RescanRequested, MarkCleanRequested;
+
+    // Collapsible "what this does to my PC" digest row (filled on demand by the behaviour button).
+    readonly FlowLayoutPanel _behaviourPanel = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Visible = false, Margin = new Padding(0, 4, 0, 4) };
     readonly Label _stats = new();
     readonly Panel _ratioBar = new();
     readonly Label _md5 = new();
@@ -30,7 +33,7 @@ internal sealed class ScanDetailControl : UserControl
         Dock = DockStyle.Fill;
         Padding = new Padding(12);
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8, BackColor = Color.Transparent };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 9, BackColor = Color.Transparent };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104)); // verdict hero card
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // guided action strip
@@ -39,6 +42,7 @@ internal sealed class ScanDetailControl : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // stats
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // ratio
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // toggle + link
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // behaviour digest (collapsible)
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // grid
 
         _meta.AutoSize = true; _meta.MaximumSize = new Size(2000, 0);
@@ -90,8 +94,13 @@ internal sealed class ScanDetailControl : UserControl
         var behaviourBtn = new Button { Text = Strings.BtnBehaviour, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
         behaviourBtn.Click += async (_, _) =>
         {
+            if (_behaviourPanel.Visible) { _behaviourPanel.Visible = false; return; } // toggle collapse
             string? sha = _item?.Sha256;
             if (string.IsNullOrWhiteSpace(sha)) return;
+
+            var cachedDigest = BehaviourDigestCache.TryGet(sha);
+            if (cachedDigest != null) { RenderBehaviour(cachedDigest); return; } // never re-scrape
+
             if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) { NativeMessageBox.Warn(Strings.BehaviourNeedKeyless); return; }
             behaviourBtn.Enabled = false;
             string old = behaviourBtn.Text;
@@ -99,32 +108,17 @@ internal sealed class ScanDetailControl : UserControl
             try
             {
                 var b = await GuiScrapeService.FetchBehaviourAsync(sha);
-                if (!b.Any) { NativeMessageBox.Info(Strings.BehaviourNone); return; }
-                var sb = new System.Text.StringBuilder();
-                void Section(string title, List<string> items)
-                {
-                    if (items.Count == 0) return;
-                    sb.AppendLine(title + ":");
-                    foreach (var x in items.Take(20)) sb.AppendLine("   " + x);
-                    sb.AppendLine();
-                }
-                Section(Strings.SecNetwork, b.Network);
-                Section(Strings.SecFilesWritten, b.FilesWritten);
-                Section(Strings.SecRegistry, b.Registry);
-                Section(Strings.SecProcesses, b.Processes);
-                Section("🎯 MITRE ATT&CK", b.Mitre);
-
                 // Persist + correlate network IOCs across files (shared C2 = same campaign).
                 var iocs = b.Network.Select(x => { int sp = x.IndexOf(' '); return sp >= 0 ? x[(sp + 1)..].Trim() : x; }).ToList();
                 IocStore.Record(sha, _item?.FilePath, _item?.Report?.IsMalicious == true, iocs);
+
+                var digest = BehaviourDigestBuilder.Build(b);
                 var conns = IocStore.Connections(sha, iocs);
                 if (conns.Count > 0)
-                {
-                    sb.AppendLine(string.Format(Strings.ConnectedThreatsFormat, conns.Count) + (conns.Any(c => c.Malicious) ? Strings.ConnectedThreatsMaliciousSuffix : "") + ":");
-                    foreach (var c in conns.Take(8)) sb.AppendLine($"   {(c.Malicious ? "🔴" : "•")} {Path.GetFileName(c.Path ?? c.Sha256)}{Strings.ConnectedShared}{string.Join(", ", c.Shared.Take(3))}");
-                }
-
-                NativeMessageBox.Info(sb.ToString());
+                    digest.Lines.Add(new DigestLine(conns.Any(c => c.Malicious) ? "🔴" : "🔗",
+                        $"{conns.Count} taranmış dosyayla ortak ağ göstergesi paylaşıyor (aynı kampanya olabilir)", conns.Any(c => c.Malicious)));
+                BehaviourDigestCache.Put(sha, digest);
+                RenderBehaviour(digest);
             }
             catch (Exception ex) { NativeMessageBox.Error("Davranış alınamadı: " + ex.Message); }
             finally { behaviourBtn.Enabled = true; behaviourBtn.Text = old; }
@@ -151,7 +145,8 @@ internal sealed class ScanDetailControl : UserControl
         root.Controls.Add(_stats, 0, 4);
         root.Controls.Add(_ratioBar, 0, 5);
         root.Controls.Add(togglePanel, 0, 6);
-        root.Controls.Add(_engines, 0, 7);
+        root.Controls.Add(_behaviourPanel, 0, 7);
+        root.Controls.Add(_engines, 0, 8);
 
         Controls.Add(root);
         Controls.Add(_empty);
@@ -243,6 +238,7 @@ internal sealed class ScanDetailControl : UserControl
         bool trustedSkip = item is { Status: ScanStatus.TrustedSkipped };
         var report = item?.Report;
         bool hasReport = report != null;
+        _behaviourPanel.Visible = false; // collapse last item's digest; the behaviour button re-opens it
 
         _empty.BackColor = Theme.Current.Background; // opaque so it covers the detail rows
         if (!hasReport && !trustedSkip)
@@ -320,6 +316,19 @@ internal sealed class ScanDetailControl : UserControl
 
     /// <summary>Guided next step: surface the recommended action inline (primary highlighted) so the
     /// user is led to one obvious safe move at the alarming moment instead of hunting the right-click menu.</summary>
+    void RenderBehaviour(BehaviourDigest d)
+    {
+        _behaviourPanel.Controls.Clear();
+        _behaviourPanel.Controls.Add(new Label { Text = "🧪 Bu dosya çalışırsa PC'ne ne yapar:", AutoSize = true, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Margin = new Padding(0, 2, 0, 4) });
+        foreach (var line in d.Lines)
+        {
+            var lbl = new Label { Text = line.Icon + "  " + line.Text, AutoSize = true, Margin = new Padding(10, 1, 0, 1) };
+            if (line.Alarm) { lbl.ForeColor = Theme.Current.Danger; lbl.Font = new Font("Segoe UI", 9f, FontStyle.Bold); }
+            _behaviourPanel.Controls.Add(lbl);
+        }
+        _behaviourPanel.Visible = true;
+    }
+
     void BuildActionStrip(RecommendationService.Reco reco)
     {
         _actionStrip.Controls.Clear();
