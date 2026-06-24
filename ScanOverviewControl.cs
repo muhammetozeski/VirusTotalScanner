@@ -16,7 +16,7 @@ internal sealed class ScanOverviewControl : UserControl
     Action? _statusAction;
     readonly Panel _attention = new() { Dock = DockStyle.Top, Height = 40, Visible = false, Padding = new Padding(12, 0, 8, 0) };
     readonly Label _attentionLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
-    readonly Panel _drop = new() { Dock = DockStyle.Top, Height = 150, Margin = new Padding(8) };
+    readonly Panel _drop = new() { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, MinimumSize = new Size(0, 130), Margin = new Padding(8) };
     readonly Label _tehditNum = new(), _supheliNum = new(), _temizNum = new();
     readonly FlowLayoutPanel _recent = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8, 4, 8, 8) };
     readonly Label _quota = new() { Dock = DockStyle.Bottom, Height = 26, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(12, 0, 0, 0), Tag = "subtle" };
@@ -40,13 +40,14 @@ internal sealed class ScanOverviewControl : UserControl
         Dock = DockStyle.Fill;
         AllowDrop = true;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(8) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 1, RowCount = 6, Padding = new Padding(8) };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // full-width column, no horizontal scroll
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // status banner
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // coverage card
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // attention
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166)); // drop-zone
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));  // count tiles
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // recent
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // drop-zone (sizes to content, DPI-safe)
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // count tiles (sizes to content)
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));     // recent (bounded panel; root AutoScrolls if needed)
 
         _attention.Controls.Add(_attentionLabel);
         BuildDropZone();
@@ -88,18 +89,20 @@ internal sealed class ScanOverviewControl : UserControl
             g.DrawPath(pen, path);
         };
 
-        var inner = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Color.Transparent };
-        inner.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
-        inner.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
-        var hint = new Label { Text = "🛡  Taramak için dosya/klasörü buraya sürükle", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 13f, FontStyle.Bold) };
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Anchor = AnchorStyles.None, AutoSize = true };
+        // AutoSize content (no fixed pixel heights) so the hint + buttons always fit and scale with DPI.
+        var inner = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2, BackColor = Color.Transparent };
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var hint = new Label { Text = "🛡  Taramak için dosya/klasörü buraya sürükle", AutoSize = true, Anchor = AnchorStyles.None, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 13f, FontStyle.Bold), Margin = new Padding(0, 12, 0, 8) };
+        var buttons = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.None, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Margin = new Padding(0, 0, 0, 10) };
         buttons.Controls.Add(ThemeManager.MakeButton("📄  Dosya seç…", (_, _) => PickFiles(), accent: true));
         buttons.Controls.Add(ThemeManager.MakeButton("📁  Klasör seç…", (_, _) => PickFolder()));
         buttons.Controls.Add(ThemeManager.MakeButton("🔬  Çalışanları tara", (_, _) => ScanRunningRequested?.Invoke()));
         buttons.Controls.Add(ThemeManager.MakeButton("⬇  İndirilenleri tara", (_, _) => ScanDownloadsRequested?.Invoke()));
         buttons.Controls.Add(ThemeManager.MakeButton("🔁  Yeniden denetle", (_, _) => RecheckRequested?.Invoke()));
         inner.Controls.Add(hint, 0, 0);
-        inner.Controls.Add(FlowCenter(buttons), 0, 1);
+        inner.Controls.Add(buttons, 0, 1);
         _drop.Controls.Add(inner);
         _drop.AllowDrop = true;
         _drop.DragEnter += (_, e) => { if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true) e.Effect = DragDropEffects.Copy; };
@@ -160,7 +163,8 @@ internal sealed class ScanOverviewControl : UserControl
 
     Control BuildTiles()
     {
-        var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        var row = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 3, RowCount = 1 };
+        row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         for (int i = 0; i < 3; i++) row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
         row.Controls.Add(Tile("Tehdit", _tehditNum, () => Theme.Current.Danger, () => GoToHistoryFiltered?.Invoke("threat")), 0, 0);
         row.Controls.Add(Tile("Şüpheli", _supheliNum, () => Theme.Current.Warning, () => GoToHistoryFiltered?.Invoke("suspicious")), 1, 0);
@@ -172,13 +176,16 @@ internal sealed class ScanOverviewControl : UserControl
     {
         var card = ThemeManager.MakeCard();
         card.Dock = DockStyle.Fill;
+        card.AutoSize = true;
+        card.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         number.Text = "0";
         number.Font = new Font("Segoe UI", 26f, FontStyle.Bold);
         number.AutoSize = false;
-        number.Dock = DockStyle.Fill;
+        number.Dock = DockStyle.Top;
+        number.Height = number.Font.Height + 14; // DPI-safe: derived from the rendered font height, not a magic px
         number.TextAlign = ContentAlignment.MiddleCenter;
         number.ForeColor = color();
-        var cap = new Label { Text = label + "  ›", Dock = DockStyle.Bottom, Height = 20, TextAlign = ContentAlignment.MiddleCenter, Tag = "subtle" };
+        var cap = new Label { Text = label + "  ›", Dock = DockStyle.Bottom, AutoSize = true, TextAlign = ContentAlignment.MiddleCenter, Tag = "subtle", Padding = new Padding(0, 0, 0, 6) };
         card.Controls.Add(number);
         card.Controls.Add(cap);
         card.Paint += (_, _) => number.ForeColor = color(); // keep tinted across theme changes
@@ -191,7 +198,7 @@ internal sealed class ScanOverviewControl : UserControl
 
     Control BuildRecent()
     {
-        var panel = new Panel { Dock = DockStyle.Fill };
+        var panel = new Panel { Dock = DockStyle.Top, Height = 240 }; // bounded; the inner list scrolls for >8 rows
         var title = ThemeManager.MakeTitle("Son taramalar", 11f);
         title.Dock = DockStyle.Top;
         panel.Controls.Add(_recent);
