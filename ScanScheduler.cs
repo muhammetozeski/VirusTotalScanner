@@ -79,6 +79,10 @@ internal sealed class ScanScheduler
             if (opts.ExpandArchives)
                 files = await Task.Run(() => ExpandArchives(files, archiveTemps), ct);
 
+            // Risk-weighted ordering: scan the likeliest-malicious files first (cheap local signals).
+            if (Settings.RiskWeightedOrdering && files.Count > 1)
+                files = await Task.Run(() => files.OrderByDescending(RiskScorer.Score).ToList(), ct);
+
             _total = files.Count;
             var items = files.Select(f => new ScanItem(f)).ToList();
             UiPost(() => { foreach (var it in items) Items.Add(it); });

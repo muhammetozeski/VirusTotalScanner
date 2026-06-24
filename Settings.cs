@@ -80,6 +80,9 @@ internal static class Settings
     /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
     public static readonly Setting<string> WatchFolders = new("");
 
+    /// <summary>Order a scan by a cheap local suspicion score so the scariest files get a verdict first.</summary>
+    public static readonly Setting<bool> RiskWeightedOrdering = new(true);
+
     /// <summary>Re-check verdicts for cached files older than this many days (a clean file can be
     /// flagged later as engines catch up). The sweep is keyless (GUI), so it costs no quota.</summary>
     public static readonly Setting<int> RecheckPeriodDays = new(14);
