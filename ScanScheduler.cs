@@ -204,6 +204,14 @@ internal sealed class ScanScheduler
                 return;
             }
 
+            // Folder suppression: dev/build-output dirs whose ever-changing hashes the per-file allowlist
+            // can't cover.
+            if (!opts.BypassTrust && FolderSuppressionStore.Contains(item.FilePath))
+            {
+                TrustSkip(item, "Geliştirme klasörü (kullanıcı onayı)", null);
+                return;
+            }
+
             // In-scan dedup: serialize lookups of identical content within one run so duplicate
             // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
             // lookup. The first item caches the report; the rest get the cache hit here.
