@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 
 namespace VirusTotalScanner;
@@ -11,13 +12,17 @@ internal static class HashService
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 20, useAsync: true);
 
-        byte[] buffer = new byte[1 << 20];
-        int read;
-        while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(1 << 20); // pooled: avoids a per-file LOH allocation
+        try
         {
-            md5.AppendData(buffer, 0, read);
-            sha.AppendData(buffer, 0, read);
+            int read;
+            while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+            {
+                md5.AppendData(buffer, 0, read);
+                sha.AppendData(buffer, 0, read);
+            }
         }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
 
         string md5Hex = Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant();
         string shaHex = Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
@@ -31,10 +36,14 @@ internal static class HashService
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 20, useAsync: true);
 
-        byte[] buffer = new byte[1 << 20];
-        int read;
-        while ((read = await fs.ReadAsync(buffer, ct)) > 0)
-            md5.AppendData(buffer, 0, read);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(1 << 20); // pooled: avoids a per-file LOH allocation
+        try
+        {
+            int read;
+            while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+                md5.AppendData(buffer, 0, read);
+        }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
 
         return Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant();
     }
@@ -55,14 +64,18 @@ internal static class HashService
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 20, useAsync: true);
 
-        byte[] buffer = new byte[1 << 20];
-        int read;
-        while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(1 << 20); // pooled: avoids a per-file LOH allocation
+        try
         {
-            md5.AppendData(buffer, 0, read);
-            sha1.AppendData(buffer, 0, read);
-            sha.AppendData(buffer, 0, read);
+            int read;
+            while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+            {
+                md5.AppendData(buffer, 0, read);
+                sha1.AppendData(buffer, 0, read);
+                sha.AppendData(buffer, 0, read);
+            }
         }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
 
         string m = Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant();
         string s1 = Convert.ToHexString(sha1.GetHashAndReset()).ToLowerInvariant();
