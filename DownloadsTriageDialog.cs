@@ -12,6 +12,20 @@ internal sealed class DownloadsTriageDialog : Form
     readonly DataGridView _grid = new();
     CancellationTokenSource? _cts;
     List<DownloadItem> _items = [];
+    Dictionary<string, (int Count, bool Suspect)> _sourceClusters = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Registrable domain of a download's origin (last two labels — panel.example.com and
+    /// cdn.example.com both → example.com) for same-source clustering. Null for empty / "+" / unparseable.</summary>
+    static string? SourceDomain(string? hostUrl)
+    {
+        if (string.IsNullOrWhiteSpace(hostUrl) || hostUrl == "+") return null;
+        string host = Uri.TryCreate(hostUrl, UriKind.Absolute, out var u) && !string.IsNullOrEmpty(u.Host)
+            ? u.Host : hostUrl.Split('/', '\\')[0];
+        host = host.Trim().TrimEnd('.').ToLowerInvariant();
+        if (host.Length == 0) return null;
+        var parts = host.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? parts[^2] + "." + parts[^1] : host;
+    }
 
     static readonly int[] WindowDays = [7, 30, 90, 365];
 
@@ -85,6 +99,15 @@ internal sealed class DownloadsTriageDialog : Form
             if (_grid.Rows[e.RowIndex].DataBoundItem is not DownloadItem d) return;
             if (d.Detections > 0) e.CellStyle!.ForeColor = Theme.Current.Danger;
             else if (e.ColumnIndex == 3 && d.Signature == "imzasız") e.CellStyle!.ForeColor = Theme.Current.Warning;
+
+            // Same-source cluster: 2+ downloads from one registrable domain (classic bad-distribution
+            // pattern). Badge + color the source cell; if any sibling is flagged, the whole group goes red
+            // so an as-yet-unscanned neighbor is pulled up by its suspect shared origin.
+            if (e.ColumnIndex == 2 && SourceDomain(d.Host) is { } dom && _sourceClusters.TryGetValue(dom, out var cl))
+            {
+                if (e.Value is string hv && !hv.Contains('⚑')) e.Value = $"{hv}  ⚑ aynı kaynak ×{cl.Count}";
+                e.CellStyle!.ForeColor = cl.Suspect ? Theme.Current.Danger : Theme.Current.Accent;
+            }
         };
         _grid.CellDoubleClick += (_, e) =>
         {
@@ -108,6 +131,12 @@ internal sealed class DownloadsTriageDialog : Form
             _items = await DownloadsTriageService.BuildAsync(AppServices.Cache, days,
                 (d, t) => { try { BeginInvoke(() => _status.Text = $"Taranıyor… {d}/{t}"); } catch { } }, ct);
             if (ct.IsCancellationRequested) return;
+            _sourceClusters = _items
+                .Select(i => (Dom: SourceDomain(i.Host), i.Detections))
+                .Where(x => x.Dom != null)
+                .GroupBy(x => x.Dom!, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() >= 2)
+                .ToDictionary(g => g.Key, g => (Count: g.Count(), Suspect: g.Any(x => x.Detections > 0)), StringComparer.OrdinalIgnoreCase);
             _grid.DataSource = _items;
             int unscanned = _items.Count(i => !i.Scanned);
             int threats = _items.Count(i => i.Detections > 0);
