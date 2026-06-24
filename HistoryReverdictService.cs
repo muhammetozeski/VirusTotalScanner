@@ -46,7 +46,11 @@ internal static class HistoryReverdictService
             {
                 var r = await GuiScrapeService.LookupAsync(e.Sha256!, ct);
                 if (r != null && VerdictCategories.IsThreat(r.DetectionCount) && r.DetectionCount > e.Detections)
+                {
                     result.Add(new ReverdictEscalation { Entry = e, OldDetections = e.Detections, NewDetections = r.DetectionCount, NewTotal = r.TotalEngines });
+                    // Persist the flip so it survives the dialog being closed (deduped by hash; first flip kept).
+                    EscalationStore.Add(e.Sha256, e.Name, e.Detections, e.Total, r.DetectionCount, r.TotalEngines, e.WhenUtc);
+                }
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) { Log("History re-verdict failed for " + e.Name + ": " + ex.Message, LogLevel.Warning); }
