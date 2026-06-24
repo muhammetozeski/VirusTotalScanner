@@ -141,7 +141,7 @@ internal sealed class ScanDetailControl : UserControl
         ConfigureEnginesGrid();
         _engines.Dock = DockStyle.Fill;
 
-        _empty.Text = "Ayrıntıları görmek için soldan bir dosya seçin.";
+        _empty.Text = Strings.DetailEmptyHint;
         _empty.Dock = DockStyle.Fill;
         _empty.TextAlign = ContentAlignment.MiddleCenter;
         _empty.Tag = "subtle";
@@ -257,18 +257,16 @@ internal sealed class ScanDetailControl : UserControl
 
         if (trustedSkip)
         {
-            _banner.Text = "İMZALI  —  VirusTotal taraması atlandı";
+            _banner.Text = Strings.BannerSigned;
             _banner.BackColor = Theme.Current.Accent;
             _meta.Text =
-                $"Dosya: {item!.FileName}\n" +
-                $"Durum: {item.SkipReason ?? "İmzalı"}" +
-                (item.Publisher != null ? $"\nYayıncı: {item.Publisher}" : "") +
+                $"{Strings.DetailLblFile}{item!.FileName}\n" +
+                $"{Strings.DetailLblStatus}{item.SkipReason ?? Strings.StatusSignedShort}" +
+                (item.Publisher != null ? $"\n{Strings.DetailLblPublisher}{item.Publisher}" : "") +
                 (ZoneIdentifier.Read(item.FilePath)?.Summary is { } z ? $"\n{z}" : "") +
                 (OverlayDetector.OverlayBytes(item.FilePath) is var ov && ov > 65536
-                    ? $"\n📎 İmza sonrası {FormatBytes(ov)} eklenmiş — kurulumcu olabilir, ama doldurulmuş/trojanlı da olabilir" : "") +
-                "\n\nGeçerli bir kod imzası bulundu; kota harcamamak için VirusTotal'e gönderilmedi.\n" +
-                "Not: imza güveni = yayıncının doğrulanması demektir, \"temiz\" garantisi değildir.\n" +
-                "Yine de VT'ye göndermek için kuyrukta satıra sağ tıklayıp \"Güveni yok say, VT ile tara\".";
+                    ? "\n" + string.Format(Strings.OverlayNoteFormat, FormatBytes(ov)) : "") +
+                Strings.SignedExplain;
             _md5.Text = item.Md5 ?? "-";
             _sha.Text = item.Sha256 ?? "-";
             _stats.Text = "";
@@ -278,19 +276,19 @@ internal sealed class ScanDetailControl : UserControl
         }
 
         string verdict = report!.Verdict;
-        _banner.Text = $"{verdict}  —  {report.DetectionCount}/{report.TotalEngines} motor tespit etti";
+        _banner.Text = string.Format(Strings.BannerVerdictFormat, verdict, report.DetectionCount, report.TotalEngines);
         _banner.BackColor = Theme.VerdictColor(verdict);
 
         // Provenance line: where this verdict came from.
-        string provenance = item!.FromCache ? "Kaynak: yerel önbellek (VT raporu)" : "Kaynak: VirusTotal taraması";
+        string provenance = item!.FromCache ? Strings.ProvenanceCache : Strings.ProvenanceScan;
 
         var reco = RecommendationService.Build(item);
         _meta.Text =
             $"👉 {reco.Emoji} {reco.Headline}\n{reco.Rationale}\n\n" +
-            $"Ad: {report.MeaningfulName ?? item.FileName}\n" +
-            $"Tür: {report.TypeDescription ?? "?"}\n" +
-            $"Boyut: {(report.Size > 0 ? FormatBytes(report.Size) : item.SizeText)}" +
-            (report.Reputation != 0 ? $"\nİtibar: {report.Reputation}" : "") +
+            $"{Strings.DetailLblName}{report.MeaningfulName ?? item.FileName}\n" +
+            $"{Strings.DetailLblType}{report.TypeDescription ?? "?"}\n" +
+            $"{Strings.DetailLblSize}{(report.Size > 0 ? FormatBytes(report.Size) : item.SizeText)}" +
+            (report.Reputation != 0 ? $"\n{Strings.DetailLblReputation}{report.Reputation}" : "") +
             (report.FirstSeenText != null ? $"\n{report.FirstSeenText}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.ConfidenceText != null ? $"\n{report.ConfidenceText}" : "") +
@@ -306,7 +304,7 @@ internal sealed class ScanDetailControl : UserControl
         _md5.Text = report.Md5 ?? item.Md5 ?? "-";
         _sha.Text = report.Sha256 ?? item.Sha256 ?? "-";
 
-        _stats.Text = $"Zararlı {report.Malicious}   •   Şüpheli {report.Suspicious}   •   Temiz {report.Harmless}   •   Tespitsiz {report.Undetected}   •   Zaman aşımı {report.Timeout}";
+        _stats.Text = string.Format(Strings.StatsFormat, report.Malicious, report.Suspicious, report.Harmless, report.Undetected, report.Timeout);
         _ratioBar.Invalidate();
 
         var list = _showAll.Checked ? report.Engines : report.Detections.ToList();
@@ -314,7 +312,7 @@ internal sealed class ScanDetailControl : UserControl
         _engines.DataSource = new List<VtEngineResult>(list);
         // Cached entries keep only the summary (no per-engine list) to stay small.
         if (report.Engines.Count == 0 && report.TotalEngines > 0)
-            _stats.Text += "   •   (önbellek: motor listesi saklanmadı, ayrıntı için yeniden tarayın)";
+            _stats.Text += Strings.StatsCacheNote;
     }
 
     void RatioBar_Paint(object? sender, PaintEventArgs e)

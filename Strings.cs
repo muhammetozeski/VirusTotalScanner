@@ -157,6 +157,24 @@ internal static class Strings
     public static string ColProgress = "İlerleme";
     public static string StatusReady = "Hazır.";
 
+    // ---- detail pane: body rendering ----
+    public static string DetailEmptyHint = "Ayrıntıları görmek için soldan bir dosya seçin.";
+    public static string BannerSigned = "İMZALI  —  VirusTotal taraması atlandı";
+    public static string BannerVerdictFormat = "{0}  —  {1}/{2} motor tespit etti";
+    public static string DetailLblFile = "Dosya: ";
+    public static string DetailLblStatus = "Durum: ";
+    public static string DetailLblPublisher = "Yayıncı: ";
+    public static string DetailLblName = "Ad: ";
+    public static string DetailLblType = "Tür: ";
+    public static string DetailLblSize = "Boyut: ";
+    public static string DetailLblReputation = "İtibar: ";
+    public static string OverlayNoteFormat = "📎 İmza sonrası {0} eklenmiş — kurulumcu olabilir, ama doldurulmuş/trojanlı da olabilir";
+    public static string SignedExplain = "\n\nGeçerli bir kod imzası bulundu; kota harcamamak için VirusTotal'e gönderilmedi.\nNot: imza güveni = yayıncının doğrulanması demektir, \"temiz\" garantisi değildir.\nYine de VT'ye göndermek için kuyrukta satıra sağ tıklayıp \"Güveni yok say, VT ile tara\".";
+    public static string ProvenanceCache = "Kaynak: yerel önbellek (VT raporu)";
+    public static string ProvenanceScan = "Kaynak: VirusTotal taraması";
+    public static string StatsFormat = "Zararlı {0}   •   Şüpheli {1}   •   Temiz {2}   •   Tespitsiz {3}   •   Zaman aşımı {4}";
+    public static string StatsCacheNote = "   •   (önbellek: motor listesi saklanmadı, ayrıntı için yeniden tarayın)";
+
     // ---- detail pane ----
     public static string ShowAllEngines = "Tüm motorları göster";
     public static string OpenVtReport = "VirusTotal raporunu aç ↗";

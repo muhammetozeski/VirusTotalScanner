@@ -110,6 +110,22 @@
   <s name="ColStatus">Status</s>
   <s name="ColProgress">Progress</s>
   <s name="StatusReady">Ready.</s>
+  <s name="DetailEmptyHint">Select a file on the left to see details.</s>
+  <s name="BannerSigned">SIGNED  —  VirusTotal scan skipped</s>
+  <s name="BannerVerdictFormat">{0}  —  {1}/{2} engines flagged it</s>
+  <s name="DetailLblFile">File: </s>
+  <s name="DetailLblStatus">Status: </s>
+  <s name="DetailLblPublisher">Publisher: </s>
+  <s name="DetailLblName">Name: </s>
+  <s name="DetailLblType">Type: </s>
+  <s name="DetailLblSize">Size: </s>
+  <s name="DetailLblReputation">Reputation: </s>
+  <s name="OverlayNoteFormat">📎 {0} appended after the signature — could be an installer, but could also be stuffed/trojanized</s>
+  <s name="SignedExplain">\n\nA valid code signature was found; not sent to VirusTotal to save quota.\nNote: signature trust = the publisher is verified, not a guarantee of "clean".\nTo send it to VT anyway, right-click the row in the queue and pick "Ignore trust, scan with VT".</s>
+  <s name="ProvenanceCache">Source: local cache (VT report)</s>
+  <s name="ProvenanceScan">Source: VirusTotal scan</s>
+  <s name="StatsFormat">Malicious {0}   •   Suspicious {1}   •   Clean {2}   •   Undetected {3}   •   Timeout {4}</s>
+  <s name="StatsCacheNote">   •   (cache: engine list not stored, rescan for detail)</s>
   <s name="ShowAllEngines">Show all engines</s>
   <s name="OpenVtReport">Open VirusTotal report ↗</s>
   <s name="BtnComments">💬  Comments</s>
