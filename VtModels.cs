@@ -31,6 +31,45 @@ internal sealed class VtComment
     public List<string> Tags { get; set; } = [];
 }
 
+// ---- sandbox behaviour summary (/ui/files/<hash>/behaviour_summary) ----
+
+internal sealed class VtBehaviourReportData
+{
+    [JsonPropertyName("attributes")] public VtBehaviourDto? Attributes { get; set; }
+}
+
+internal sealed class VtBehaviourDto
+{
+    [JsonPropertyName("dns_lookups")] public List<VtDnsDto>? DnsLookups { get; set; }
+    [JsonPropertyName("ip_traffic")] public List<VtIpDto>? IpTraffic { get; set; }
+    [JsonPropertyName("files_written")] public List<string>? FilesWritten { get; set; }
+    [JsonPropertyName("files_dropped")] public List<VtDroppedDto>? FilesDropped { get; set; }
+    [JsonPropertyName("registry_keys_set")] public List<VtRegistryDto>? RegistryKeysSet { get; set; }
+    [JsonPropertyName("processes_created")] public List<string>? ProcessesCreated { get; set; }
+    [JsonPropertyName("mitre_attack_techniques")] public List<VtMitreDto>? Mitre { get; set; }
+}
+
+internal sealed class VtDnsDto { [JsonPropertyName("hostname")] public string? Hostname { get; set; } }
+internal sealed class VtIpDto { [JsonPropertyName("destination_ip")] public string? DestinationIp { get; set; } }
+internal sealed class VtDroppedDto { [JsonPropertyName("path")] public string? Path { get; set; } }
+internal sealed class VtRegistryDto { [JsonPropertyName("key")] public string? Key { get; set; } }
+internal sealed class VtMitreDto
+{
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("signature_description")] public string? Description { get; set; }
+}
+
+/// <summary>"What this file does when run" — flattened sandbox behaviour for display.</summary>
+internal sealed class VtBehaviour
+{
+    public List<string> Network { get; set; } = [];
+    public List<string> FilesWritten { get; set; } = [];
+    public List<string> Registry { get; set; } = [];
+    public List<string> Processes { get; set; } = [];
+    public List<string> Mitre { get; set; } = [];
+    public bool Any => Network.Count + FilesWritten.Count + Registry.Count + Processes.Count + Mitre.Count > 0;
+}
+
 internal sealed class VtFileData
 {
     [JsonPropertyName("attributes")] public VtFileAttributes? Attributes { get; set; }

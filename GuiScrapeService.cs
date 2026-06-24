@@ -143,6 +143,69 @@ internal static class GuiScrapeService
         finally { _targetSuffix = ""; _gate.Release(); }
     }
 
+    /// <summary>Fetches the aggregated sandbox behaviour summary for a hash via the GUI (keyless).</summary>
+    public static async Task<VtBehaviour> FetchBehaviourAsync(string hash, CancellationToken ct = default)
+    {
+        hash = hash.Trim().ToLowerInvariant();
+        var b = new VtBehaviour();
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (!await EnsureReadyAsync()) return b;
+
+            var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _targetHash = hash;
+            _targetSuffix = "/behaviours"; // the per-sandbox reports list (the GUI does not call behaviour_summary)
+            _currentUrl = "https://www.virustotal.com/gui/file/" + hash + "/behavior";
+            _pending = tcs;
+            _captchaShown = false;
+
+            Log("Keyless GUI behaviour: " + hash, LogLevel.Info);
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _timeoutCts = timeout;
+            timeout.CancelAfter(TimeSpan.FromSeconds(45));
+
+            _form!.BeginInvoke(() =>
+            {
+                try { _web!.CoreWebView2.Navigate(_currentUrl); }
+                catch (Exception ex) { tcs.TrySetResult(null); Log("GUI navigate (behaviour) failed: " + ex.Message, LogLevel.Warning); }
+            });
+
+            string? json;
+            using (timeout.Token.Register(() => tcs.TrySetResult(null)))
+                json = await tcs.Task;
+
+            _pending = null;
+            _timeoutCts = null;
+            HideBrowser();
+
+            if (string.IsNullOrEmpty(json)) return b;
+
+            // /behaviours returns a list of per-sandbox reports; merge them all and dedup.
+            var reports = JsonSerializer.Deserialize<VtResponse<List<VtBehaviourReportData>>>(json, JsonOpts)?.Data;
+            foreach (var dto in (reports ?? []).Select(r => r.Attributes).Where(a => a != null))
+            {
+                foreach (var d in dto!.DnsLookups ?? []) if (!string.IsNullOrWhiteSpace(d.Hostname)) b.Network.Add("🌐 " + d.Hostname);
+                foreach (var ip in dto.IpTraffic ?? []) if (!string.IsNullOrWhiteSpace(ip.DestinationIp)) b.Network.Add("📡 " + ip.DestinationIp);
+                foreach (var f in dto.FilesWritten ?? []) if (!string.IsNullOrWhiteSpace(f)) b.FilesWritten.Add(f);
+                foreach (var f in dto.FilesDropped ?? []) if (!string.IsNullOrWhiteSpace(f.Path)) b.FilesWritten.Add("⬇ " + f.Path);
+                foreach (var r in dto.RegistryKeysSet ?? []) if (!string.IsNullOrWhiteSpace(r.Key)) b.Registry.Add(r.Key);
+                foreach (var p in dto.ProcessesCreated ?? []) if (!string.IsNullOrWhiteSpace(p)) b.Processes.Add(p);
+                foreach (var m in dto.Mitre ?? []) if (!string.IsNullOrWhiteSpace(m.Id)) b.Mitre.Add($"{m.Id} {m.Description}".Trim());
+            }
+
+            b.Network = b.Network.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            b.FilesWritten = b.FilesWritten.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            b.Registry = b.Registry.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            b.Processes = b.Processes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            b.Mitre = b.Mitre.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return b;
+        }
+        catch (Exception ex) { Log("Keyless GUI behaviour failed: " + ex.Message, LogLevel.Warning); return b; }
+        finally { _targetSuffix = ""; _gate.Release(); }
+    }
+
     public static void Shutdown()
     {
         _shuttingDown = true;

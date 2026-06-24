@@ -89,9 +89,43 @@ internal sealed class ScanDetailControl : UserControl
         };
         ThemeManager.StyleButton(commentsBtn);
 
+        var behaviourBtn = new Button { Text = Strings.BtnBehaviour, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        behaviourBtn.Click += async (_, _) =>
+        {
+            string? sha = _item?.Sha256;
+            if (string.IsNullOrWhiteSpace(sha)) return;
+            if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) { NativeMessageBox.Warn("Sandbox davranışı için anahtarsız (GUI) mod gerekli."); return; }
+            behaviourBtn.Enabled = false;
+            string old = behaviourBtn.Text;
+            behaviourBtn.Text = "🔬  Getiriliyor…";
+            try
+            {
+                var b = await GuiScrapeService.FetchBehaviourAsync(sha);
+                if (!b.Any) { NativeMessageBox.Info("Sandbox davranış verisi bulunamadı."); return; }
+                var sb = new System.Text.StringBuilder();
+                void Section(string title, List<string> items)
+                {
+                    if (items.Count == 0) return;
+                    sb.AppendLine(title + ":");
+                    foreach (var x in items.Take(20)) sb.AppendLine("   " + x);
+                    sb.AppendLine();
+                }
+                Section("🌐 Ağ", b.Network);
+                Section("📁 Yazılan/bırakılan dosyalar", b.FilesWritten);
+                Section("🗝 Kayıt defteri", b.Registry);
+                Section("⚙ Süreçler", b.Processes);
+                Section("🎯 MITRE ATT&CK", b.Mitre);
+                NativeMessageBox.Info(sb.ToString());
+            }
+            catch (Exception ex) { NativeMessageBox.Error("Davranış alınamadı: " + ex.Message); }
+            finally { behaviourBtn.Enabled = true; behaviourBtn.Text = old; }
+        };
+        ThemeManager.StyleButton(behaviourBtn);
+
         togglePanel.Controls.Add(_showAll);
         togglePanel.Controls.Add(_link);
         togglePanel.Controls.Add(commentsBtn);
+        togglePanel.Controls.Add(behaviourBtn);
 
         ConfigureEnginesGrid();
         _engines.Dock = DockStyle.Fill;

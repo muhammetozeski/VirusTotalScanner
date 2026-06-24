@@ -25,6 +25,7 @@ internal static class CliRunner
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
         if (opts.CommentsHash != null) return await CommentsCmd(opts.CommentsHash);
+        if (opts.BehaviourHash != null) return await BehaviourCmd(opts.BehaviourHash);
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
         if (opts.VerifyBaseline) return await VerifyBaselineCmd();
         if (opts.DriftReport != null) return await DriftReportCmd(opts.DriftReport);
@@ -140,6 +141,26 @@ internal static class CliRunner
 
         Console.WriteLine($"{changes.Count} verdikt değişikliği yazıldı: {path}");
         return changes.Any(c => c.GotWorse) ? 1 : 0;
+    }
+
+    static async Task<int> BehaviourCmd(string hash)
+    {
+        if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable))
+        { Console.Error.WriteLine("HATA: davranış için anahtarsız GUI gerekli (--keyless)."); return 3; }
+        var b = await GuiScrapeService.FetchBehaviourAsync(hash);
+        if (!b.Any) { Console.WriteLine("Sandbox davranış verisi bulunamadı."); return 0; }
+        static void Section(string title, List<string> items)
+        {
+            if (items.Count == 0) return;
+            Console.WriteLine(title + ":");
+            foreach (var x in items.Take(15)) Console.WriteLine("   " + x);
+        }
+        Section("Ağ", b.Network);
+        Section("Yazılan/bırakılan dosyalar", b.FilesWritten);
+        Section("Kayıt defteri", b.Registry);
+        Section("Süreçler", b.Processes);
+        Section("MITRE ATT&CK", b.Mitre);
+        return 0;
     }
 
     static async Task<int> CommentsCmd(string hash)

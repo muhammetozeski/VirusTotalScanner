@@ -35,6 +35,7 @@ internal sealed class CliOptions
     public string? RemoveKeyValue;
     public string? LookupHash;
     public string? CommentsHash;
+    public string? BehaviourHash;
     public string? ExpectedHash;
     public string? SnapshotPath;
     public string? ReportPath;
@@ -71,6 +72,7 @@ internal static class ArgumentDef
     static readonly CmdArg RemoveKey = new("--removekey", "--removekey");
     static readonly CmdArg Lookup = new("--lookup", "--lookup");
     static readonly CmdArg Comments = new("--comments", "--comments");
+    static readonly CmdArg Behaviour = new("--behaviour", "--behavior");
     static readonly CmdArg Expect = new("--expect", "--verify-hash");
     static readonly CmdArg Snapshot = new("--snapshot", "--snapshot");
     static readonly CmdArg Report = new("--report", "--report");
@@ -108,6 +110,7 @@ internal static class ArgumentDef
             else if (RemoveKey.IsMatch(a)) { if (i + 1 < args.Length) o.RemoveKeyValue = args[++i]; o.NoGui = true; }
             else if (Lookup.IsMatch(a)) { if (i + 1 < args.Length) o.LookupHash = args[++i]; o.NoGui = true; }
             else if (Comments.IsMatch(a)) { if (i + 1 < args.Length) o.CommentsHash = args[++i]; o.NoGui = true; o.Keyless = true; }
+            else if (Behaviour.IsMatch(a)) { if (i + 1 < args.Length) o.BehaviourHash = args[++i]; o.NoGui = true; o.Keyless = true; }
             else if (Expect.IsMatch(a)) { if (i + 1 < args.Length) o.ExpectedHash = args[++i]; o.NoGui = true; }
             else if (Snapshot.IsMatch(a)) { if (i + 1 < args.Length) o.SnapshotPath = args[++i]; }
             else if (Report.IsMatch(a)) { if (i + 1 < args.Length) o.ReportPath = args[++i]; o.NoGui = true; }

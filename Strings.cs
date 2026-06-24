@@ -69,6 +69,7 @@ internal static class Strings
     public static string ShowAllEngines = "Tüm motorları göster";
     public static string OpenVtReport = "VirusTotal raporunu aç ↗";
     public static string BtnComments = "💬  Yorumlar";
+    public static string BtnBehaviour = "🔬  Davranış";
     public static string ColEngine = "Antivirüs";
     public static string ColCategory = "Kategori";
     public static string ColResult = "Sonuç";
