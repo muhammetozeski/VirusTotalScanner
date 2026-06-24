@@ -78,11 +78,18 @@ internal sealed class ScanHistoryControl : UserControl
             dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
             dlg.ShowDialog(FindForm());
         });
+        var hotspots = ThemeManager.MakeButton("🎯  Tehdit odakları", (_, _) =>
+        {
+            using var dlg = new ThreatHotspotDialog(ThreatHotspotService.Find());
+            dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
+            dlg.ShowDialog(FindForm());
+        });
         strip.Controls.Add(_search);
         strip.Controls.Add(_threatsOnly);
         strip.Controls.Add(_starredOnly);
         strip.Controls.Add(reverdict);
         strip.Controls.Add(recurring);
+        strip.Controls.Add(hotspots);
         strip.Controls.Add(report);
         strip.Controls.Add(clear);
         strip.Controls.Add(_count);
