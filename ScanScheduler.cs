@@ -240,7 +240,9 @@ internal sealed class ScanScheduler
         finally
         {
             DoneOne();
-            try { ItemFinished?.Invoke(item); } catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); }
+            // Marshal to the UI thread like ProgressChanged: subscribers mutate the grid/BindingList,
+            // and several Parallel workers finish concurrently — a direct call here races the UI.
+            UiPost(() => { try { ItemFinished?.Invoke(item); } catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); } });
         }
     }
 
