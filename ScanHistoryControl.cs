@@ -10,6 +10,8 @@ internal sealed class ScanHistoryControl : UserControl
     readonly DataGridView _grid = new();
     readonly TextBox _search = new() { Width = 220 };
     string _categoryFilter = ""; // "", "threat", "suspicious", "clean" — set by an overview tile drill-down
+    readonly Panel _escBanner = new() { Dock = DockStyle.Fill, Visible = false, Cursor = Cursors.Hand, Padding = new Padding(12, 6, 12, 6) };
+    readonly Label _escLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
     readonly CheckBox _threatsOnly = new() { Text = "Sadece tehditler", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
     readonly CheckBox _starredOnly = new() { Text = "★ Yıldızlılar", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
     readonly Label _count = new() { AutoSize = true, Margin = new Padding(12, 7, 0, 0), Tag = "subtle" };
@@ -20,9 +22,10 @@ internal sealed class ScanHistoryControl : UserControl
     public ScanHistoryControl()
     {
         Dock = DockStyle.Fill;
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // strip
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // escalation banner (shown only when there are flips)
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // grid
 
         var strip = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(8, 6, 6, 4) };
         _search.PlaceholderText = "🔎  Ara (ad/yol)…";
@@ -79,19 +82,46 @@ internal sealed class ScanHistoryControl : UserControl
 
         BuildGrid();
 
+        _escBanner.Controls.Add(_escLabel);
+        _escBanner.Click += OpenReverdict;
+        _escLabel.Click += OpenReverdict;
+
         root.Controls.Add(strip, 0, 0);
-        root.Controls.Add(_grid, 0, 1);
+        root.Controls.Add(_escBanner, 0, 1);
+        root.Controls.Add(_grid, 0, 2);
         Controls.Add(root);
 
         ScanHistoryStore.Changed += OnStoreChanged;
+        EscalationStore.Changed += OnEscChanged;
+        RefreshEscBanner();
         Reload();
     }
 
     void OnStoreChanged() { try { if (IsHandleCreated) BeginInvoke(Reload); } catch { } }
+    void OnEscChanged() { try { if (IsHandleCreated) BeginInvoke(RefreshEscBanner); } catch { } }
+
+    void OpenReverdict(object? s, EventArgs e)
+    {
+        using var dlg = new HistoryReverdictDialog();
+        dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
+        dlg.ShowDialog(FindForm());
+    }
+
+    /// <summary>Pinned red banner above the grid summarizing the persisted clean→threat flips.</summary>
+    void RefreshEscBanner()
+    {
+        int n = EscalationStore.Count;
+        if (n == 0) { _escBanner.Visible = false; return; }
+        _escBanner.BackColor = Color.FromArgb(60, 30, 30);
+        _escLabel.ForeColor = Color.FromArgb(255, 140, 140);
+        var latest = EscalationStore.All().OrderByDescending(r => r.FlipUtc).First();
+        _escLabel.Text = $"🔴 Sonradan tehdit oldu: {n} dosya bir zamanlar temizdi, şimdi işaretli (en son: {latest.Name} {latest.NewRatio}).  İncelemek için tıkla.";
+        _escBanner.Visible = true;
+    }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) ScanHistoryStore.Changed -= OnStoreChanged;
+        if (disposing) { ScanHistoryStore.Changed -= OnStoreChanged; EscalationStore.Changed -= OnEscChanged; }
         base.Dispose(disposing);
     }
 

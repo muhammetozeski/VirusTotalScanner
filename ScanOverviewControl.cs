@@ -360,6 +360,8 @@ internal sealed class ScanOverviewControl : UserControl
     {
         var msgs = new List<string>();
         if (!string.IsNullOrEmpty(_sweepNotice)) msgs.Add(_sweepNotice);
+        int escalations = EscalationStore.Count;
+        if (escalations > 0) msgs.Add($"🔴 {escalations} dosya bir zamanlar temizdi, sonradan tehdide dönüştü (Geçmiş sekmesine bak).");
         if (_stale) msgs.Add("Bir süredir tarama yapılmadı — 'İndirilenleri tara' ya da 'Yeniden denetle' ile güncel tut.");
         if (AppServices.Vault.UsableKeyCount == 0 && !Settings.KeylessGuiLookup)
             msgs.Add("Kullanılabilir API anahtarı yok — Ayarlar'dan anahtar ekle ya da anahtarsız modu aç.");
