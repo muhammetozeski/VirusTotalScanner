@@ -143,6 +143,21 @@ internal sealed class ScanScheduler
         try
         {
             await _pause.WaitWhilePausedAsync(ct);
+
+            // Cheapest signal first: a trusted code signature is read from the file handle and needs
+            // NO hash, so check it before reading the whole file end-to-end. A trusted-signed file
+            // then skips without ever being hashed — a big win on signed-heavy install trees.
+            // (Trusted = vouched-for provenance, NOT "clean" — it never shows the green banner.)
+            if (opts.SkipTrusted && !opts.BypassTrust)
+            {
+                var trust = TrustService.Evaluate(item.FilePath);
+                if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
+                {
+                    TrustSkip(item, trust.Reason, trust.Publisher);
+                    return;
+                }
+            }
+
             SetStatus(item, ScanStatus.Hashing);
             var (md5, sha256) = await HashService.ComputeAsync(item.FilePath, ct);
             UiPost(() => { item.Md5 = md5; item.Sha256 = sha256; });
@@ -159,19 +174,11 @@ internal sealed class ScanScheduler
                 }
             }
 
-            // Keyless, zero-quota skip: user known-good list, then a trusted code signature.
-            // A trusted signature means vouched-for provenance, NOT "clean" — so it never
-            // counts as clean and never shows the green banner.
-            if (opts.SkipTrusted && !opts.BypassTrust)
+            // Known-good list check needs the hash, so it stays after hashing.
+            if (opts.SkipTrusted && !opts.BypassTrust && KnownGoodDb.Contains(md5, sha256))
             {
-                if (KnownGoodDb.Contains(md5, sha256)) { TrustSkip(item, "Bilinen temiz (yerel liste)", null); return; }
-
-                var trust = TrustService.Evaluate(item.FilePath);
-                if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
-                {
-                    TrustSkip(item, trust.Reason, trust.Publisher);
-                    return;
-                }
+                TrustSkip(item, "Bilinen temiz (yerel liste)", null);
+                return;
             }
 
             await _pause.WaitWhilePausedAsync(ct);
