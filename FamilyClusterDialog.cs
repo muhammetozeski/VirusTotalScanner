@@ -18,7 +18,7 @@ internal sealed class FamilyClusterDialog : Form
 
     public FamilyClusterDialog(List<FamilyClusterService.Cluster> clusters)
     {
-        Text = "🧬 Aile kümeleri";
+        Text = Strings.DlgFamilyClustersTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(860, 480);
         MinimumSize = new Size(620, 340);
@@ -38,9 +38,7 @@ internal sealed class FamilyClusterDialog : Form
             Dock = DockStyle.Top,
             Height = 32,
             Padding = new Padding(10, 9, 10, 0),
-            Text = rows.Count == 0
-                ? "Aynı aileyi paylaşan 2+ farklı hash yok (önbellekte tekrar eden bir aile bulunmadı)."
-                : $"{rows.Count} aile kümesi — aynı zararlı ailesini paylaşan farklı dosyalar.",
+            Text = rows.Count == 0 ? Strings.FamilyClustersNone : string.Format(Strings.FamilyClustersHeaderFormat, rows.Count),
         };
 
         var grid = new DataGridView
@@ -52,15 +50,15 @@ internal sealed class FamilyClusterDialog : Form
             RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         };
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Aile", DataPropertyName = nameof(Row.Family), Width = 130 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Üye", DataPropertyName = nameof(Row.Members), Width = 55 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Konum", DataPropertyName = nameof(Row.Locations), Width = 60 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tespit", DataPropertyName = nameof(Row.Detections), Width = 70 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "İlk görülme", DataPropertyName = nameof(Row.FirstSeen), Width = 100 });
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Yollar", DataPropertyName = nameof(Row.Paths), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFamily, DataPropertyName = nameof(Row.Family), Width = 130 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColMembers, DataPropertyName = nameof(Row.Members), Width = 55 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColLocations, DataPropertyName = nameof(Row.Locations), Width = 60 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDetections, DataPropertyName = nameof(Row.Detections), Width = 70 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFirstSeen, DataPropertyName = nameof(Row.FirstSeen), Width = 100 });
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColPaths, DataPropertyName = nameof(Row.Paths), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         grid.DataSource = rows;
 
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 100 };
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 100 };
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(10, 6, 10, 6) };
         bottom.Controls.Add(close);
 

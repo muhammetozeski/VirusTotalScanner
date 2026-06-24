@@ -19,13 +19,13 @@ internal sealed class FolderRollupDialog : Form
 
     public FolderRollupDialog(IEnumerable<ScanItem> items)
     {
-        Text = "📊 Klasör özeti";
+        Text = Strings.DlgFolderRollupTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(820, 460);
         MinimumSize = new Size(560, 320);
 
         var rows = Build(items);
-        var total = rows.Aggregate(new Row { Folder = "TOPLAM" }, (acc, r) =>
+        var total = rows.Aggregate(new Row { Folder = Strings.RollupTotal }, (acc, r) =>
         {
             acc.Files += r.Files; acc.Threats += r.Threats; acc.Suspicious += r.Suspicious;
             acc.Clean += r.Clean; acc.Signed += r.Signed; acc.Unknown += r.Unknown; return acc;
@@ -37,8 +37,8 @@ internal sealed class FolderRollupDialog : Form
             AutoSize = false,
             Height = 38,
             Padding = new Padding(10, 10, 10, 0),
-            Text = $"{rows.Count} klasör • {total.Files} dosya • {total.Threats} tehdit • {total.Suspicious} şüpheli • " +
-                   $"{total.Clean} temiz • {total.Signed} imzalı-atlandı • {total.Unknown} bilinmiyor/hata",
+            Text = string.Format(Strings.RollupSummaryFormat, rows.Count, total.Files, total.Threats,
+                total.Suspicious, total.Clean, total.Signed, total.Unknown),
         };
 
         var grid = new DataGridView
@@ -50,13 +50,13 @@ internal sealed class FolderRollupDialog : Form
             RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         };
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Klasör", DataPropertyName = nameof(Row.Folder), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
-        AddNum(grid, "Dosya", nameof(Row.Files));
-        AddNum(grid, "Tehdit", nameof(Row.Threats));
-        AddNum(grid, "Şüpheli", nameof(Row.Suspicious));
-        AddNum(grid, "Temiz", nameof(Row.Clean));
-        AddNum(grid, "İmzalı", nameof(Row.Signed));
-        AddNum(grid, "Bilinmiyor", nameof(Row.Unknown));
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFolder, DataPropertyName = nameof(Row.Folder), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        AddNum(grid, Strings.ColFile, nameof(Row.Files));
+        AddNum(grid, Strings.ColThreat, nameof(Row.Threats));
+        AddNum(grid, Strings.ColSuspicious, nameof(Row.Suspicious));
+        AddNum(grid, Strings.ColClean, nameof(Row.Clean));
+        AddNum(grid, Strings.ColSigned, nameof(Row.Signed));
+        AddNum(grid, Strings.ColUnknown, nameof(Row.Unknown));
         grid.DataSource = rows;
 
         // Paint folders that contain a threat red, fully-clean folders green-ish.
@@ -67,7 +67,7 @@ internal sealed class FolderRollupDialog : Form
             else if (r.Suspicious > 0) e.CellStyle!.ForeColor = Theme.Current.Warning;
         };
 
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 100 };
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 100 };
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(10, 6, 10, 6) };
         bottom.Controls.Add(close);
 

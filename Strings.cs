@@ -58,6 +58,39 @@ internal static class Strings
     public static string SettingsLanguageLabel = "Dil:";
     public static string LanguageRestartNote = "Dil değişikliği uygulama yeniden başlatılınca tam olarak uygulanır.";
 
+    // ---- common buttons / column words (reused across dialogs) ----
+    public static string BtnClose = "Kapat";
+    public static string BtnOk = "Tamam";
+    public static string ColThreat = "Tehdit";
+    public static string ColSuspicious = "Şüpheli";
+    public static string ColClean = "Temiz";
+    public static string ColSigned = "İmzalı";
+    public static string ColUnknown = "Bilinmiyor";
+    public static string ColVerdict = "Verdikt";
+    public static string ColDetections = "Tespit";
+
+    // ---- folder rollup dialog ----
+    public static string DlgFolderRollupTitle = "📊 Klasör özeti";
+    public static string ColFolder = "Klasör";
+    public static string RollupSummaryFormat = "{0} klasör • {1} dosya • {2} tehdit • {3} şüpheli • {4} temiz • {5} imzalı-atlandı • {6} bilinmiyor/hata";
+    public static string RollupTotal = "TOPLAM";
+
+    // ---- folder neighbors dialog ----
+    public static string DlgNeighborsTitle = "📂 Klasör komşuları";
+    public static string NeighborsHeaderFormat = "{0}\n{1} taranmış komşu • {2} hiç taranmamış dosya";
+    public static string NeighborsScanRestFormat = "🔎  Kalanları tara ({0})";
+    public static string NeighborsNoNew = "Taranacak yeni dosya yok";
+
+    // ---- family clusters dialog ----
+    public static string DlgFamilyClustersTitle = "🧬 Aile kümeleri";
+    public static string FamilyClustersNone = "Aynı aileyi paylaşan 2+ farklı hash yok (önbellekte tekrar eden bir aile bulunmadı).";
+    public static string FamilyClustersHeaderFormat = "{0} aile kümesi — aynı zararlı ailesini paylaşan farklı dosyalar.";
+    public static string ColFamily = "Aile";
+    public static string ColMembers = "Üye";
+    public static string ColLocations = "Konum";
+    public static string ColFirstSeen = "İlk görülme";
+    public static string ColPaths = "Yollar";
+
     // ---- scan item status text ----
     public static string StatusQueued = "Sırada";
     public static string StatusHashing = "Hash hesaplanıyor…";
