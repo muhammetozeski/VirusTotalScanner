@@ -484,6 +484,8 @@ internal sealed class SettingsControl : UserControl
         autoUsb.CheckedChanged += (_, _) => { Settings.AutoScanUsb.Value = autoUsb.Checked; SettingsManager.SaveSettings(); };
         var procGuard = new CheckBox { Text = "Çalıştırılan her exe'yi başlarken denetle (gerçek-zamanlı, yönetici gerekir)", AutoSize = true, Checked = Settings.WatchProcessLaunches };
         procGuard.CheckedChanged += (_, _) => { Settings.WatchProcessLaunches.Value = procGuard.Checked; SettingsManager.SaveSettings(); if (procGuard.Checked) NativeMessageBox.Info("Bu koruma bir sonraki açılışta etkinleşir (WMI izleme yönetici hakları gerektirir)."); };
+        var sigSoften = new CheckBox { Text = "İmzalı dosyada 1-2 sezgisel tespiti 'imzayla yumuşatıldı' işaretle (muhtemel yanlış pozitif)", AutoSize = true, Checked = Settings.SignatureSoftenLowDetections };
+        sigSoften.CheckedChanged += (_, _) => { Settings.SignatureSoftenLowDetections.Value = sigSoften.Checked; SettingsManager.SaveSettings(); };
 
         var autoQ = new CheckBox { Text = "Arka plan gözcüleri yüksek-tespitli tehditleri otomatik karantinaya alsın (geri alınabilir)", AutoSize = true, Checked = Settings.AutoQuarantineWatchers };
         autoQ.CheckedChanged += (_, _) => { Settings.AutoQuarantineWatchers.Value = autoQ.Checked; SettingsManager.SaveSettings(); };
@@ -557,6 +559,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(usb);
         body.Controls.Add(autoUsb);
         body.Controls.Add(procGuard);
+        body.Controls.Add(sigSoften);
         body.Controls.Add(autoQ);
         body.Controls.Add(autoQRow);
         body.Controls.Add(mute);

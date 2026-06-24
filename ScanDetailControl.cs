@@ -323,6 +323,7 @@ internal sealed class ScanDetailControl : UserControl
             (LocalFirstSeenLine(item) is { } lfs ? $"\n{lfs}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.ConfidenceText != null ? $"\n{report.ConfidenceText}" : "") +
+            (item.SignatureSoftened ? $"\n🔓 Geçerli imza nedeniyle muhtemel yanlış pozitif: {item.Trust?.Publisher ?? item.Publisher ?? "imzalı"} — ‘Temiz olarak işaretle’ ile onayla" : "") +
             (report.StaleText != null ? $"\n{report.StaleText}" : "") +
             (report.CommunityRulesText != null ? $"\n{report.CommunityRulesText}" : "") +
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +

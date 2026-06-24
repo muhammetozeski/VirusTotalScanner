@@ -166,6 +166,11 @@ internal static class Settings
     /// as possibly-stale (a re-check hint). 0 disables the signal.</summary>
     public static readonly Setting<int> StaleSignatureDays = new(60);
 
+    /// <summary>Mark a row as a likely false positive ("imzayla yumuşatıldı") when a fully-signed file gets
+    /// only 1-2 purely heuristic detections and no negative reputation. Off by default; a hint + quick
+    /// mark-clean shortcut only — it never lowers the verdict band or hides a real threat.</summary>
+    public static readonly Setting<bool> SignatureSoftenLowDetections = new(false);
+
     /// <summary>Engine names considered "major" / high-reputation (; separated). Detections are
     /// split into major vs minor so a few obscure-engine hits read clearly as a likely false positive.</summary>
     public static readonly Setting<string> MajorEnginesList =

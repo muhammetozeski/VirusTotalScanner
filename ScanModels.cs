@@ -65,6 +65,17 @@ internal sealed class ScanItem : INotifyPropertyChanged
     /// <summary>Why VT was skipped (e.g. "İmzalı · Microsoft", "Bilinen temiz (yerel liste)").</summary>
     public string? SkipReason { get; set; }
 
+    /// <summary>Local signature-trust result, captured even when the file is still sent to VT (e.g. a valid
+    /// non-Microsoft signature filtered out by TrustMicrosoftOnly) so 1-2 heuristic hits can be softened.</summary>
+    public TrustResult? Trust { get; set; }
+
+    /// <summary>A likely false positive: the soften setting is on, the file has a fully valid signature
+    /// chain, and there are only 1-2 purely heuristic detections with no negative reputation. A HINT only —
+    /// it never changes the verdict band or the suspicious/threat bucketing.</summary>
+    public bool SignatureSoftened =>
+        Settings.SignatureSoftenLowDetections && Trust is { Trusted: true }
+        && Report is { } r && r.DetectionCount is > 0 and <= 2 && r.HeuristicOnly && r.Reputation >= 0;
+
     string? _error;
     public string? Error { get => _error; set => Set(ref _error, value); }
 
