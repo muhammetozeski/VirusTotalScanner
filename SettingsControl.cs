@@ -312,7 +312,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card("Genel", 415, out var body);
+        var card = Card("Genel", 450, out var body);
 
         var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
@@ -374,10 +374,25 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(startup);
         body.Controls.Add(resume);
         body.Controls.Add(autoResume);
+        var ledgerRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
+        ledgerRow.Controls.Add(ThemeManager.MakeButton("📤 Ledger dışa aktar", (_, _) =>
+        {
+            using var dlg = new SaveFileDialog { Filter = "Ledger|*.json", FileName = "team-ledger.json" };
+            if (dlg.ShowDialog() == DialogResult.OK) NativeMessageBox.Info($"{LedgerService.Export(AppServices.Cache, dlg.FileName)} kayıt yazıldı.");
+        }));
+        ledgerRow.Controls.Add(ThemeManager.MakeButton("📥 Ledger içe aktar", (_, _) =>
+        {
+            using var dlg = new OpenFileDialog { Filter = "Ledger|*.json" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            var (add, conf, ok) = LedgerService.Import(AppServices.Cache, dlg.FileName);
+            NativeMessageBox.Info($"{add} yeni kayıt eklendi, {conf} çakışma.\nBütünlük: {(ok ? "OK ✓" : "UYUŞMUYOR ⚠")}");
+        }));
+
         body.Controls.Add(tray);
         body.Controls.Add(notify);
         body.Controls.Add(votes);
         body.Controls.Add(watch);
+        body.Controls.Add(ledgerRow);
         body.Controls.Add(logging);
         return card;
     }

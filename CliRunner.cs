@@ -29,6 +29,9 @@ internal static class CliRunner
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
         if (opts.VerifyBaseline) return await VerifyBaselineCmd();
         if (opts.DriftReport != null) return await DriftReportCmd(opts.DriftReport);
+        if (opts.ExportLedger != null) { int n = LedgerService.Export(AppServices.Cache, opts.ExportLedger); Console.WriteLine($"{n} kayıt ledger'a yazıldı: {opts.ExportLedger}"); return 0; }
+        if (opts.ImportLedger != null) { var (add, conf, ok) = LedgerService.Import(AppServices.Cache, opts.ImportLedger); Console.WriteLine($"{add} yeni kayıt eklendi, {conf} çakışma. Bütünlük: {(ok ? "OK" : "UYUŞMUYOR")}"); return 0; }
+        if (opts.LedgerDiff != null) { var (nw, cf) = LedgerService.Diff(AppServices.Cache, opts.LedgerDiff); Console.WriteLine($"Sende olmayan {nw.Count}, çakışma {cf.Count}:"); foreach (var x in nw.Take(20)) Console.WriteLine("  [YENİ] " + x); foreach (var x in cf.Take(20)) Console.WriteLine("  [ÇAKIŞMA] " + x); return 0; }
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;
