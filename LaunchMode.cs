@@ -23,6 +23,7 @@ internal sealed class CliOptions
     public bool Keyless;
     public bool ExpandArchives;
     public bool Running;
+    public bool VerifyBaseline;
     public bool ShowHelp;
     public bool ShowVersion;
     public bool InstallMenu;
@@ -47,6 +48,7 @@ internal static class ArgumentDef
     static readonly CmdArg Keyless = new("--keyless", "-k");
     static readonly CmdArg ExpandArchives = new("--expand-archives", "--expand");
     static readonly CmdArg Running = new("--running", "--processes");
+    static readonly CmdArg VerifyBaseline = new("--verify-baseline", "--baseline");
     static readonly CmdArg NoGui = new("--nogui", "-n");
     static readonly CmdArg Cli = new("--cli", "-c");
     static readonly CmdArg Gui = new("--gui", "-g");
@@ -79,6 +81,7 @@ internal static class ArgumentDef
             else if (Keyless.IsMatch(a)) o.Keyless = true;
             else if (ExpandArchives.IsMatch(a)) o.ExpandArchives = true;
             else if (Running.IsMatch(a)) { o.Running = true; o.NoGui = true; }
+            else if (VerifyBaseline.IsMatch(a)) { o.VerifyBaseline = true; o.NoGui = true; }
             else if (NoGui.IsMatch(a) || Cli.IsMatch(a)) o.NoGui = true;
             else if (Gui.IsMatch(a)) o.ForceGui = true;
             else if (Tray.IsMatch(a)) { o.Tray = true; o.ForceGui = true; }

@@ -42,6 +42,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHashLookup, (_, _) => _ = HashLookupAsync()));
         bar.Controls.Add(ThemeManager.MakeButton("✓  Hash doğrula", (_, _) => _ = VerifyHashAsync()));
         bar.Controls.Add(ThemeManager.MakeButton("🔬  Çalışanları tara", (_, _) => ScanRunning()));
+        bar.Controls.Add(ThemeManager.MakeButton("🛡  Bütünlük denetimi", (_, _) => _ = VerifyBaselineAsync()));
         _pauseBtn = ThemeManager.MakeButton(Strings.BtnPause, (_, _) => TogglePause());
         _cancelBtn = ThemeManager.MakeButton(Strings.BtnCancel, (_, _) => _scheduler.Cancel());
         bar.Controls.Add(_pauseBtn);
@@ -131,6 +132,7 @@ internal sealed class ScanQueueControl : UserControl
         var miReveal = (ToolStripMenuItem)menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
         var miNeighbors = (ToolStripMenuItem)menu.Items.Add("📂  Klasör komşuları", null, (_, _) => ShowNeighbors());
         var miFindCopies = (ToolStripMenuItem)menu.Items.Add("🔁  Diğer kopyaları bul (disk)", null, (_, _) => _ = FindCopiesAsync());
+        var miPin = (ToolStripMenuItem)menu.Items.Add("📌  Bütünlük izlemesine al", null, (_, _) => _ = PinBaselineAsync());
         menu.Items.Add(new ToolStripSeparator());
         var miRescan = (ToolStripMenuItem)menu.Items.Add("🔄  Yeniden tara", null, (_, _) => RescanSelected());
         var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add("🛡  Güveni yok say, VT ile tara", null, (_, _) => RescanIgnoringTrust());
@@ -148,6 +150,7 @@ internal sealed class ScanQueueControl : UserControl
             miReveal.Enabled = exists;
             miNeighbors.Enabled = exists;
             miFindCopies.Enabled = i.Report != null && !string.IsNullOrEmpty(i.Sha256);
+            miPin.Enabled = exists;
             miRescan.Enabled = exists;
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;
@@ -424,6 +427,40 @@ internal sealed class ScanQueueControl : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
         finally { try { _summary.Text = oldSummary; } catch { } }
+    }
+
+    async Task PinBaselineAsync()
+    {
+        var i = SelectedItem();
+        if (i == null || !File.Exists(i.FilePath)) return;
+        if (await BaselineStore.PinAsync(i.FilePath))
+            NativeMessageBox.Info($"Bütünlük izlemesine eklendi:\n{i.FileName}\n\nToplam izlenen: {BaselineStore.Count}");
+        else NativeMessageBox.Error("Eklenemedi (dosya okunamadı).");
+    }
+
+    async Task VerifyBaselineAsync()
+    {
+        if (BaselineStore.Count == 0) { NativeMessageBox.Info("İzlenen dosya yok.\nBir sonuca sağ tıklayıp 'Bütünlük izlemesine al' deyin."); return; }
+        using var cts = new CancellationTokenSource();
+        string old = _summary.Text;
+        List<DriftResult> res;
+        try
+        {
+            res = await BaselineStore.VerifyAsync(
+                (d, t) => { try { BeginInvoke(() => _summary.Text = $"🛡 Bütünlük denetimi… {d}/{t}"); } catch { } }, cts.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex) { NativeMessageBox.Error("Bütünlük denetimi hatası: " + ex.Message); return; }
+        finally { try { _summary.Text = old; } catch { } }
+
+        int alarms = res.Count(r => r.IsAlarm);
+        int changed = res.Count(r => r.Kind != DriftKind.Unchanged);
+        var sb = new StringBuilder();
+        sb.AppendLine($"{res.Count} izlenen dosya denetlendi — {alarms} ALARM, {changed} değişiklik.\n");
+        if (changed == 0) sb.AppendLine("Hepsi değişmedi ✓");
+        else foreach (var r in res.Where(r => r.Kind != DriftKind.Unchanged).OrderByDescending(r => r.IsAlarm).Take(40))
+            sb.AppendLine($"{(r.IsAlarm ? "🔴" : "•")} {Path.GetFileName(r.Path)} — {r.Detail}");
+        if (alarms > 0) NativeMessageBox.Error(sb.ToString()); else NativeMessageBox.Info(sb.ToString());
     }
 
     void ScanRunning()

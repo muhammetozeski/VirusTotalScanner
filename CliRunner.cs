@@ -25,6 +25,7 @@ internal static class CliRunner
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
+        if (opts.VerifyBaseline) return await VerifyBaselineCmd();
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;
@@ -90,6 +91,17 @@ internal static class CliRunner
             Console.WriteLine($"\nBitti. {total} dosya tarandı, {mal} tehdit bulundu.");
         }
         return threat ? 1 : 0;
+    }
+
+    static async Task<int> VerifyBaselineCmd()
+    {
+        if (BaselineStore.Count == 0) { Console.WriteLine("İzlenen dosya yok."); return 0; }
+        var res = await BaselineStore.VerifyAsync(null, default);
+        foreach (var r in res.Where(r => r.Kind != DriftKind.Unchanged))
+            Console.WriteLine($"{(r.IsAlarm ? "[ALARM]" : "[değişti]")} {r.Path} — {r.Detail}");
+        int alarms = res.Count(r => r.IsAlarm);
+        Console.WriteLine($"{res.Count} izlenen dosya denetlendi, {alarms} alarm.");
+        return alarms > 0 ? 1 : 0;
     }
 
     static async Task<int> VerifyHashCmd(CliOptions opts)
