@@ -239,6 +239,7 @@ internal static class CliRunner
             Console.WriteLine($"   👉 {reco.Headline} — {reco.Rationale}");
             if (report.ConsensusText != null) Console.WriteLine("   " + report.ConsensusText);
             if (report.ConfidenceText != null) Console.WriteLine("   " + report.ConfidenceText);
+            if (report.CommunityRulesText != null) Console.WriteLine("   " + report.CommunityRulesText);
             if (report.FamilyLabel != null) Console.WriteLine("   " + report.FamilyLabel);
             if (report.CapabilitySummary != null) Console.WriteLine("   " + report.CapabilitySummary);
             foreach (var d in report.Detections.Take(15)) Console.WriteLine($"   - {d.EngineName}: {d.Result}");

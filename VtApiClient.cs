@@ -194,6 +194,10 @@ internal sealed class VtApiClient
             }
 
             report.SignatureHits = report.Detections.Count(e => string.Equals(e.Method, "blacklist", StringComparison.OrdinalIgnoreCase));
+
+            foreach (var s in a.SigmaResults ?? []) if (!string.IsNullOrWhiteSpace(s.RuleTitle)) report.CommunityRules.Add($"Sigma: {s.RuleTitle}" + (string.IsNullOrWhiteSpace(s.RuleLevel) ? "" : $" [{s.RuleLevel}]"));
+            foreach (var i in a.IdsResults ?? []) if (!string.IsNullOrWhiteSpace(i.RuleMsg)) report.CommunityRules.Add($"IDS: {i.RuleMsg}");
+            foreach (var y in a.YaraResults ?? []) if (!string.IsNullOrWhiteSpace(y.RuleName)) report.CommunityRules.Add($"YARA: {y.RuleName}" + (string.IsNullOrWhiteSpace(y.Author) ? "" : $" ({y.Author})"));
         }
 
         return report;

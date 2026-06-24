@@ -93,6 +93,27 @@ internal sealed class VtFileAttributes
     [JsonPropertyName("total_votes")] public VtVotesDto? TotalVotes { get; set; }
     [JsonPropertyName("tags")] public List<string>? Tags { get; set; }
     [JsonPropertyName("popular_threat_classification")] public VtThreatClassDto? ThreatClassification { get; set; }
+    [JsonPropertyName("sigma_analysis_results")] public List<VtSigmaDto>? SigmaResults { get; set; }
+    [JsonPropertyName("crowdsourced_ids_results")] public List<VtIdsDto>? IdsResults { get; set; }
+    [JsonPropertyName("crowdsourced_yara_results")] public List<VtYaraDto>? YaraResults { get; set; }
+}
+
+internal sealed class VtSigmaDto
+{
+    [JsonPropertyName("rule_title")] public string? RuleTitle { get; set; }
+    [JsonPropertyName("rule_level")] public string? RuleLevel { get; set; }
+}
+
+internal sealed class VtIdsDto
+{
+    [JsonPropertyName("rule_msg")] public string? RuleMsg { get; set; }
+    [JsonPropertyName("alert_severity")] public string? Severity { get; set; }
+}
+
+internal sealed class VtYaraDto
+{
+    [JsonPropertyName("rule_name")] public string? RuleName { get; set; }
+    [JsonPropertyName("author")] public string? Author { get; set; }
 }
 
 internal sealed class VtThreatClassDto
@@ -211,6 +232,15 @@ internal sealed class VtFileReport
     /// <summary>How many detections are signature-based (engine method == "blacklist") vs heuristic/ML.
     /// Stored so it survives in the summary cache. A heuristic-only detection set is a strong FP tell.</summary>
     public int SignatureHits { get; set; }
+
+    /// <summary>Crowdsourced rule hits (Sigma / IDS / YARA) that name WHY a file is flagged, formatted
+    /// for display. Already in the report JSON; stored so it survives in the summary cache.</summary>
+    public List<string> CommunityRules { get; set; } = [];
+
+    [JsonIgnore]
+    public string? CommunityRulesText => CommunityRules.Count == 0 ? null
+        : $"🛡 Topluluk kuralları ({CommunityRules.Count}): " + string.Join("  •  ", CommunityRules.Take(5))
+          + (CommunityRules.Count > 5 ? $"  (+{CommunityRules.Count - 5})" : "");
 
     [JsonIgnore] public int HeuristicOnlyHits => Math.Max(0, DetectionCount - SignatureHits);
     [JsonIgnore] public bool HeuristicOnly => DetectionCount > 0 && SignatureHits == 0;
