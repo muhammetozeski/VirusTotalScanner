@@ -93,10 +93,24 @@ internal sealed class DownloadsWatcher : IDisposable
     /// <summary>Verdict for one file via the cheap-signal order (signed→cache→keyless). On a hit, the
     /// threat is raised against <paramref name="containerPath"/> — the file the user actually downloaded
     /// (so quarantine targets the .zip), labelled with the offending inner member via originNote.</summary>
+    // Documents/media whose extension a lure file hides BEHIND its real exec extension (invoice.pdf.exe).
+    static readonly HashSet<string> LureFronts = new(StringComparer.OrdinalIgnoreCase)
+    { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".jpg", ".jpeg", ".png", ".gif", ".mp4", ".mp3", ".csv", ".html" };
+
+    /// <summary>The double-extension masquerade: the real extension is exec-class and the name BEFORE it
+    /// ends in a document/media extension (invoice.pdf.exe, photo.jpg.scr). Dangerous by naming alone.</summary>
+    static bool IsDoubleExtensionLure(string path)
+    {
+        if (!ExecExts.Contains(Path.GetExtension(path))) return false;
+        return LureFronts.Contains(Path.GetExtension(Path.GetFileNameWithoutExtension(path)));
+    }
+
     async Task VerdictOne(string path, string containerPath, string? originNote)
     {
+        // A double-extension lure is a threat by its name alone — never silently trust-skip it.
+        bool lure = IsDoubleExtensionLure(path);
         var trust = TrustService.Evaluate(path);
-        if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
+        if (!lure && TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
         { Interlocked.Increment(ref Cleared); return; }
 
         var (md5, sha) = await HashService.ComputeAsync(path);
@@ -104,10 +118,12 @@ internal sealed class DownloadsWatcher : IDisposable
             ?? (GuiScrapeService.IsRuntimeAvailable ? await GuiScrapeService.LookupAsync(sha) : null);
         if (report != null && report.TotalEngines > 0) _cache.Put(md5, report, path);
 
-        if (report?.IsMalicious == true)
+        // Flag if VT says malicious OR the name is a lure (catches brand-new payloads no engine has yet).
+        if (report?.IsMalicious == true || lure)
         {
             Interlocked.Increment(ref Flagged);
-            ThreatFound?.Invoke(new ScanItem(containerPath) { Report = report, Md5 = md5, Sha256 = sha, OriginNote = originNote });
+            string? note = lure ? "çift uzantı tuzağı" + (originNote != null ? " " + originNote : "") : originNote;
+            ThreatFound?.Invoke(new ScanItem(containerPath) { Report = report, Md5 = md5, Sha256 = sha, OriginNote = note });
         }
         else Interlocked.Increment(ref Cleared);
     }
