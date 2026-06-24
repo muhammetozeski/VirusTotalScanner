@@ -41,6 +41,7 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFolder, (_, _) => SelectFolder(), accent: true));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHashLookup, (_, _) => _ = HashLookupAsync()));
         bar.Controls.Add(ThemeManager.MakeButton("✓  Hash doğrula", (_, _) => _ = VerifyHashAsync()));
+        bar.Controls.Add(ThemeManager.MakeButton("🔬  Çalışanları tara", (_, _) => ScanRunning()));
         _pauseBtn = ThemeManager.MakeButton(Strings.BtnPause, (_, _) => TogglePause());
         _cancelBtn = ThemeManager.MakeButton(Strings.BtnCancel, (_, _) => _scheduler.Cancel());
         bar.Controls.Add(_pauseBtn);
@@ -423,6 +424,15 @@ internal sealed class ScanQueueControl : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
         finally { try { _summary.Text = oldSummary; } catch { } }
+    }
+
+    void ScanRunning()
+    {
+        var (paths, unreadable) = RunningProcesses.ImagePaths();
+        if (paths.Count == 0) { NativeMessageBox.Info("Okunabilir çalışan süreç imajı bulunamadı."); return; }
+        if (!NativeMessageBox.Confirm($"Şu an çalışan {paths.Count} süreç imajı taranacak ({unreadable} okunamadı/atlandı).\nÇoğu Microsoft imzalı olduğundan atlanır; yalnızca bilinmeyenler VT'ye gider.\n\nDevam edilsin mi?"))
+            return;
+        StartScan(paths.ToArray(), recurse: false);
     }
 
     void ShowNeighbors()

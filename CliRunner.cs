@@ -26,7 +26,15 @@ internal static class CliRunner
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
 
-        if (opts.Paths.Count == 0) { PrintHelp(); return 2; }
+        // --running scans the on-disk image of every running process instead of given paths.
+        List<string> scanPaths = opts.Paths;
+        if (opts.Running)
+        {
+            var (rp, unreadable) = RunningProcesses.ImagePaths();
+            scanPaths = rp;
+            if (!opts.Json && !opts.Quiet) Console.WriteLine($"Çalışan süreçler: {rp.Count} imaj taranacak ({unreadable} okunamadı/atlandı).");
+        }
+        if (scanPaths.Count == 0) { PrintHelp(); return 2; }
 
         bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
 
@@ -54,7 +62,7 @@ internal static class CliRunner
         var scanOpts = ScanOptions.FromSettings(opts.Recurse);
         scanOpts.BypassTrust = opts.NoTrust;
         scanOpts.ExpandArchives = opts.ExpandArchives;
-        await scheduler.RunAsync(opts.Paths, scanOpts);
+        await scheduler.RunAsync(scanPaths, scanOpts);
 
         if (opts.Json) PrintJson(scheduler.Items);
 
@@ -240,6 +248,7 @@ internal static class CliRunner
               --no-trust      İmza güvenini yok say (imzalı dosyaları da VT'ye gönder)
           -k, --keyless       Anahtarsız sorgula (GUI/WebView2 üzerinden, kotasız, yavaş)
               --expand-archives  Arşivleri (zip/nupkg/jar…) aç, üyelerini ayrı ayrı tara
+              --running       Çalışan tüm süreçlerin imajlarını tara ("şu an virüslü müyüm?")
           -n, --nogui, --cli  Grafik arayüz açmadan terminalde çalış
           -g, --gui           Terminalden bile olsa grafik arayüzü aç
           -j, --json          Sonuçları JSON olarak yaz (stdout)
