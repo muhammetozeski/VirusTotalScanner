@@ -274,9 +274,15 @@ internal sealed class ScanOverviewControl : UserControl
         SetBanner("🟢  Korunuyorsun", "Diskte bilinen canlı tehdit yok.", Theme.Current.Success, "", null);
     }
 
+    string? _sweepNotice;
+    /// <summary>Set by the host when a scheduled sweep found threats while the app was closed — shown in
+    /// the attention strip until the user acts on it.</summary>
+    public void SetSweepNotice(string? msg) { _sweepNotice = msg; if (IsHandleCreated) UpdateAttention(0); }
+
     void UpdateAttention(int tehditCount)
     {
         var msgs = new List<string>();
+        if (!string.IsNullOrEmpty(_sweepNotice)) msgs.Add(_sweepNotice);
         if (AppServices.Vault.UsableKeyCount == 0 && !Settings.KeylessGuiLookup)
             msgs.Add("Kullanılabilir API anahtarı yok — Ayarlar'dan anahtar ekle ya da anahtarsız modu aç.");
         int quarantined = SafeQuarantineCount();

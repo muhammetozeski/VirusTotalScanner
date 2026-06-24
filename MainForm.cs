@@ -93,11 +93,12 @@ internal sealed partial class MainForm : Form
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
     readonly bool _startHidden;
-    enum ToastAction { None, ScanUsb, ShowThreat, UndoQuarantine }
+    enum ToastAction { None, ScanUsb, ShowThreat, UndoQuarantine, LoadSweepThreats }
     ToastAction _toastAction;  // what clicking the CURRENT balloon should do (set right before each toast)
     string? _pendingUsbDrive;  // the removable drive for a ScanUsb toast
     ScanItem? _lastThreat;     // the item for a ShowThreat toast
     QuarantineEntry? _lastQuarantine; // the entry for an UndoQuarantine toast
+    string[] _sweepThreatPaths = []; // the paths for a LoadSweepThreats toast
 
     public MainForm(bool startHidden = false)
     {
@@ -232,6 +233,10 @@ internal sealed partial class MainForm : Form
             case ToastAction.UndoQuarantine when _lastQuarantine is { } qe:
                 if (QuarantineVault.Restore(qe, out _)) NativeMessageBox.Info("Dosya geri yüklendi.");
                 _lastQuarantine = null;
+                break;
+            case ToastAction.LoadSweepThreats when _sweepThreatPaths.Length > 0:
+                _tabs.SelectedIndex = 1; // Tarama
+                _scan.StartScan(_sweepThreatPaths, recurse: false);
                 break;
         }
     }
@@ -393,6 +398,35 @@ internal sealed partial class MainForm : Form
         OfferResume();
         StartWatchCheck();
         RetryPendingOutbox();
+        CheckSweepResult();
+    }
+
+    /// <summary>Surface a scheduled sweep that found threats while the app was closed: a one-time attention
+    /// line + toast (click loads the threat paths into the queue), so a background sweep becomes something
+    /// the user actually notices instead of a silent HTML file.</summary>
+    void CheckSweepResult()
+    {
+        try
+        {
+            var r = SweepResultStore.TryRead(SweepScheduler.ResultPath);
+            if (r == null || r.Threats <= 0) return;
+            if (DateTime.TryParse(Settings.LastSeenSweepUtc.Value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var seen)
+                && r.WhenUtc <= seen) return; // already announced this sweep
+            Settings.LastSeenSweepUtc.Value = r.WhenUtc.ToString("o");
+            SettingsManager.SaveSettings();
+
+            _sweepThreatPaths = r.ThreatPaths.Where(File.Exists).ToArray();
+            _overview.SetSweepNotice($"🌙 Zamanlı tarama {r.Threats} tehdit buldu — kuyruğa yüklemek için bildirime tıkla.");
+            if (_sweepThreatPaths.Length > 0)
+            {
+                _toastAction = ToastAction.LoadSweepThreats;
+                _tray.BalloonTipTitle = "Zamanlı tarama tehdit buldu";
+                _tray.BalloonTipText = $"{r.Threats} tehdit bulundu. Kuyruğa yüklemek için tıkla.";
+                _tray.BalloonTipIcon = ToolTipIcon.Warning;
+                _tray.ShowBalloonTip(8000);
+            }
+        }
+        catch (Exception ex) { Log("Sweep result check failed: " + ex.Message, LogLevel.Warning); }
     }
 
     /// <summary>Self-heal: re-scan files that failed while offline, now that we're back online.</summary>

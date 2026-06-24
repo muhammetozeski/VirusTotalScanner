@@ -88,6 +88,10 @@ internal static class Settings
     /// (e.g. 10) so only obvious malware is touched; the .VIRUS vault + an undo toast cover false positives.</summary>
     public static readonly Setting<int> AutoQuarantineThreshold = new(10);
 
+    /// <summary>ISO-8601 UTC of the most recent scheduled-sweep result already surfaced to the user, so a
+    /// sweep's findings are announced once on next launch and not repeated.</summary>
+    public static readonly Setting<string> LastSeenSweepUtc = new("");
+
     /// <summary>Show VirusTotal community votes in the detail pane.</summary>
     public static readonly Setting<bool> ShowCommunityVotes = new(true);
 
