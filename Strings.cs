@@ -58,6 +58,23 @@ internal static class Strings
     public static string SettingsLanguageLabel = "Dil:";
     public static string LanguageRestartNote = "Dil değişikliği uygulama yeniden başlatılınca tam olarak uygulanır.";
 
+    // ---- scan item status text ----
+    public static string StatusQueued = "Sırada";
+    public static string StatusHashing = "Hash hesaplanıyor…";
+    public static string StatusLookingUp = "VirusTotal sorgulanıyor…";
+    public static string StatusUploading = "Yükleniyor…";
+    public static string StatusPolling = "Analiz bekleniyor…";
+    public static string StatusCompleted = "✅ Tamamlandı";
+    public static string StatusFailedPrefix = "⚠ Hata: ";
+    public static string StatusUnknown = "bilinmiyor";
+    public static string StatusSkippedFormat = "⏭ Atlandı ({0})";
+    public static string StatusSafeType = "güvenli tür";
+    public static string StatusTrustedFormat = "🔵 {0} (VT atlandı)";
+    public static string StatusSignedShort = "İmzalı";
+    public static string StatusCancelled = "✋ İptal edildi";
+    public static string VerdictSigned = "İMZALI";
+    public static string CacheSuffix = " • önbellek";
+
     // ---- scan queue grid + status ----
     public static string ColFile = "Dosya";
     public static string ColSize = "Boyut";

@@ -65,21 +65,21 @@ internal sealed class ScanItem : INotifyPropertyChanged
     string? _error;
     public string? Error { get => _error; set => Set(ref _error, value); }
 
-    public string Verdict => Report?.Verdict ?? (Status == ScanStatus.TrustedSkipped ? "İMZALI" : "");
+    public string Verdict => Report?.Verdict ?? (Status == ScanStatus.TrustedSkipped ? Strings.VerdictSigned : "");
 
     public string StatusText => _status switch
     {
-        ScanStatus.Queued => "Sırada",
-        ScanStatus.Hashing => "Hash hesaplanıyor…",
-        ScanStatus.LookingUp => "VirusTotal sorgulanıyor…",
-        ScanStatus.Uploading => Detail ?? "Yükleniyor…",
-        ScanStatus.Polling => Detail ?? "Analiz bekleniyor…",
-        ScanStatus.Completed => Report == null ? "✅ Tamamlandı" :
-            $"{VerdictEmoji(Report)} {Report.Verdict} ({Report.DetectionCount}/{Report.TotalEngines})" + (FromCache ? " • önbellek" : ""),
-        ScanStatus.Failed => "⚠ Hata: " + (Error ?? "bilinmiyor"),
-        ScanStatus.Skipped => "⏭ Atlandı (" + (SkipReason ?? "güvenli tür") + ")",
-        ScanStatus.TrustedSkipped => "🔵 " + (SkipReason ?? "İmzalı") + " (VT atlandı)",
-        ScanStatus.Cancelled => "✋ İptal edildi",
+        ScanStatus.Queued => Strings.StatusQueued,
+        ScanStatus.Hashing => Strings.StatusHashing,
+        ScanStatus.LookingUp => Strings.StatusLookingUp,
+        ScanStatus.Uploading => Detail ?? Strings.StatusUploading,
+        ScanStatus.Polling => Detail ?? Strings.StatusPolling,
+        ScanStatus.Completed => Report == null ? Strings.StatusCompleted :
+            $"{VerdictEmoji(Report)} {Report.Verdict} ({Report.DetectionCount}/{Report.TotalEngines})" + (FromCache ? Strings.CacheSuffix : ""),
+        ScanStatus.Failed => Strings.StatusFailedPrefix + (Error ?? Strings.StatusUnknown),
+        ScanStatus.Skipped => string.Format(Strings.StatusSkippedFormat, SkipReason ?? Strings.StatusSafeType),
+        ScanStatus.TrustedSkipped => string.Format(Strings.StatusTrustedFormat, SkipReason ?? Strings.StatusSignedShort),
+        ScanStatus.Cancelled => Strings.StatusCancelled,
         _ => _status.ToString(),
     };
 
