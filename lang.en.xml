@@ -133,6 +133,10 @@
   <s name="GateYes">Yes</s>
   <s name="GateNo">No</s>
   <s name="GateAsking">  —  asking</s>
+  <s name="MenuInstallConfirm">VirusTotalScanner will add itself to the Windows right-click menu (all users).\nAdministrator permission (UAC) will be requested.\n\nContinue?</s>
+  <s name="MenuInstalledInfo">Added to the right-click menu.\nOn Windows 11 it appears under 'Show more options'.</s>
+  <s name="MenuOpFailedWarn">The operation could not be completed (administrator permission may be required).</s>
+  <s name="MenuStatusPrefix">Status: </s>
   <s name="CardAbout">About</s>
   <s name="AboutGetKeyLink">Get a VirusTotal API key (virustotal.com)</s>
   <s name="AboutConfigFilePrefix">Config file: </s>

@@ -474,13 +474,9 @@ internal sealed class SettingsControl : UserControl
 
     void InstallMenu()
     {
-        if (!NativeMessageBox.Confirm(
-            "VirusTotalScanner kendisini Windows sağ tuş menüsüne (tüm kullanıcılar) ekleyecek.\n" +
-            "Yönetici izni (UAC) istenecek.\n\nDevam edilsin mi?",
-            "İzin"))
+        if (!NativeMessageBox.Confirm(Strings.MenuInstallConfirm, Strings.FirstRunMenuTitle))
             return;
-        RunMenuOp(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e),
-            "Sağ tuş menüsüne eklendi.\nWindows 11'de 'Daha fazla seçenek göster' altında görünür.");
+        RunMenuOp(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out var e), Strings.MenuInstalledInfo);
     }
 
     /// <summary>Runs an elevation-capable menu op off the UI thread, then refreshes status.</summary>
@@ -493,7 +489,7 @@ internal sealed class SettingsControl : UserControl
             {
                 RefreshMenuStatus();
                 if (ok) NativeMessageBox.Info(okMsg);
-                else NativeMessageBox.Warn("İşlem tamamlanamadı (yönetici izni gerekebilir).");
+                else NativeMessageBox.Warn(Strings.MenuOpFailedWarn);
             });
         });
     }
@@ -501,7 +497,7 @@ internal sealed class SettingsControl : UserControl
     void RefreshMenuStatus()
     {
         var state = ContextMenuInstaller.Verify();
-        _menuStatus.Text = "Durum: " + ContextMenuInstaller.Describe(state);
+        _menuStatus.Text = Strings.MenuStatusPrefix + ContextMenuInstaller.Describe(state);
         _menuStatus.ForeColor = state switch
         {
             MenuState.Ok => Theme.Current.Success,

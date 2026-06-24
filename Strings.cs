@@ -177,6 +177,12 @@ internal static class Strings
     public static string GateNo = "Hayır";
     public static string GateAsking = "  —  soruluyor";
 
+    // ---- settings: context-menu install messages ----
+    public static string MenuInstallConfirm = "VirusTotalScanner kendisini Windows sağ tuş menüsüne (tüm kullanıcılar) ekleyecek.\nYönetici izni (UAC) istenecek.\n\nDevam edilsin mi?";
+    public static string MenuInstalledInfo = "Sağ tuş menüsüne eklendi.\nWindows 11'de 'Daha fazla seçenek göster' altında görünür.";
+    public static string MenuOpFailedWarn = "İşlem tamamlanamadı (yönetici izni gerekebilir).";
+    public static string MenuStatusPrefix = "Durum: ";
+
     // ---- settings: about card ----
     public static string CardAbout = "Hakkında";
     public static string AboutGetKeyLink = "VirusTotal API anahtarı al (virustotal.com)";
