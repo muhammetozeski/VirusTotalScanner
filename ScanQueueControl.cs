@@ -28,6 +28,9 @@ internal sealed class ScanQueueControl : UserControl
     readonly Dictionary<Bucket, Button> _chips = [];
     readonly Label _filterCount = new() { AutoSize = true, Margin = new Padding(10, 8, 0, 0) };
     System.ComponentModel.BindingList<ScanItem>? _view;
+    readonly System.Windows.Forms.Timer _filterTimer = new() { Interval = 200 }; // debounce search keystrokes
+    string _lastFilterQuery = "";
+    Bucket _lastFilterBucket = Bucket.All;
     Bucket _bucket = Bucket.All;
 
     // ---- "have I scanned this before?" recall bar ----
@@ -144,7 +147,8 @@ internal sealed class ScanQueueControl : UserControl
 
         _search.PlaceholderText = "🔎  Ara (ad/yol)…";
         _search.Margin = new Padding(0, 4, 8, 4);
-        _search.TextChanged += (_, _) => ApplyFilter();
+        _search.TextChanged += (_, _) => { _filterTimer.Stop(); _filterTimer.Start(); }; // debounce
+        _filterTimer.Tick += (_, _) => { _filterTimer.Stop(); ApplyFilter(); };
         _search.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { _search.Clear(); e.Handled = true; } };
         strip.Controls.Add(_search);
 
@@ -224,16 +228,30 @@ internal sealed class ScanQueueControl : UserControl
         if (!FilterActive)
         {
             if (!ReferenceEquals(_grid.DataSource, _scheduler.Items)) _grid.DataSource = _scheduler.Items;
+            _lastFilterQuery = ""; _lastFilterBucket = Bucket.All;
         }
         else
         {
             _view ??= [];
+            string q = _search.Text.Trim();
+            // Incremental narrowing: if the query only grew within the same bucket and the grid already
+            // shows _view, drop the now-excluded rows in place instead of rebuilding from all of Items.
+            bool canNarrow = ReferenceEquals(_grid.DataSource, _view) && _bucket == _lastFilterBucket
+                && _lastFilterQuery.Length > 0 && q.StartsWith(_lastFilterQuery, StringComparison.OrdinalIgnoreCase);
             _view.RaiseListChangedEvents = false;
-            _view.Clear();
-            foreach (var it in _scheduler.Items) if (Passes(it)) _view.Add(it);
+            if (canNarrow)
+            {
+                for (int n = _view.Count - 1; n >= 0; n--) if (!Passes(_view[n])) _view.RemoveAt(n);
+            }
+            else
+            {
+                _view.Clear();
+                foreach (var it in _scheduler.Items) if (Passes(it)) _view.Add(it);
+            }
             _view.RaiseListChangedEvents = true;
             _view.ResetBindings();
             if (!ReferenceEquals(_grid.DataSource, _view)) _grid.DataSource = _view;
+            _lastFilterQuery = q; _lastFilterBucket = _bucket;
         }
         Reselect(keep);
         UpdateChipCounts();
