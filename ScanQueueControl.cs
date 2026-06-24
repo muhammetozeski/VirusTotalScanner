@@ -221,7 +221,7 @@ internal sealed class ScanQueueControl : UserControl
 
     void SelectFolder()
     {
-        using var dlg = new FolderBrowserDialog { Description = "Taranacak klasör (alt klasörler dahil)" };
+        using var dlg = new FolderBrowserDialog { Description = Strings.FolderPickDescription };
         if (dlg.ShowDialog() == DialogResult.OK && !string.IsNullOrEmpty(dlg.SelectedPath))
             StartScan([dlg.SelectedPath], recurse: true);
     }
@@ -232,7 +232,7 @@ internal sealed class ScanQueueControl : UserControl
         if (!_scheduler.IsRunning && !AppServices.Rotator.HasUsableKeys && !Settings.TrustSkipSigned && !keyless)
         {
             NeedApiKey?.Invoke();
-            NativeMessageBox.Warn("Taramadan önce bir API anahtarı ekleyin, ya da Güven Kaynakları'ndan imza-atlamayı / anahtarsız (GUI) modu açın.");
+            NativeMessageBox.Warn(Strings.NeedApiKeyWarn);
             return;
         }
         var opts = ScanOptions.FromSettings(recurse);
@@ -241,9 +241,7 @@ internal sealed class ScanQueueControl : UserControl
         // Archive found? Ask once whether to scan the archive itself or expand and scan its members.
         var pathList = paths.ToList();
         if (!_scheduler.IsRunning && HasArchives(pathList))
-            opts.ExpandArchives = NativeMessageBox.Confirm(
-                "Seçimde arşiv var (zip/nupkg/jar…).\n\nÜyelerini açıp her birini ayrı ayrı (kotasız) sorgulamak ister misiniz?\n\nEvet = üyeleri tara   •   Hayır = arşivin kendisini tara",
-                "Arşiv bulundu");
+            opts.ExpandArchives = NativeMessageBox.Confirm(Strings.ArchivePrompt, Strings.ArchiveFoundTitle);
 
         _ = Task.Run(async () =>
         {
@@ -273,12 +271,12 @@ internal sealed class ScanQueueControl : UserControl
     {
         // Default is a precomputed example (notepad.exe's SHA-256) so there's something to test with.
         const string exampleHash = "ab15a95de88ab0624307ae0e28e333756a2a522f650a0be78749901f7dc32ecf";
-        string? input = Dialogs.InputBox("Sorgulanacak MD5 / SHA-1 / SHA-256 hash:", "Hash sorgula", exampleHash);
+        string? input = Dialogs.InputBox(Strings.HashLookupPrompt, Strings.HashLookupTitle, exampleHash);
         if (string.IsNullOrWhiteSpace(input)) return;
         input = input.Trim().ToLowerInvariant();
         if (!Regex.IsMatch(input, "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$"))
         {
-            NativeMessageBox.Warn("Geçerli bir MD5/SHA-1/SHA-256 hash girin.");
+            NativeMessageBox.Warn(Strings.HashInvalidWarn);
             return;
         }
         if (!AppServices.Rotator.HasUsableKeys) { NeedApiKey?.Invoke(); return; }
@@ -287,14 +285,14 @@ internal sealed class ScanQueueControl : UserControl
         {
             string key = await AppServices.Rotator.AcquireAsync();
             var report = await AppServices.Api.GetFileReportAsync(input, key);
-            if (report == null) { NativeMessageBox.Info("Bu hash VirusTotal'de bulunamadı."); return; }
+            if (report == null) { NativeMessageBox.Info(Strings.HashNotFound); return; }
             var item = new ScanItem(input) { Report = report, Status = ScanStatus.Completed };
             item.Md5 = report.Md5; item.Sha256 = report.Sha256;
             _scheduler.Items.Add(item);
             _grid.ClearSelection();
             if (_grid.Rows.Count > 0) _grid.Rows[^1].Selected = true;
         }
-        catch (Exception ex) { NativeMessageBox.Error("Sorgu başarısız: " + ex.Message); }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.LookupFailedPrefix + ex.Message); }
     }
 
     void TogglePause()
@@ -374,7 +372,7 @@ internal sealed class ScanQueueControl : UserControl
     void ExportCsv()
     {
         var items = _scheduler.Items.Where(i => i.Report != null).ToList();
-        if (items.Count == 0) { NativeMessageBox.Info("Dışa aktarılacak sonuç yok."); return; }
+        if (items.Count == 0) { NativeMessageBox.Info(Strings.NoResultsToExport); return; }
         using var dlg = new SaveFileDialog { Filter = "CSV|*.csv", FileName = "virustotal-sonuclar.csv" };
         if (dlg.ShowDialog() != DialogResult.OK) return;
         var sb = new StringBuilder();
@@ -384,8 +382,8 @@ internal sealed class ScanQueueControl : UserControl
             var r = i.Report!;
             sb.AppendLine($"\"{i.FileName}\";{r.Verdict};{r.Malicious};{r.Suspicious};{r.TotalEngines};{r.Md5};{r.Sha256};{r.ReportUrl}");
         }
-        try { File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8); NativeMessageBox.Info("Kaydedildi: " + dlg.FileName); }
-        catch (Exception ex) { NativeMessageBox.Error("Kaydetme hatası: " + ex.Message); }
+        try { File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8); NativeMessageBox.Info(Strings.SavedPrefix + dlg.FileName); }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.SaveErrorPrefix + ex.Message); }
     }
 
     void ShowFolderRollup()
@@ -525,7 +523,7 @@ internal sealed class ScanQueueControl : UserControl
             case QuotaExhaustedChoice.Keyless:
                 Settings.KeylessGuiLookup.Value = true;
                 SettingsManager.SaveSettings();
-                NativeMessageBox.Info("Anahtarsız (GUI) mod açıldı. Sıradaki dosyalar kotasız sorgulanacak.");
+                NativeMessageBox.Info(Strings.KeylessEnabledInfo);
                 break;
             case QuotaExhaustedChoice.NewKey:
                 using (var key = new ApiKeyDialog())
@@ -541,23 +539,23 @@ internal sealed class ScanQueueControl : UserControl
     void ExportReport()
     {
         var items = _scheduler.Items.Where(i => i.Report != null || i.Status == ScanStatus.TrustedSkipped).ToList();
-        if (items.Count == 0) { NativeMessageBox.Info("Dışa aktarılacak sonuç yok."); return; }
+        if (items.Count == 0) { NativeMessageBox.Info(Strings.NoResultsToExport); return; }
         using var dlg = new SaveFileDialog
         {
-            Filter = "HTML rapor|*.html|CSV|*.csv|JSON|*.json|Metin|*.txt",
+            Filter = Strings.ReportFilter,
             FileName = "virustotal-rapor.html",
         };
         if (dlg.ShowDialog() != DialogResult.OK) return;
-        try { ReportWriter.Write(dlg.FileName, items); NativeMessageBox.Info("Rapor kaydedildi: " + dlg.FileName); }
-        catch (Exception ex) { NativeMessageBox.Error("Rapor yazılamadı: " + ex.Message); }
+        try { ReportWriter.Write(dlg.FileName, items); NativeMessageBox.Info(Strings.ReportSavedPrefix + dlg.FileName); }
+        catch (Exception ex) { NativeMessageBox.Error(Strings.ReportWriteErrorPrefix + ex.Message); }
     }
 
     void ClearCache()
     {
-        if (NativeMessageBox.Confirm($"Yerel hash önbelleği ({AppServices.Cache.Count} kayıt) temizlensin mi?"))
+        if (NativeMessageBox.Confirm(string.Format(Strings.CacheClearConfirmFormat, AppServices.Cache.Count)))
         {
             AppServices.Cache.Clear();
-            NativeMessageBox.Info("Önbellek temizlendi.");
+            NativeMessageBox.Info(Strings.CacheClearedInfo);
         }
     }
 

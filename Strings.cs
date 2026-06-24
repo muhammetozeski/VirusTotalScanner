@@ -116,6 +116,26 @@ internal static class Strings
 
     public static string ProgressSummaryFormat = "Toplam {0} • Tamamlanan {1} • Zararlı {2} • Şüpheli {3} • Temiz {4} • İmzalı↷atlandı {5} • Hata {6}";
 
+    // ---- scan queue control: scan-entry / lookup / export / cache messages ----
+    public static string FolderPickDescription = "Taranacak klasör (alt klasörler dahil)";
+    public static string NeedApiKeyWarn = "Taramadan önce bir API anahtarı ekleyin, ya da Güven Kaynakları'ndan imza-atlamayı / anahtarsız (GUI) modu açın.";
+    public static string ArchivePrompt = "Seçimde arşiv var (zip/nupkg/jar…).\n\nÜyelerini açıp her birini ayrı ayrı (kotasız) sorgulamak ister misiniz?\n\nEvet = üyeleri tara   •   Hayır = arşivin kendisini tara";
+    public static string ArchiveFoundTitle = "Arşiv bulundu";
+    public static string HashLookupPrompt = "Sorgulanacak MD5 / SHA-1 / SHA-256 hash:";
+    public static string HashLookupTitle = "Hash sorgula";
+    public static string HashInvalidWarn = "Geçerli bir MD5/SHA-1/SHA-256 hash girin.";
+    public static string HashNotFound = "Bu hash VirusTotal'de bulunamadı.";
+    public static string LookupFailedPrefix = "Sorgu başarısız: ";
+    public static string NoResultsToExport = "Dışa aktarılacak sonuç yok.";
+    public static string SavedPrefix = "Kaydedildi: ";
+    public static string SaveErrorPrefix = "Kaydetme hatası: ";
+    public static string ReportFilter = "HTML rapor|*.html|CSV|*.csv|JSON|*.json|Metin|*.txt";
+    public static string ReportSavedPrefix = "Rapor kaydedildi: ";
+    public static string ReportWriteErrorPrefix = "Rapor yazılamadı: ";
+    public static string CacheClearConfirmFormat = "Yerel hash önbelleği ({0} kayıt) temizlensin mi?";
+    public static string CacheClearedInfo = "Önbellek temizlendi.";
+    public static string KeylessEnabledInfo = "Anahtarsız (GUI) mod açıldı. Sıradaki dosyalar kotasız sorgulanacak.";
+
     // ---- scan queue control: quarantine + find-copies messages ----
     public static string NeedVtResultInfo = "Önce dosyanın VT sonucu olmalı.";
     public static string QuarantineConfirmFormat = "'{0}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)";

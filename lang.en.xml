@@ -54,6 +54,24 @@
   <s name="MenuRescanNoTrust">🛡  Ignore trust, scan with VT</s>
   <s name="MenuQuarantine">⚠  Quarantine (.VIRUS)</s>
   <s name="ProgressSummaryFormat">Total {0} • Done {1} • Malicious {2} • Suspicious {3} • Clean {4} • Signed↷skipped {5} • Errors {6}</s>
+  <s name="FolderPickDescription">Folder to scan (subfolders included)</s>
+  <s name="NeedApiKeyWarn">Add an API key before scanning, or enable signature-skip / keyless (GUI) mode in Trust Sources.</s>
+  <s name="ArchivePrompt">The selection contains an archive (zip/nupkg/jar…).\n\nExpand its members and look each one up separately (no quota)?\n\nYes = scan members   •   No = scan the archive itself</s>
+  <s name="ArchiveFoundTitle">Archive found</s>
+  <s name="HashLookupPrompt">MD5 / SHA-1 / SHA-256 hash to look up:</s>
+  <s name="HashLookupTitle">Look up hash</s>
+  <s name="HashInvalidWarn">Enter a valid MD5/SHA-1/SHA-256 hash.</s>
+  <s name="HashNotFound">This hash was not found on VirusTotal.</s>
+  <s name="LookupFailedPrefix">Lookup failed: </s>
+  <s name="NoResultsToExport">No results to export.</s>
+  <s name="SavedPrefix">Saved: </s>
+  <s name="SaveErrorPrefix">Save error: </s>
+  <s name="ReportFilter">HTML report|*.html|CSV|*.csv|JSON|*.json|Text|*.txt</s>
+  <s name="ReportSavedPrefix">Report saved: </s>
+  <s name="ReportWriteErrorPrefix">Could not write report: </s>
+  <s name="CacheClearConfirmFormat">Clear the local hash cache ({0} entries)?</s>
+  <s name="CacheClearedInfo">Cache cleared.</s>
+  <s name="KeylessEnabledInfo">Keyless (GUI) mode enabled. Upcoming files will be looked up without quota.</s>
   <s name="NeedVtResultInfo">The file needs a VT result first.</s>
   <s name="QuarantineConfirmFormat">Quarantine '{0}'? (renamed to .VIRUS, made non-executable; can be restored later)</s>
   <s name="QuarantineDoneInfo">File quarantined (non-executable). It can be restored from the quarantine vault.</s>
