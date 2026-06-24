@@ -385,12 +385,31 @@ internal sealed class ScanQueueControl : UserControl
     void UpdateRecallBar(ScanItem? item)
     {
         string? md5 = item?.Md5;
-        if (string.IsNullOrEmpty(md5)) { _recallBar.Visible = false; return; }
-        var prior = ScanHistoryStore.All().Where(e => string.Equals(e.Md5, md5, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (prior.Count < 2) { _recallBar.Visible = false; return; } // 1 = only the current scan's own record
-        var last = prior[^2]; // the scan before the most recent (this one)
-        _recallBar.BackColor = RecallBlend(Theme.Current.Accent, Theme.Current.Panel, 0.22f);
+        if (item == null || string.IsNullOrEmpty(md5)) { _recallBar.Visible = false; return; }
+        var history = ScanHistoryStore.All();
         _recallLabel.ForeColor = Theme.Current.Text;
+
+        // Highest-priority signal: same PATH was scanned before, but the content (hash) has changed —
+        // exactly the "clean file swapped/trojanized in place" case the plain hash recall misses.
+        if (!string.IsNullOrEmpty(item.FilePath))
+        {
+            var changed = history.LastOrDefault(e =>
+                string.Equals(e.Path, item.FilePath, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrEmpty(e.Md5) && !string.Equals(e.Md5, md5, StringComparison.OrdinalIgnoreCase));
+            if (changed != null)
+            {
+                _recallBar.BackColor = RecallBlend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
+                _recallLabel.Text = $"⚠ Bu yolda daha önce FARKLI bir dosya taramıştın ({changed.WhenLocal:yyyy-MM-dd} — {changed.Verdict} {changed.Ratio}); içerik o zamandan beri DEĞİŞTİ.".TrimEnd();
+                _recallBar.Visible = true;
+                return;
+            }
+        }
+
+        // Otherwise: the exact same file (by hash) was scanned before.
+        var prior = history.Where(e => string.Equals(e.Md5, md5, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (prior.Count < 2) { _recallBar.Visible = false; return; } // 1 = only the current scan's own record
+        var last = prior[^2];
+        _recallBar.BackColor = RecallBlend(Theme.Current.Accent, Theme.Current.Panel, 0.22f);
         _recallLabel.Text = $"🕘 Bu dosyayı daha önce {prior.Count - 1} kez taradın. Önceki: {last.WhenLocal:yyyy-MM-dd HH:mm} — {last.Verdict} {last.Ratio}".TrimEnd();
         _recallBar.Visible = true;
     }
