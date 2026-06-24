@@ -71,6 +71,12 @@ internal static class Settings
     /// <summary>Show a Windows toast/notification when a threat is found.</summary>
     public static readonly Setting<bool> NotifyOnThreat = new(true);
 
+    /// <summary>Only notify for threats with at least this many engine detections (1 = any threat).</summary>
+    public static readonly Setting<int> NotifyMinDetections = new(1);
+
+    /// <summary>Show one summary toast (clean/suspect/threat tally) when a scan finishes.</summary>
+    public static readonly Setting<bool> NotifyScanSummary = new(false);
+
     /// <summary>Show VirusTotal community votes in the detail pane.</summary>
     public static readonly Setting<bool> ShowCommunityVotes = new(true);
 

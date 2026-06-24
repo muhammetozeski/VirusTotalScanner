@@ -128,8 +128,10 @@ internal sealed partial class MainForm : Form
         AppServices.Scheduler.ProgressChanged += p => SafeUi(() => TaskbarProgress.Set(p.Done, p.Total));
         AppServices.Scheduler.Finished += () => SafeUi(() =>
         {
-            bool threats = AppServices.Scheduler.Items.Any(i => i.Report?.IsMalicious == true);
+            var items = AppServices.Scheduler.Items;
+            bool threats = items.Any(i => i.Report?.IsMalicious == true);
             if (threats) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
+            if (Settings.NotifyScanSummary && items.Count > 0) ShowScanSummaryToast(items);
         });
         AppServices.Vault.Changed += () => SafeUi(UpdateStatusBar);
         AppServices.Vault.CountersUpdated += () => SafeUi(UpdateStatusBar);
@@ -262,11 +264,21 @@ internal sealed partial class MainForm : Form
 
     // ---- threat notification ----
 
+    void ShowScanSummaryToast(System.Collections.Generic.IList<ScanItem> items)
+    {
+        int mal = items.Count(i => i.Report?.IsMalicious == true);
+        _tray.BalloonTipTitle = mal > 0 ? "Tarama bitti — tehdit bulundu" : "Tarama bitti — temiz";
+        _tray.BalloonTipText = $"{items.Count} dosya tarandı, {mal} tehdit.";
+        _tray.BalloonTipIcon = mal > 0 ? ToolTipIcon.Warning : ToolTipIcon.Info;
+        _tray.ShowBalloonTip(5000);
+    }
+
     void OnThreatFound(ScanItem item)
     {
         _pendingUsbDrive = null; // a threat toast click should restore the window, not scan a stale drive
         _lastThreat = item;
         if (!Settings.NotifyOnThreat) return;
+        if (item.Report != null && item.Report.DetectionCount < Settings.NotifyMinDetections) return; // below the user's severity floor
         SafeUi(() =>
         {
             _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;

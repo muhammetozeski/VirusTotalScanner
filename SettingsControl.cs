@@ -310,7 +310,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card(Strings.CardGeneral, 478, out var body);
+        var card = Card(Strings.CardGeneral, 540, out var body);
 
         var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
@@ -346,6 +346,10 @@ internal sealed class SettingsControl : UserControl
         tray.CheckedChanged += (_, _) => { Settings.MinimizeToTray.Value = tray.Checked; SettingsManager.SaveSettings(); };
         var notify = new CheckBox { Text = Strings.NotifyThreatLabel, AutoSize = true, Checked = Settings.NotifyOnThreat };
         notify.CheckedChanged += (_, _) => { Settings.NotifyOnThreat.Value = notify.Checked; SettingsManager.SaveSettings(); };
+        var notifyThreshold = LabeledNumeric("Bildirim eşiği (en az kaç tespit):", Settings.NotifyMinDetections, 1, 70,
+            v => { Settings.NotifyMinDetections.Value = v; SettingsManager.SaveSettings(); });
+        var notifySummary = new CheckBox { Text = "Tarama bitince özet bildirim göster", AutoSize = true, Checked = Settings.NotifyScanSummary };
+        notifySummary.CheckedChanged += (_, _) => { Settings.NotifyScanSummary.Value = notifySummary.Checked; SettingsManager.SaveSettings(); };
         var votes = new CheckBox { Text = Strings.ShowVotesLabel, AutoSize = true, Checked = Settings.ShowCommunityVotes };
         votes.CheckedChanged += (_, _) => { Settings.ShowCommunityVotes.Value = votes.Checked; SettingsManager.SaveSettings(); };
         var watch = new CheckBox { Text = Strings.WatchDownloadsLabel, AutoSize = true, Checked = Settings.WatchDownloads };
@@ -391,6 +395,8 @@ internal sealed class SettingsControl : UserControl
 
         body.Controls.Add(tray);
         body.Controls.Add(notify);
+        body.Controls.Add(notifyThreshold);
+        body.Controls.Add(notifySummary);
         body.Controls.Add(votes);
         body.Controls.Add(watch);
         body.Controls.Add(usb);
