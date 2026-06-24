@@ -38,4 +38,24 @@ internal static class RunningProcesses
 
         return (paths.ToList(), unreadable);
     }
+
+    /// <summary>Every running process whose on-disk image IS the given file — the holders that keep a
+    /// mapped/locked binary from being renamed (so quarantine can offer to close them first).</summary>
+    public static List<(int Pid, string Name)> MatchingProcesses(string filePath)
+    {
+        var hits = new List<(int, string)>();
+        if (string.IsNullOrEmpty(filePath)) return hits;
+        foreach (var p in Process.GetProcesses())
+        {
+            try
+            {
+                string? file = p.MainModule?.FileName;
+                if (!string.IsNullOrEmpty(file) && string.Equals(file, filePath, StringComparison.OrdinalIgnoreCase))
+                    hits.Add((p.Id, p.ProcessName));
+            }
+            catch { /* access-denied on protected processes is expected */ }
+            finally { try { p.Dispose(); } catch { } }
+        }
+        return hits;
+    }
 }

@@ -694,12 +694,42 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (!File.Exists(i.FilePath)) return;
         if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.QuarantineConfirmFormat, i.FileName))) return;
-        if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err))
+        if (TryQuarantineUnlocking(i, out var err))
         {
             var entry = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, i.FilePath, StringComparison.OrdinalIgnoreCase));
             if (entry != null) ShowQuarantineUndo(i.FileName, entry); else NativeMessageBox.Info(Strings.QuarantineDoneInfo);
         }
-        else NativeMessageBox.Error(Strings.QuarantineFailedPrefix + err);
+        else if (!string.IsNullOrEmpty(err)) NativeMessageBox.Error(Strings.QuarantineFailedPrefix + err);
+    }
+
+    /// <summary>Quarantine a file, recovering from the "binary is running so Windows refuses to rename the
+    /// mapped image" failure: detect the holding process(es), offer (via the quarantine gate) to close
+    /// them, then retry; if it still won't move, schedule deletion at reboot so the active threat is at
+    /// least neutralized. Returns true if the file ended up quarantined.</summary>
+    bool TryQuarantineUnlocking(ScanItem i, out string? err)
+    {
+        if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out err)) return true;
+
+        var holders = RunningProcesses.MatchingProcesses(i.FilePath);
+        if (holders.Count == 0) return false; // not a lock — surface the original error
+
+        string who = string.Join(", ", holders.Select(h => $"{h.Name} (PID {h.Pid})"));
+        if (!ConfirmGates.Quarantine.Ask(this, $"Bu dosya şu an çalışıyor: {who}.\nKarantinaya almak için önce kapatılsın mı?"))
+        { err = null; return false; } // user declined the kill — don't show a raw error
+
+        foreach (var h in holders)
+            try { using var p = System.Diagnostics.Process.GetProcessById(h.Pid); p.Kill(true); p.WaitForExit(2000); }
+            catch { /* already gone / access denied — fall through to the retry */ }
+
+        if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out err)) return true;
+
+        // Still locked: neutralize at reboot.
+        if (NativeFileOps.ScheduleDeleteOnReboot(i.FilePath))
+        {
+            NativeMessageBox.Info($"{i.FileName} hâlâ kilitli; bilgisayar yeniden başlatıldığında silinecek şekilde işaretlendi. Lütfen yeniden başlatın.");
+            err = null;
+        }
+        return false;
     }
 
     void MarkClean(ScanItem item)
