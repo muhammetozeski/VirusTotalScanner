@@ -373,6 +373,27 @@ internal static class Strings
     public static string TrustSigInvalid = "imza geçersiz";
     public static string TrustUntrustedFormat = "güvenilmiyor (0x{0:X8})";
 
+    // ---- report signal text (detail pane / CLI) ----
+    public static string StaleTextFormat = "🕗 {0}/{1} tespit aylarca eski imzalardan — yeniden denetlemek iyi olur";
+    public static string CommunityRulesPrefixFormat = "🛡 Topluluk kuralları ({0}): ";
+    public static string MoreParenFormat = "  (+{0})";
+    public static string ConfidenceHeuristic = "🤖 Tüm tespitler sezgisel/ML (imza eşleşmesi yok → olası yanlış pozitif)";
+    public static string ConfidenceSigFormat = "🎯 {0} imza eşleşmesi (gerçek tespit) • {1} sezgisel/ML";
+    public static string FamilyLabelFormat = "🏷 En sık aile: {0}";
+    public static string FamilyMotorFormat = " ({0} motor)";
+    public static string VerdictUnknown = "BİLİNMİYOR";
+    public static string AgeYearsFormat = "{0} yıl önce";
+    public static string AgeDaysFormat = "{0} gün önce";
+    public static string AgeHoursFormat = "{0} saat önce";
+    public static string AgeMinutesFormat = "{0} dakika önce";
+    public static string SubmissionsFormat = " • {0} gönderim";
+    public static string VeryNew = "  ⚠ çok yeni";
+    public static string FirstSeenFormat = "İlk görülme: {0} ({1}){2}{3}";
+    public static string VotesTextFormat = "Topluluk: 👍 {0} zararsız  •  👎 {1} zararlı";
+    public static string ConsensusNoneFlagged = "🛡 Konsensüs: hiçbir motor işaretlemedi";
+    public static string ConsensusMajorCleanHint = "  (büyük motor yok → olası yanlış pozitif)";
+    public static string ConsensusFormat = "Büyük motorlar: {0} işaretledi   •   Küçük motorlar: {1}{2}{3}";
+
     // ---- recommendation (Keep / Caution / Remove) ----
     public static string RecoHeadlineKeep = "Güvenli tutulabilir";
     public static string RecoHeadlineCautionDontRun = "Dikkatli ol — henüz çalıştırma";

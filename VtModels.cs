@@ -239,7 +239,7 @@ internal sealed class VtFileReport
 
     [JsonIgnore]
     public string? StaleText => StaleDetections == 0 || DetectionCount == 0 ? null
-        : $"🕗 {StaleDetections}/{DetectionCount} tespit aylarca eski imzalardan — yeniden denetlemek iyi olur";
+        : string.Format(Strings.StaleTextFormat, StaleDetections, DetectionCount);
 
     /// <summary>Crowdsourced rule hits (Sigma / IDS / YARA) that name WHY a file is flagged, formatted
     /// for display. Already in the report JSON; stored so it survives in the summary cache.</summary>
@@ -247,8 +247,8 @@ internal sealed class VtFileReport
 
     [JsonIgnore]
     public string? CommunityRulesText => CommunityRules.Count == 0 ? null
-        : $"🛡 Topluluk kuralları ({CommunityRules.Count}): " + string.Join("  •  ", CommunityRules.Take(5))
-          + (CommunityRules.Count > 5 ? $"  (+{CommunityRules.Count - 5})" : "");
+        : string.Format(Strings.CommunityRulesPrefixFormat, CommunityRules.Count) + string.Join("  •  ", CommunityRules.Take(5))
+          + (CommunityRules.Count > 5 ? string.Format(Strings.MoreParenFormat, CommunityRules.Count - 5) : "");
 
     [JsonIgnore] public int HeuristicOnlyHits => Math.Max(0, DetectionCount - SignatureHits);
     [JsonIgnore] public bool HeuristicOnly => DetectionCount > 0 && SignatureHits == 0;
@@ -257,15 +257,15 @@ internal sealed class VtFileReport
     [JsonIgnore]
     public string? ConfidenceText =>
         DetectionCount == 0 ? null
-        : HeuristicOnly ? "🤖 Tüm tespitler sezgisel/ML (imza eşleşmesi yok → olası yanlış pozitif)"
-        : $"🎯 {SignatureHits} imza eşleşmesi (gerçek tespit) • {HeuristicOnlyHits} sezgisel/ML";
+        : HeuristicOnly ? Strings.ConfidenceHeuristic
+        : string.Format(Strings.ConfidenceSigFormat, SignatureHits, HeuristicOnlyHits);
 
     [JsonIgnore]
     public string? CapabilitySummary => BehaviorTags.Summarize(Tags, ThreatLabel);
 
     [JsonIgnore]
     public string? FamilyLabel => string.IsNullOrEmpty(Family) ? null
-        : $"🏷 En sık aile: {Family}" + (FamilyCount > 1 ? $" ({FamilyCount} motor)" : "");
+        : string.Format(Strings.FamilyLabelFormat, Family) + (FamilyCount > 1 ? string.Format(Strings.FamilyMotorFormat, FamilyCount) : "");
 
     [JsonIgnore] public IEnumerable<VtEngineResult> Detections => Engines.Where(e => e.IsDetection);
     [JsonIgnore] public int DetectionCount => Malicious + Suspicious;
@@ -280,7 +280,7 @@ internal sealed class VtFileReport
     [JsonIgnore] public string ReportUrl => AppConstants.VtGuiFile + (Sha256 ?? Md5 ?? Sha1 ?? string.Empty);
 
     [JsonIgnore]
-    public string Verdict => TotalEngines > 0 ? VerdictCategories.Classify(DetectionCount).Name : "BİLİNMİYOR";
+    public string Verdict => TotalEngines > 0 ? VerdictCategories.Classify(DetectionCount).Name : Strings.VerdictUnknown;
 
     /// <summary>Age + prevalence line: a 0/70 on a file the world first saw minutes ago is very
     /// different from a 0/70 on a years-old, widely-seen file.</summary>
@@ -291,13 +291,13 @@ internal sealed class VtFileReport
         {
             if (FirstSeenUtc is not { } first) return null;
             var age = DateTime.UtcNow - first;
-            string ageStr = age.TotalDays >= 365 ? $"{(int)(age.TotalDays / 365)} yıl önce"
-                : age.TotalDays >= 1 ? $"{(int)age.TotalDays} gün önce"
-                : age.TotalHours >= 1 ? $"{(int)age.TotalHours} saat önce"
-                : $"{(int)age.TotalMinutes} dakika önce";
-            string prev = TimesSubmitted > 0 ? $" • {TimesSubmitted} gönderim" : "";
-            string rare = age.TotalDays < 2 ? "  ⚠ çok yeni" : "";
-            return $"İlk görülme: {first:yyyy-MM-dd} ({ageStr}){prev}{rare}";
+            string ageStr = age.TotalDays >= 365 ? string.Format(Strings.AgeYearsFormat, (int)(age.TotalDays / 365))
+                : age.TotalDays >= 1 ? string.Format(Strings.AgeDaysFormat, (int)age.TotalDays)
+                : age.TotalHours >= 1 ? string.Format(Strings.AgeHoursFormat, (int)age.TotalHours)
+                : string.Format(Strings.AgeMinutesFormat, (int)age.TotalMinutes);
+            string prev = TimesSubmitted > 0 ? string.Format(Strings.SubmissionsFormat, TimesSubmitted) : "";
+            string rare = age.TotalDays < 2 ? Strings.VeryNew : "";
+            return string.Format(Strings.FirstSeenFormat, first.ToString("yyyy-MM-dd"), ageStr, prev, rare);
         }
     }
 
@@ -305,7 +305,7 @@ internal sealed class VtFileReport
     /// a useful false-positive signal (e.g. a game exe the community marked clean).</summary>
     [JsonIgnore]
     public string? VotesText => (VotesHarmless > 0 || VotesMalicious > 0)
-        ? $"Topluluk: 👍 {VotesHarmless} zararsız  •  👎 {VotesMalicious} zararlı"
+        ? string.Format(Strings.VotesTextFormat, VotesHarmless, VotesMalicious)
         : null;
 
     /// <summary>"Who flagged it" — splits detections into major vs minor engines so a few
@@ -316,10 +316,10 @@ internal sealed class VtFileReport
         get
         {
             if (TotalEngines == 0) return null;
-            if (DetectionCount == 0) return "🛡 Konsensüs: hiçbir motor işaretlemedi";
+            if (DetectionCount == 0) return Strings.ConsensusNoneFlagged;
             string majors = MajorFlaggers.Count > 0 ? "  →  " + string.Join(", ", MajorFlaggers.Take(6)) : "";
-            string hint = MajorClean ? "  (büyük motor yok → olası yanlış pozitif)" : "";
-            return $"Büyük motorlar: {MajorDetectionCount} işaretledi   •   Küçük motorlar: {MinorDetectionCount}{majors}{hint}";
+            string hint = MajorClean ? Strings.ConsensusMajorCleanHint : "";
+            return string.Format(Strings.ConsensusFormat, MajorDetectionCount, MinorDetectionCount, majors, hint);
         }
     }
 }
