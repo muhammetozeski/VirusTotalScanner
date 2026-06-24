@@ -9,6 +9,7 @@ internal sealed class ScanHistoryControl : UserControl
 {
     readonly DataGridView _grid = new();
     readonly TextBox _search = new() { Width = 220 };
+    string _categoryFilter = ""; // "", "threat", "suspicious", "clean" — set by an overview tile drill-down
     readonly CheckBox _threatsOnly = new() { Text = "Sadece tehditler", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
     readonly CheckBox _starredOnly = new() { Text = "★ Yıldızlılar", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
     readonly Label _count = new() { AutoSize = true, Margin = new Padding(12, 7, 0, 0), Tag = "subtle" };
@@ -26,10 +27,10 @@ internal sealed class ScanHistoryControl : UserControl
         var strip = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(8, 6, 6, 4) };
         _search.PlaceholderText = "🔎  Ara (ad/yol)…";
         _search.Margin = new Padding(0, 4, 8, 4);
-        _search.TextChanged += (_, _) => Reload();
+        _search.TextChanged += (_, _) => { _categoryFilter = ""; Reload(); };
         _search.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) _search.Clear(); };
-        _threatsOnly.CheckedChanged += (_, _) => Reload();
-        _starredOnly.CheckedChanged += (_, _) => Reload();
+        _threatsOnly.CheckedChanged += (_, _) => { _categoryFilter = ""; Reload(); };
+        _starredOnly.CheckedChanged += (_, _) => { _categoryFilter = ""; Reload(); };
         var clear = ThemeManager.MakeButton("🗑  Geçmişi temizle", (_, _) =>
         {
             if (ScanHistoryStore.Count > 0 && NativeMessageBox.Confirm("Tüm tarama geçmişi silinsin mi? (önbellek etkilenmez)"))
@@ -148,11 +149,27 @@ internal sealed class ScanHistoryControl : UserControl
 
     HistoryEntry? Selected() => _grid.CurrentRow?.DataBoundItem as HistoryEntry;
 
+    /// <summary>Apply a category drill-down from an overview count tile (threat / suspicious / clean),
+    /// clearing the other filters first so the click lands exactly on those files.</summary>
+    public void ApplyExternalFilter(string category)
+    {
+        _threatsOnly.Checked = false; _starredOnly.Checked = false; _search.Text = ""; // handlers clear _categoryFilter…
+        _categoryFilter = category; // …so set it after, then reload authoritatively
+        Reload();
+    }
+
     void Reload()
     {
         string q = _search.Text.Trim();
         var rows = ScanHistoryStore.All()
             .Reverse() // newest first
+            .Where(e => _categoryFilter switch
+            {
+                "threat" => VerdictCategories.IsThreat(e.Detections),
+                "suspicious" => e.Detections > 0 && !VerdictCategories.IsThreat(e.Detections),
+                "clean" => e.Detections == 0,
+                _ => true,
+            })
             .Where(e => !_threatsOnly.Checked || e.Detections > 0)
             .Where(e => !_starredOnly.Checked || e.Starred)
             .Where(e => q.Length == 0

@@ -27,6 +27,9 @@ internal sealed class ScanOverviewControl : UserControl
     public event Action? ScanRunningRequested, ScanDownloadsRequested, RecheckRequested;
     /// <summary>Status-banner "go to the relevant tab" — the host switches to the given tab index.</summary>
     public event Action<int>? GoToTab;
+    /// <summary>A count tile was clicked — the host opens History pre-filtered to that category
+    /// ("threat" / "suspicious" / "clean").</summary>
+    public event Action<string>? GoToHistoryFiltered;
 
     public ScanOverviewControl()
     {
@@ -113,13 +116,13 @@ internal sealed class ScanOverviewControl : UserControl
     {
         var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
         for (int i = 0; i < 3; i++) row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
-        row.Controls.Add(Tile("Tehdit", _tehditNum, () => Theme.Current.Danger), 0, 0);
-        row.Controls.Add(Tile("Şüpheli", _supheliNum, () => Theme.Current.Warning), 1, 0);
-        row.Controls.Add(Tile("Temiz", _temizNum, () => Theme.Current.Success), 2, 0);
+        row.Controls.Add(Tile("Tehdit", _tehditNum, () => Theme.Current.Danger, () => GoToHistoryFiltered?.Invoke("threat")), 0, 0);
+        row.Controls.Add(Tile("Şüpheli", _supheliNum, () => Theme.Current.Warning, () => GoToHistoryFiltered?.Invoke("suspicious")), 1, 0);
+        row.Controls.Add(Tile("Temiz", _temizNum, () => Theme.Current.Success, () => GoToHistoryFiltered?.Invoke("clean")), 2, 0);
         return row;
     }
 
-    static Panel Tile(string label, Label number, Func<Color> color)
+    static Panel Tile(string label, Label number, Func<Color> color, Action onClick)
     {
         var card = ThemeManager.MakeCard();
         card.Dock = DockStyle.Fill;
@@ -129,10 +132,14 @@ internal sealed class ScanOverviewControl : UserControl
         number.Dock = DockStyle.Fill;
         number.TextAlign = ContentAlignment.MiddleCenter;
         number.ForeColor = color();
-        var cap = new Label { Text = label, Dock = DockStyle.Bottom, Height = 20, TextAlign = ContentAlignment.MiddleCenter, Tag = "subtle" };
+        var cap = new Label { Text = label + "  ›", Dock = DockStyle.Bottom, Height = 20, TextAlign = ContentAlignment.MiddleCenter, Tag = "subtle" };
         card.Controls.Add(number);
         card.Controls.Add(cap);
         card.Paint += (_, _) => number.ForeColor = color(); // keep tinted across theme changes
+        // Click the number to land on those files in History.
+        card.Cursor = number.Cursor = cap.Cursor = Cursors.Hand;
+        void Click(object? s, EventArgs e) => onClick();
+        card.Click += Click; number.Click += Click; cap.Click += Click;
         return card;
     }
 
