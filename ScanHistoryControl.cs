@@ -95,9 +95,9 @@ internal sealed class ScanHistoryControl : UserControl
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) Reopen(Selected()); };
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("🔁  Tekrar tara", null, (_, _) => { var h = Selected(); if (h?.Path != null && File.Exists(h.Path)) RescanRequested?.Invoke([h.Path]); });
+        menu.Items.Add("🔁  Tekrar tara", null, (_, _) => { var h = Selected(); if (EnsureFile(h)) RescanRequested?.Invoke([h!.Path!]); });
         menu.Items.Add("🔎  Ayrıntıyı aç", null, (_, _) => Reopen(Selected()));
-        menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var h = Selected(); if (h?.Path != null && File.Exists(h.Path)) try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + h.Path + "\""); } catch { } });
+        menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var h = Selected(); if (EnsureFile(h)) try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + h!.Path + "\""); } catch { } });
         menu.Items.Add("📋  SHA-256 kopyala", null, (_, _) => { var h = Selected(); if (!string.IsNullOrEmpty(h?.Sha256)) try { Clipboard.SetText(h.Sha256); } catch { } });
         menu.Items.Add("⭐  Yıldız aç/kapat", null, (_, _) => { if (Selected() is { } h) { h.Starred = !h.Starred; ScanHistoryStore.Persist(); } });
         menu.Items.Add("📝  Not ekle/düzenle…", null, (_, _) =>
@@ -130,16 +130,29 @@ internal sealed class ScanHistoryControl : UserControl
     void Reopen(HistoryEntry? e)
     {
         if (e == null) return;
-        var report = ScanHistoryStore.LastByMd5(e.Md5) != null ? AppServices.Cache.TryGet(e.Md5 ?? "", int.MaxValue) : null;
+        var report = string.IsNullOrEmpty(e.Md5) ? null : AppServices.Cache.TryGet(e.Md5, int.MaxValue);
         if (report == null)
         {
-            NativeMessageBox.Info("Bu kaydın tam ayrıntısı önbellekte yok (sonuç süresi dolmuş olabilir).\n" +
-                $"{e.Name} — {e.Verdict} {e.Ratio}");
+            // Evicted from cache: offer to re-scan (if the file is still there) instead of a dead end.
+            bool here = e.Path != null && File.Exists(e.Path);
+            string head = $"{e.Name} — {e.Verdict} {e.Ratio}\n\nTam ayrıntı önbellekte yok";
+            if (here && NativeMessageBox.Confirm(head + ".\nDosyayı yeniden taramak ister misin?"))
+                RescanRequested?.Invoke([e.Path!]);
+            else if (!here)
+                NativeMessageBox.Info(head + " ve dosya artık şurada değil:\n" + (e.Path ?? "(yol yok)"));
             return;
         }
         var item = new ScanItem(e.Path ?? e.Name) { Report = report, Status = ScanStatus.Completed, Md5 = e.Md5, Sha256 = e.Sha256 };
         using var dlg = new DetailDialog(item);
         dlg.ShowDialog(FindForm());
+    }
+
+    /// <summary>True if the row's file still exists; otherwise tells the user plainly.</summary>
+    static bool EnsureFile(HistoryEntry? h)
+    {
+        if (h?.Path != null && File.Exists(h.Path)) return true;
+        NativeMessageBox.Info(h?.Path != null ? "Dosya artık şurada değil:\n" + h.Path : "Bu kaydın dosya yolu yok.");
+        return false;
     }
 
     public void ApplyTheme()

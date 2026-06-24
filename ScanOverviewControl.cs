@@ -188,10 +188,13 @@ internal sealed class ScanOverviewControl : UserControl
 
     void Reopen(HistoryEntry e)
     {
-        var report = AppServices.Cache.TryGet(e.Md5 ?? "", int.MaxValue);
+        var report = string.IsNullOrEmpty(e.Md5) ? null : AppServices.Cache.TryGet(e.Md5, int.MaxValue);
         if (report == null)
         {
-            NativeMessageBox.Info($"{e.Name} — {e.Verdict} {e.Ratio}\n\nTam ayrıntı önbellekte yok.");
+            bool here = e.Path != null && File.Exists(e.Path);
+            string head = $"{e.Name} — {e.Verdict} {e.Ratio}\n\nTam ayrıntı önbellekte yok";
+            if (here && NativeMessageBox.Confirm(head + ".\nDosyayı yeniden taramak ister misin?")) ScanRequested?.Invoke([e.Path!]);
+            else if (!here) NativeMessageBox.Info(head + " ve dosya artık şurada değil:\n" + (e.Path ?? "(yol yok)"));
             return;
         }
         var item = new ScanItem(e.Path ?? e.Name) { Report = report, Status = ScanStatus.Completed, Md5 = e.Md5, Sha256 = e.Sha256 };
