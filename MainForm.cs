@@ -383,6 +383,16 @@ internal sealed partial class MainForm : Form
         _pendingUsbDrive = null; // a threat toast click should restore the window, not scan a stale drive
         _lastThreat = item;
 
+        // User-defined post-scan rules run first (first-match-wins). When none are defined the store is
+        // empty and this is a no-op, so the built-in fixed rule below stays the default behavior.
+        if (AutoActionStore.Count > 0 && item.Report is { } rep)
+        {
+            int level = (int)RecommendationService.Build(item).Level;
+            bool fromNet = false; try { fromNet = ZoneIdentifier.Read(item.FilePath)?.FromInternet ?? false; } catch { }
+            var rule = AutoActionStore.FirstMatch(background, rep.DetectionCount, fromNet, level, item.FilePath);
+            if (rule != null && ApplyAutoAction(rule, item)) return;
+        }
+
         // A passive background catch (watcher / unattended USB sweep) of obvious malware: quarantine it
         // immediately with an undo toast, so a live threat isn't left runnable while the user is away.
         if (background && Settings.AutoQuarantineWatchers && Settings.AutoQuarantineThreshold > 0
@@ -406,6 +416,29 @@ internal sealed partial class MainForm : Form
     }
 
     static string OriginSuffix(ScanItem item) => string.IsNullOrEmpty(item.OriginNote) ? "" : " " + item.OriginNote;
+
+    /// <summary>Apply one matched auto-action, reusing the existing single-call remediation paths. Returns
+    /// true if the threat was handled here (so the normal toast path is skipped); ToastOnly falls through.</summary>
+    bool ApplyAutoAction(AutoActionRule rule, ScanItem item)
+    {
+        switch (rule.Action)
+        {
+            case AutoActionKind.MarkClean:
+                AllowlistStore.Add(item, "oto-eylem kuralı");
+                Log($"Auto-action: allowlisted {item.FileName} by rule.", LogLevel.Info);
+                return true;
+            case AutoActionKind.SuppressFolder:
+                FolderSuppressionStore.Add(Path.GetDirectoryName(item.FilePath));
+                Log($"Auto-action: suppressed folder of {item.FileName} by rule.", LogLevel.Info);
+                return true;
+            case AutoActionKind.Quarantine:
+                if (!File.Exists(item.FilePath)) return false;
+                SafeUi(() => AutoQuarantine(item));
+                return true;
+            default:
+                return false; // ToastOnly → let the normal notification path run
+        }
+    }
 
     void AutoQuarantine(ScanItem item)
     {

@@ -48,6 +48,7 @@ internal sealed class SettingsControl : UserControl
         _flow.Controls.Add(BuildAllowlistCard());
         _flow.Controls.Add(BuildFolderSuppressionCard());
         _flow.Controls.Add(BuildVerdictCard());
+        _flow.Controls.Add(BuildAutoActionCard());
         _flow.Controls.Add(BuildScanCard());
         _flow.Controls.Add(BuildSweepCard());
         _flow.Controls.Add(BuildGeneralCard());
@@ -326,6 +327,43 @@ internal sealed class SettingsControl : UserControl
         _catRows = new System.ComponentModel.BindingList<VerdictCategory>(
             VerdictCategories.All.Select(c => new VerdictCategory { MinDetections = c.MinDetections, Name = c.Name, ColorHex = c.ColorHex }).ToList());
         if (_catGrid != null) _catGrid.DataSource = _catRows;
+    }
+
+    System.ComponentModel.BindingList<AutoActionRule>? _aaRows;
+    DataGridView? _aaGrid;
+
+    Panel BuildAutoActionCard()
+    {
+        var card = Card("Tarama sonrası oto-eylem kuralları", 300, out var body);
+
+        _aaGrid = new DataGridView { Dock = DockStyle.Top, Height = 150, AutoGenerateColumns = false };
+        _aaGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Yalnızca arka plan", DataPropertyName = nameof(AutoActionRule.BackgroundOnly), Width = 105 });
+        _aaGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min tespit", DataPropertyName = nameof(AutoActionRule.MinDetections), Width = 75 });
+        _aaGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "İnternetten", DataPropertyName = nameof(AutoActionRule.RequireFromInternet), Width = 80 });
+        _aaGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Min seviye 0-2", DataPropertyName = nameof(AutoActionRule.MinLevel), Width = 95 });
+        _aaGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Klasör ön-eki", DataPropertyName = nameof(AutoActionRule.FolderPrefix), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _aaGrid.Columns.Add(new DataGridViewComboBoxColumn { HeaderText = "Eylem", DataPropertyName = nameof(AutoActionRule.Action), DataSource = Enum.GetValues<AutoActionKind>(), Width = 120 });
+        _aaGrid.AllowUserToAddRows = false;
+        ThemeManager.StyleGrid(_aaGrid);
+        _aaGrid.ReadOnly = false; // re-enable after StyleGrid
+
+        RefreshAutoActions();
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAddShort, (_, _) => _aaRows!.Add(new AutoActionRule()), accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (_aaGrid.CurrentRow?.DataBoundItem is AutoActionRule r) _aaRows!.Remove(r); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSave, (_, _) => { AutoActionStore.Replace(_aaRows!); NativeMessageBox.Info("Oto-eylem kuralları kaydedildi."); }));
+
+        body.Controls.Add(buttons);
+        body.Controls.Add(_aaGrid);
+        body.Controls.Add(ThemeManager.MakeLabel("İlk eşleşen kural uygulanır. Eylemler: ToastOnly (sadece bildir), MarkClean (beyaz listeye al), SuppressFolder (klasörü atla), Quarantine (karantinaya al). Boş liste = yerleşik davranış.", subtle: true));
+        return card;
+    }
+
+    void RefreshAutoActions()
+    {
+        _aaRows = new System.ComponentModel.BindingList<AutoActionRule>([.. AutoActionStore.All()]);
+        if (_aaGrid != null) _aaGrid.DataSource = _aaRows;
     }
 
     Panel BuildScanCard()
