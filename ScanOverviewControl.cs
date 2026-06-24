@@ -212,6 +212,8 @@ internal sealed class ScanOverviewControl : UserControl
             msgs.Add("Kullanılabilir API anahtarı yok — Ayarlar'dan anahtar ekle ya da anahtarsız modu aç.");
         int quarantined = SafeQuarantineCount();
         if (quarantined > 0) msgs.Add($"{quarantined} dosya karantinada (geri yüklenebilir).");
+        int pending = PendingOutbox.Count;
+        if (pending > 0) msgs.Add($"📤 {pending} dosya çevrimdışı sırada (internet gelince denenecek).");
 
         if (msgs.Count == 0) { _attention.Visible = false; return; }
         _attention.BackColor = Blend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);

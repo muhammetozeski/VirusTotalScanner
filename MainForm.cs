@@ -133,6 +133,7 @@ internal sealed partial class MainForm : Form
             if (threats) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
             if (Settings.NotifyScanSummary && items.Count > 0) ShowScanSummaryToast(items);
         });
+        System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += (_, ev) => { if (ev.IsAvailable) SafeUi(RetryPendingOutbox); };
         AppServices.Vault.Changed += () => SafeUi(UpdateStatusBar);
         AppServices.Vault.CountersUpdated += () => SafeUi(UpdateStatusBar);
         Theme.Changed += () => SafeUi(ApplyTheme);
@@ -332,6 +333,22 @@ internal sealed partial class MainForm : Form
 
         OfferResume();
         StartWatchCheck();
+        RetryPendingOutbox();
+    }
+
+    /// <summary>Self-heal: re-scan files that failed while offline, now that we're back online.</summary>
+    void RetryPendingOutbox()
+    {
+        try
+        {
+            PendingOutbox.PruneMissing();
+            if (!PendingOutbox.ShouldRetry() || AppServices.Scheduler.IsRunning) return;
+            var paths = PendingOutbox.Paths().Where(File.Exists).ToArray();
+            if (paths.Length == 0) return;
+            _tabs.SelectedIndex = 1; // Tarama
+            _scan.StartScan(paths, recurse: false);
+        }
+        catch (Exception ex) { Log("Pending-outbox retry failed: " + ex.Message, LogLevel.Warning); }
     }
 
     /// <summary>Re-check the borderline watch list in the background (keyless, zero quota); alert on any

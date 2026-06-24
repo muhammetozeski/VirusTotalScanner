@@ -215,6 +215,9 @@ internal sealed class ScanScheduler
                 item.Error = "VT'de bulunamadı veya sorgu sonuç vermedi (yükleme için API anahtarı gerekir).";
                 SetStatus(item, ScanStatus.Failed);
                 Bump(ref _failed);
+                // Offline self-heal: if we're offline, remember the file to retry when connectivity returns
+                // (a real "not found" while online is NOT queued, so 404s don't pile up).
+                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
             }
             else
             {
@@ -231,6 +234,7 @@ internal sealed class ScanScheduler
             UiPost(() => item.Error = ex.Message);
             SetStatus(item, ScanStatus.Failed);
             Bump(ref _failed);
+            if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
             Log($"Scan failed for {item.FileName}: {ex}", LogLevel.Error);
         }
         finally
@@ -327,6 +331,7 @@ internal sealed class ScanScheduler
     void Complete(ScanItem item, VtFileReport report)
     {
         SetStatus(item, ScanStatus.Completed);
+        PendingOutbox.Remove(item.FilePath); // healed: this file finally got a verdict
         // Bucket by the user's verdict categories: highest band -> malicious, any other threat
         // band -> suspicious, else clean.
         if (report.TotalEngines > 0 && report.IsMalicious)
