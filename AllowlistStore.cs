@@ -11,8 +11,12 @@ internal sealed class AllowlistEntry
     public string FileName { get; set; } = "";
     public string Reason { get; set; } = "";
     public DateTime AddedUtc { get; set; }
+    public int DetectionCountAtAdd { get; set; }
+    public DateTime LastVerifiedUtc { get; set; }
+    public bool IsStale { get; set; } // re-validation found this once-clean hash is now flagged
 
     [System.Text.Json.Serialization.JsonIgnore] public DateTime AddedLocal => AddedUtc.ToLocalTime();
+    [System.Text.Json.Serialization.JsonIgnore] public string Health => IsStale ? "⚠ ARTIK İŞARETLİ" : (LastVerifiedUtc == default ? "denetlenmedi" : "temiz");
 }
 
 /// <summary>
@@ -58,11 +62,74 @@ internal static class AllowlistStore
         {
             var existing = Entries.FirstOrDefault(e => string.Equals(e.Hash, hash, StringComparison.OrdinalIgnoreCase));
             if (existing != null) { existing.Reason = reason; existing.FileName = item.FileName; }
-            else Entries.Add(new AllowlistEntry { Hash = hash, Md5 = item.Md5, FileName = item.FileName, Reason = reason, AddedUtc = DateTime.UtcNow });
+            else Entries.Add(new AllowlistEntry { Hash = hash, Md5 = item.Md5, FileName = item.FileName, Reason = reason, AddedUtc = DateTime.UtcNow, DetectionCountAtAdd = item.Report?.DetectionCount ?? 0 });
             Save();
         }
         Changed?.Invoke();
         return true;
+    }
+
+    /// <summary>Re-query every allowlisted hash keyless (zero quota). A once-clean hash that VirusTotal now
+    /// flags is marked stale (NOT deleted — the skip keeps working until the user acts), so the
+    /// noise-reduction list can't silently become a permanent blind spot for a later-compromised build.</summary>
+    public static async Task<List<AllowlistEntry>> CheckHealthAsync(Action<int, int>? progress = null, CancellationToken ct = default)
+    {
+        var newlyStale = new List<AllowlistEntry>();
+        if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable)) return newlyStale;
+        var snapshot = All(); // entry references are shared with the live list, so field writes persist
+        int done = 0;
+        foreach (var e in snapshot)
+        {
+            ct.ThrowIfCancellationRequested();
+            string? hash = !string.IsNullOrEmpty(e.Hash) ? e.Hash : e.Md5;
+            if (!string.IsNullOrEmpty(hash))
+            {
+                try
+                {
+                    var r = await GuiScrapeService.LookupAsync(hash, ct);
+                    e.LastVerifiedUtc = DateTime.UtcNow;
+                    if (r != null && VerdictCategories.IsThreat(r.DetectionCount) && !e.IsStale) { e.IsStale = true; newlyStale.Add(e); }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) { Log("Allowlist health check failed for " + e.FileName + ": " + ex.Message, LogLevel.Warning); }
+            }
+            progress?.Invoke(++done, snapshot.Count);
+        }
+        lock (Lock) { Save(); }
+        Changed?.Invoke();
+        return newlyStale;
+    }
+
+    /// <summary>Clear the stale flag (the user reviewed it and chose to keep trusting the file).</summary>
+    public static void MarkReviewed(string? hash)
+    {
+        if (string.IsNullOrEmpty(hash)) return;
+        lock (Lock)
+        {
+            var e = Entries.FirstOrDefault(x => string.Equals(x.Hash, hash, StringComparison.OrdinalIgnoreCase));
+            if (e == null || !e.IsStale) return;
+            e.IsStale = false; Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>One-pass bulk seed: add every clean (0-detection, hashed) file from the scan history that
+    /// isn't already listed, so the user can fill the allowlist without one right-click at a time.</summary>
+    public static int ImportCleanFromHistory()
+    {
+        int added = 0;
+        lock (Lock)
+        {
+            foreach (var h in ScanHistoryStore.All().Where(e => e.Detections == 0 && !string.IsNullOrEmpty(e.Sha256)))
+            {
+                if (Entries.Any(x => string.Equals(x.Hash, h.Sha256, StringComparison.OrdinalIgnoreCase))) continue;
+                Entries.Add(new AllowlistEntry { Hash = h.Sha256!, Md5 = h.Md5, FileName = h.Name, Reason = "Geçmişten içe aktarıldı (temiz)", AddedUtc = DateTime.UtcNow, LastVerifiedUtc = h.WhenUtc });
+                added++;
+            }
+            if (added > 0) Save();
+        }
+        if (added > 0) Changed?.Invoke();
+        return added;
     }
 
     public static void Remove(string? hash)
