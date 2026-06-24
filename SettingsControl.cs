@@ -16,6 +16,7 @@ internal sealed class SettingsControl : UserControl
     }
 
     readonly FlowLayoutPanel _flow = new();
+    readonly TextBox _settingsSearch = new() { Dock = DockStyle.Top, Margin = new Padding(0), PlaceholderText = "🔎  Ayar ara (ad/etiket)…  —  Esc temizler" };
     readonly DataGridView _keysGrid = new();
     readonly Label _menuStatus = new();
 
@@ -28,6 +29,18 @@ internal sealed class SettingsControl : UserControl
         _flow.AutoScroll = true;
         _flow.Padding = new Padding(10);
         Controls.Add(_flow);
+
+        // Live filter over the ~10 cards: type a setting name/label to hide non-matching cards.
+        _settingsSearch.TextChanged += (_, _) =>
+        {
+            string q = _settingsSearch.Text.Trim();
+            _flow.SuspendLayout();
+            foreach (Control card in _flow.Controls)
+                card.Visible = q.Length == 0 || CardText(card).Contains(q, StringComparison.OrdinalIgnoreCase);
+            _flow.ResumeLayout();
+        };
+        _settingsSearch.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) _settingsSearch.Clear(); };
+        Controls.Add(_settingsSearch); // docks above _flow (added last → top edge)
 
         _flow.Controls.Add(BuildKeysCard());
         _flow.Controls.Add(BuildContextMenuCard());
@@ -46,6 +59,15 @@ internal sealed class SettingsControl : UserControl
 
         RefreshKeys();
         RefreshMenuStatus();
+    }
+
+    /// <summary>All visible text within a card (title + every child control's Text), for the live filter.</summary>
+    static string CardText(Control card)
+    {
+        var sb = new System.Text.StringBuilder();
+        void Walk(Control c) { if (!string.IsNullOrEmpty(c.Text)) sb.Append(c.Text).Append(' '); foreach (Control ch in c.Controls) Walk(ch); }
+        Walk(card);
+        return sb.ToString();
     }
 
     void ResizeCards()
