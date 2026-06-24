@@ -212,7 +212,7 @@ internal sealed class ScanScheduler
                 report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
 
             if (report != null && opts.UseCache && report.TotalEngines > 0)
-                _cache.Put(md5, report);
+                _cache.Put(md5, report, item.FilePath);
 
             if (report == null)
             {

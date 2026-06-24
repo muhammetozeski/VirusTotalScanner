@@ -128,6 +128,7 @@ internal sealed class ScanQueueControl : UserControl
         menu.Items.Add(copyMenu);
 
         var miReveal = (ToolStripMenuItem)menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
+        var miNeighbors = (ToolStripMenuItem)menu.Items.Add("📂  Klasör komşuları", null, (_, _) => ShowNeighbors());
         menu.Items.Add(new ToolStripSeparator());
         var miRescan = (ToolStripMenuItem)menu.Items.Add("🔄  Yeniden tara", null, (_, _) => RescanSelected());
         var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add("🛡  Güveni yok say, VT ile tara", null, (_, _) => RescanIgnoringTrust());
@@ -143,6 +144,7 @@ internal sealed class ScanQueueControl : UserControl
             miOpenVt.Enabled = i.Report != null;
             copyMenu.Enabled = true;
             miReveal.Enabled = exists;
+            miNeighbors.Enabled = exists;
             miRescan.Enabled = exists;
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;
@@ -374,6 +376,16 @@ internal sealed class ScanQueueControl : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) { NativeMessageBox.Error("Yeniden denetim hatası: " + ex.Message); }
         finally { try { _summary.Text = oldSummary; } catch { } }
+    }
+
+    void ShowNeighbors()
+    {
+        var i = SelectedItem();
+        if (i == null) return;
+        var data = NeighborsService.Build(i.FilePath, AppServices.Cache);
+        if (data == null) { NativeMessageBox.Info("Bu dosyanın klasörü bulunamadı."); return; }
+        using var dlg = new NeighborsDialog(data, paths => StartScan(paths, recurse: false));
+        dlg.ShowDialog(FindForm());
     }
 
     async Task VerifyHashAsync()
