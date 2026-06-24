@@ -38,8 +38,10 @@ internal static class BehaviourDigestBuilder
 
         if (b.Processes.Count > 0)
             d.Lines.Add(new("⚙", $"{b.Processes.Count} başka süreç başlatıyor", false));
-        if (b.Mitre.Count > 0)
-            d.Lines.Add(new("🎯", $"{b.Mitre.Count} MITRE ATT&CK tekniğiyle eşleşiyor", false));
+
+        // Decode MITRE technique ids into plain-Turkish statements grouped by tactic, instead of a bare count.
+        foreach (var (tactic, meanings) in MitreGlossary.Decode(b.Mitre))
+            d.Lines.Add(new("🎯", $"{tactic}: {string.Join("; ", meanings)}", MitreGlossary.IsAlarmTactic(tactic)));
 
         if (d.Lines.Count == 0)
             d.Lines.Add(new("✓", "Kayda değer bir sistem etkisi gözlenmedi", false));
