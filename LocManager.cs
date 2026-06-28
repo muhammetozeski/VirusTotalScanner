@@ -12,11 +12,30 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class LocManager
 {
-    public static readonly (string Code, string Name)[] Available =
-    [
-        ("tr", "Türkçe"),
-        ("en", "English"),
-    ];
+
+    public static (string Code, string Name)[] Available
+    {
+        get
+        {
+            if (!Directory.Exists(ConfigPathResolver.ConfigFolder))
+                return [("tr", "Türkçe")];
+            return Directory.GetFiles(ConfigPathResolver.ConfigFolder, "lang.*.xml")
+                .Select(f =>
+                {
+                    string code = Path.GetFileName(f).Split('.')[1];
+                    string name = code.ToUpperInvariant();
+                    try
+                    {
+                        var doc = XDocument.Load(f);
+                        var langName = doc.Root?.Element("LanguageName")?.Value;
+                        if (!string.IsNullOrWhiteSpace(langName)) name = langName;
+                    }
+                    catch { }
+                    return (code, name);
+                })
+                .ToArray();
+        }
+    }
 
     static FieldInfo[] StringFields() => typeof(Strings)
         .GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -31,7 +50,7 @@ internal static class LocManager
         {
             // Always keep an editable Turkish baseline file next to the exe (write once if missing).
             string trPath = PathFor("tr");
-            if (!File.Exists(trPath)) WriteXml(trPath);
+            if (!File.Exists(trPath)) WriteXml(trPath, "Türkçe");
 
             string lang = (Settings.Language.Value ?? "tr").Trim().ToLowerInvariant();
             if (lang is "" or "tr") return;
@@ -43,12 +62,13 @@ internal static class LocManager
         catch (Exception ex) { Log("Localization init failed: " + ex.Message, LogLevel.Warning); }
     }
 
-    /// <summary>Reflection-writes the current field values to an XML file (used for lang.tr.xml).</summary>
-    static void WriteXml(string path)
+    /// <summary>Reflection-writes the current field values to an XML file (used for default language file: lang.tr.xml).</summary>
+    static void WriteXml(string path, string languageName)
     {
         try
         {
             var doc = new XDocument(new XElement("strings",
+                new XElement("LanguageName", languageName),
                 StringFields().Select(f => new XElement("s",
                     new XAttribute("name", f.Name),
                     Escape((string?)f.GetValue(null) ?? "")))));
@@ -57,6 +77,7 @@ internal static class LocManager
         }
         catch (Exception ex) { Log("Language baseline write failed: " + ex.Message, LogLevel.Warning); }
     }
+
 
     /// <summary>Reflection-loads values from an XML file over the matching <see cref="Strings"/> fields.</summary>
     static void ReadInto(string path)

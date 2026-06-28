@@ -22,8 +22,7 @@ internal interface ISettingSetup
 
 /// <summary>
 /// A strongly-typed configuration setting. Adapted from
-/// C:\E\KodlamaProjeleri\CSharp\TPMPass\SettingsManager.cs (NotificationService warning
-/// replaced with Log). The key is assigned by <see cref="SettingsManager"/> from the
+/// The key is assigned by <see cref="SettingsManager"/> from the
 /// field name via reflection.
 /// </summary>
 internal class Setting<T>(T defaultValue) : ISetting, ISettingSetup

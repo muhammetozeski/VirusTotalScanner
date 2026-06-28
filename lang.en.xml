@@ -2,6 +2,7 @@
 <!-- English UI strings for VirusTotal Scanner. Names must match the fields in Strings.cs.
      Multi-line values use a literal \n (handled by LocManager). Copied next to the exe at build. -->
 <strings>
+  <LanguageName>English</LanguageName>
   <s name="TabScan">🛡  Scan</s>
   <s name="TabQuota">📊  Quota</s>
   <s name="TabLogs">📜  Logs</s>
