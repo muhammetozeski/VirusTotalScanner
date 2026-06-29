@@ -622,4 +622,646 @@ internal static class Strings
     public static string ColResult = "Sonuç";
     public static string ColVersion = "Sürüm";
     public static string BtnCopy = "Kopyala";
+
+    // ============================================================
+    // Localization completion: user-facing strings lifted from code
+    // ============================================================
+
+    // ---- ScanQueueControl ----
+    public static string BtnIncidentTimeline = "🕓  Olay zaman çizelgesi";
+    public static string BtnDownloadsTriage = "📥  İndirilenler triyajı";
+    public static string BtnHelp = "❓  Yardım";
+    public static string BtnAllCommands = "⌨  Ctrl+K · Tüm komutlar";
+    public static string TipSelectFiles = "Taranacak dosya(lar) seç.";
+    public static string TipSelectFolder = "Bir klasörü, alt klasörleriyle birlikte tara.";
+    public static string TipHashLookup = "Elindeki bir MD5/SHA hash'ini VirusTotal'de ara (dosya gerekmez).";
+    public static string TipVerifyHash = "Bir dosyanın beklenen hash ile birebir aynı olduğunu doğrula.";
+    public static string TipScanRunning = "Şu an çalışan tüm süreçlerin imajlarını tara — 'şu an virüslü müyüm?'.";
+    public static string TipIntegrityCheck = "İzlemeye aldığın dosyaların değişip değişmediğini (drift) denetle.";
+    public static string TipExportCsv = "Sonuçları CSV tablosu olarak kaydet.";
+    public static string TipExportReport = "Sonuçları HTML/CSV/JSON/metin rapora yaz.";
+    public static string TipFolderRollup = "Taranan klasörleri tehdit/temiz sayılarıyla özetle.";
+    public static string TipFamilyClusters = "Aynı zararlı ailesini paylaşan farklı dosyaları grupla.";
+    public static string TipQuarantineVault = "Karantinaya alınanları gör; güvenliyse geri yükle.";
+    public static string TipRecheck = "Eski önbellek kayıtlarını kotasız (GUI) yeniden sorgula.";
+    public static string TipClearCache = "Yerel hash önbelleğini temizle (verdiktler tekrar VT'den alınır).";
+    public static string TipIncidentTimeline = "Diske gelen çalıştırılabilirleri varış gününe göre kümele.";
+    public static string TipAllCommands = "Tüm özelliklere tek yerden ulaş (kopya bul, autostart kancaları, aile kümeleri…).";
+    public static string TipPause = "Devam eden taramayı duraklat / sürdür.";
+    public static string TipCancel = "Devam eden taramayı iptal et.";
+    public static string SearchPlaceholder = "🔎  Ara (ad/yol)…";
+    public static string ChipAll = "Tümü";
+    public static string ChipSkipped = "Atlandı";
+    public static string ChipError = "Hata";
+    public static string FilterCountFormat = "gösterilen {0} / toplam {1}";
+    public static string ChipCountFormat = "{0} ({1})";
+    public static string BtnUndo = "↩  Geri al";
+    public static string UndoQuarantinedFormat = "✓  '{0}' karantinaya alındı (.VIRUS).";
+    public static string UndoRestoredFormat = "↩ '{0}' geri yüklendi.";
+    public static string RecallPathChangedFormat = "⚠ Bu yolda en son FARKLI bir dosya taramıştın ({0:yyyy-MM-dd} — {1} {2}); içerik o zamandan beri DEĞİŞTİ.";
+    public static string RecallSeenBeforeFormat = "🕘 Bu dosyayı daha önce {0} kez taradın. Önceki: {1:yyyy-MM-dd HH:mm} — {2} {3}";
+    public static string MenuCopySha256 = "SHA-256";
+    public static string MenuCopyMd5 = "MD5";
+    public static string MenuShare = "📤  Paylaş";
+    public static string MenuShareCardImage = "🖼  Kart resmi (panoya)";
+    public static string ShareCardCopiedInfo = "📋 Kart resmi panoya kopyalandı.";
+    public static string CopyFailedPrefix = "Kopyalanamadı: ";
+    public static string MenuShareSummaryText = "📝  Özet metin (panoya)";
+    public static string MenuShareMarkdown = "⬇  Markdown özet (panoya)";
+    public static string ShareMarkdownCopiedInfo = "📋 Markdown özet panoya kopyalandı.";
+    public static string MenuShareSaveCard = "💾  Kart resmi kaydet…";
+    public static string MenuWatchAdd = "👁  İzlemeye al (re-verdict)";
+    public static string MenuWatchRemove = "👁  İzlemeden çıkar";
+    public static string MenuRescanFailed = "🔁  Yalnızca hatalıları yeniden tara";
+    public static string MenuMarkClean = "✓  Temiz olarak işaretle";
+    public static string MenuSuppressFolder = "🔇  Bu klasörü sessizleştir";
+    public static string MenuRescanCountFormat = "🔄  {0} dosyayı yeniden tara";
+    public static string MenuQuarantineCountFormat = "⚠  {0} dosyayı karantinaya al (.VIRUS)";
+    public static string OpenFilesDialogTitle = "Taranacak dosyalar";
+    public static string ClipboardEmptyInfo = "Pano boş ya da metin içermiyor.";
+    public static string ClipboardNotPathInfoFormat = "Panodaki metin bir dosya yolu, klasör ya da hash değil:\n{0}";
+    public static string NoFailedRowsInfo = "Yeniden taranacak hatalı satır yok.";
+    public static string PersistenceCleanupConfirmFormat = "{0} karantinaya alındı, ama {1} otomatik başlatma kancası hâlâ ona işaret ediyor (her açılışta çalıştırmaya çalışır). Şimdi temizleyelim mi?";
+    public static string QuarantineKillConfirmFormat = "Bu dosya şu an çalışıyor: {0}.\nKarantinaya almak için önce kapatılsın mı?";
+    public static string QuarantineLockedRebootFormat = "{0} hâlâ kilitli; bilgisayar yeniden başlatıldığında silinecek şekilde işaretlendi. Lütfen yeniden başlatın.";
+    public static string AllowlistReasonUserMarkedClean = "Kullanıcı temiz olarak işaretledi";
+    public static string MarkCleanNoHashInfo = "Bu dosyanın hash'i henüz yok; temiz olarak işaretlenemiyor.";
+    public static string SkipReasonUserSaidClean = "Kullanıcı temiz dedi";
+    public static string SuppressFolderConfirmFormat = "Bu klasör ve altındaki tüm dosyalar bundan sonra taramada atlanacak:\n{0}\n\nDevam edilsin mi?";
+    public static string FolderMutedInfoFormat = "Klasör sessizleştirildi:\n{0}";
+    public static string FolderAlreadyMutedInfo = "Bu klasör zaten listede.";
+    public static string MarkedCleanCountInfoFormat = "{0} dosya temiz olarak işaretlendi (bundan sonra taramada atlanır).";
+    public static string QuarantineBatchConfirmFormat = "{0} dosya karantinaya alınsın mı? (uzantıları .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)";
+    public static string QuarantineBatchResultFormat = "{0}/{1} dosya karantinaya alındı.";
+    public static string CsvDefaultFileName = "virustotal-sonuclar.csv";
+    public static string CsvHeaderRow = "Dosya;Verdict;Zararli;Supheli;Toplam;MD5;SHA256;Rapor";
+    public static string ProgressEtaFormat = "  •  Kalan ~{0}";
+    public static string ProgressRateFormat = "{0}  •  {1:0.#} dosya/sn  •  Geçen {2}";
+    public static string OverallBarTooltipFormat = "Zararlı {0} · Şüpheli {1} · Temiz {2} · İmzalı {3} · Atlandı {4} · Hata {5}  ({6}/{7})";
+    public static string DurationHoursMinutesFormat = "{0} sa {1} dk";
+    public static string DurationMinutesSecondsFormat = "{0} dk {1} sn";
+    public static string DurationSecondsFormat = "{0} sn";
+    public static string NoVisibleThreatsInfo = "Görünür tehdit yok.";
+    public static string ThreatsSelectedFormat = "{0} tehdit seçildi — Ctrl+Q ile karantina";
+    public static string JumpVerdictPositionFormat = "{0}/{1}  —  J/K sonraki/önceki, Shift+J/K hatalar";
+    public static string VerdictImageCopiedInfo = "📋 Verdikt görseli panoya kopyalandı.";
+    public static string EmptyStateTitle = "Taramaya başlamak için bir yol seç";
+    public static string EmptyStateDropHint = "Dosya/klasörleri buraya sürükleyip de bırakabilirsin";
+    public static string BtnInstallContextMenu = "🖱  Sağ tuş menüsünü kur";
+    public static string CmdSelectFilesName = "Dosya seç…";
+    public static string CmdSelectFilesDesc = "Taranacak dosya(lar) seç";
+    public static string CmdSelectFolderDesc = "Bir klasörü alt klasörleriyle tara";
+    public static string CmdHashLookupName = "Hash sorgula…";
+    public static string CmdHashLookupDesc = "Bir MD5/SHA hash'ini VirusTotal'de ara";
+    public static string CmdRescanFailedName = "Yalnızca hatalıları yeniden tara";
+    public static string CmdRescanFailedDesc = "Başarısız (Hata) satırların hepsini yeniden tara";
+    public static string CmdScanClipboardName = "Panodaki yolu/hash'i tara";
+    public static string CmdScanClipboardDesc = "Panodaki dosya yolunu, klasörü ya da MD5/SHA hash'ini denetle";
+    public static string CmdVerifyHashName = "Hash doğrula…";
+    public static string CmdVerifyHashDesc = "Bir dosyayı beklenen hash ile karşılaştır";
+    public static string CmdScanRunningName = "Çalışanları tara";
+    public static string CmdScanRunningDesc = "Çalışan tüm süreç imajlarını tara";
+    public static string CmdIntegrityCheckName = "Bütünlük denetimi";
+    public static string CmdIntegrityCheckDesc = "İzlenen dosyalarda değişiklik/drift ara";
+    public static string CmdFamilyClustersName = "Aile kümeleri";
+    public static string CmdFamilyClustersDesc = "Aynı zararlı ailesini paylaşan dosyaları grupla";
+    public static string CmdQuarantineVaultName = "Karantina kasası";
+    public static string CmdQuarantineVaultDesc = "Karantinaya alınanları görüntüle / geri yükle";
+    public static string CmdIncidentTimelineName = "Olay zaman çizelgesi";
+    public static string CmdIncidentTimelineDesc = "Gelen çalıştırılabilirleri varış zamanına göre kümele";
+    public static string CmdRecheckName = "Verdikt yeniden denetle";
+    public static string CmdRecheckDesc = "Eski önbellek kayıtlarını kotasız yeniden sorgula";
+    public static string CmdFolderRollupName = "Klasör özeti";
+    public static string CmdFolderRollupDesc = "Taranan klasörleri tehdit sayısıyla özetle";
+    public static string CmdExportReportName = "Rapor (HTML)";
+    public static string CmdExportReportDesc = "Sonuçları HTML/CSV/JSON/metin rapora yaz";
+    public static string CmdExportCsvName = "Dışa aktar (CSV)";
+    public static string CmdExportCsvDesc = "Sonuçları CSV olarak kaydet";
+    public static string CmdClearCacheName = "Önbelleği temizle";
+    public static string CmdClearCacheDesc = "Yerel hash önbelleğini sil";
+    public static string CmdFindCopiesName = "Diğer kopyaları bul (disk)";
+    public static string CmdFindCopiesDesc = "Seçili dosyanın birebir kopyalarını diskte ara";
+    public static string CmdHuntPersistenceName = "Autostart kancalarını bul";
+    public static string CmdHuntPersistenceDesc = "Seçili dosya için kalıcılık kayıtlarını ara";
+    public static string CmdNeighborsName = "Klasör komşuları";
+    public static string CmdNeighborsDesc = "Seçili dosyanın klasöründeki diğer dosyalar";
+    public static string CmdSaveProfileName = "Profil kaydet… (tarama ayarları)";
+    public static string CmdSaveProfileDesc = "Şu anki tarama ayarlarını adlandırılmış profil olarak kaydet";
+    public static string CmdApplyProfileNameFormat = "Profil uygula: {0}";
+    public static string CmdApplyProfileDesc = "Bu profilin tarama ayarlarını uygula";
+    public static string CmdDeleteProfileNameFormat = "Profil sil: {0}";
+    public static string CmdDeleteProfileDesc = "Bu tarama profilini sil";
+    public static string ProfileDeletedFormat = "Profil silindi: {0}";
+    public static string SaveProfilePrompt = "Profil adı:";
+    public static string SaveProfileTitle = "Tarama profili kaydet";
+    public static string ProfileSavedFormat = "Profil kaydedildi: {0}";
+    public static string ProfileAppliedFormat = "Profil uygulandı: {0} ({1} ayar)";
+    public static string ProfileNotFoundFormat = "Profil bulunamadı: {0}";
+    public static string DownloadsFolderNotFoundInfo = "İndirilenler klasörü bulunamadı.";
+
+    // ---- SettingsControl ----
+    public static string SettingsSearchPlaceholder = "🔎  Ayar ara (ad/etiket)…  —  Esc temizler";
+    public static string CardAllowlist = "Beyaz liste (temiz olarak işaretledikleriniz)";
+    public static string ColReason = "Gerekçe";
+    public static string ColHash = "Hash";
+    public static string ColAdded = "Eklendi";
+    public static string BtnRemoveFromList = "Listeden çıkar";
+    public static string BtnReviewMarkClean = "Gözden geçir (temiz say)";
+    public static string BtnHealthCheck = "🩺  Sağlık denetimi";
+    public static string AllowlistAllStillClean = "Beyaz listedeki tüm dosyalar hâlâ temiz.";
+    public static string AllowlistNowFlaggedFormat = "{0} dosya artık işaretli! Kırmızı satırları gözden geçirin (çıkarın ya da temiz sayın).";
+    public static string AllowlistImportedFromHistoryFormat = "{0} temiz dosya geçmişten beyaz listeye eklendi.";
+    public static string BtnImportFromHistory = "Geçmişten içe aktar";
+    public static string AllowlistHint = "'Temiz olarak işaretle' dediğiniz dosyalar burada; 'Sağlık denetimi' bunları kotasız yeniden sorgular ve sonradan tehdide dönüşenleri kırmızı işaretler.";
+    public static string CardFolderSuppression = "Klasör bazlı sessizleştirme (geliştirme/build klasörleri)";
+    public static string BtnAddFolder = "Klasör ekle…";
+    public static string FolderSuppressionHint = "Bu klasörlerin altındaki dosyalar taramada atlanır — her derlemede hash'i değişen build çıktısı için (hash listesi bunu kapsayamaz).";
+    public static string CardAutoAction = "Tarama sonrası oto-eylem kuralları";
+    public static string ColBackgroundOnly = "Yalnızca arka plan";
+    public static string ColMinDetect = "Min tespit";
+    public static string ColFromInternet = "İnternetten";
+    public static string ColMinLevel = "Min seviye 0-2";
+    public static string ColFolderPrefix = "Klasör ön-eki";
+    public static string ColAction = "Eylem";
+    public static string AutoActionSaved = "Oto-eylem kuralları kaydedildi.";
+    public static string AutoActionHint = "İlk eşleşen kural uygulanır. Eylemler: ToastOnly (sadece bildir), MarkClean (beyaz listeye al), SuppressFolder (klasörü atla), Quarantine (karantinaya al). Boş liste = yerleşik davranış.";
+    public static string ScanCleanCacheDaysLabel = "Temiz önbellek geçerlilik (gün):";
+    public static string ScanThreatCacheDaysLabel = "Tehdit önbellek geçerlilik (gün):";
+    public static string NotifyThresholdLabel = "Bildirim eşiği (en az kaç tespit):";
+    public static string NotifyScanSummaryLabel = "Tarama bitince özet bildirim göster";
+    public static string WatchUsbLabel = "USB takıldığında taramayı öner";
+    public static string AutoScanUsbLabel = "USB takılınca tıklamadan hemen otomatik tara (arka planda)";
+    public static string WatchProcessLaunchesLabel = "Çalıştırılan her exe'yi başlarken denetle (gerçek-zamanlı, yönetici gerekir)";
+    public static string ProcGuardEnabledInfo = "Bu koruma bir sonraki açılışta etkinleşir (WMI izleme yönetici hakları gerektirir).";
+    public static string SignatureSoftenLabel = "İmzalı dosyada 1-2 sezgisel tespiti 'imzayla yumuşatıldı' işaretle (muhtemel yanlış pozitif)";
+    public static string AutoQuarantineWatchersLabel = "Arka plan gözcüleri yüksek-tespitli tehditleri otomatik karantinaya alsın (geri alınabilir)";
+    public static string AutoQuarantineThresholdLabel = "Otomatik karantina eşiği (tespit sayısı):";
+    public static string MuteInFullscreenLabel = "Tam ekran uygulamada (oyun/sunum) bildirimleri sustur";
+    public static string QuietHoursLabel = "Sessiz saatler (başlangıç–bitiş, eşitse kapalı):";
+    public static string QuietHoursSeparator = "–";
+    public static string QuarantineRetentionLabel = "Karantinayı şu günden eski kayıtlardan otomatik temizle (0=kapalı):";
+    public static string PeriodicRecheckLabel = "Tepside her N saatte arka planda yeniden denetle (izleme/önbellek/bütünlük, 0=sadece açılışta):";
+    public static string KeyRowDefaultLabel = "Key";
+    public static string KeyDeleteConfirm = "Bu anahtar silinsin mi?";
+    public static string BtnResetAllSettings = "↺  Tüm ayarları varsayılana döndür";
+    public static string ResetAllSettingsConfirm = "Tüm ayarlar varsayılan değerlerine döndürülsün mü? (API anahtarları etkilenmez)";
+    public static string SettingsResetInfo = "Ayarlar varsayılana döndürüldü. Görünmesi için Ayarlar sekmesini yeniden açın.";
+    public static string BtnExportSettings = "Ayarları dışa aktar";
+    public static string SettingsFileFilter = "Ayar dosyası|*.txt|Tümü|*.*";
+    public static string SettingsExportedInfo = "Ayarlar dışa aktarıldı (API anahtarları hariç, paylaşıma uygun).";
+    public static string SettingsExportFailedPrefix = "Dışa aktarılamadı: ";
+    public static string BtnImportSettings = "Ayarları içe aktar";
+    public static string SettingsImportedFormat = "{0} ayar içe aktarıldı. Görünmesi için Ayarlar sekmesini yeniden açın.";
+    public static string SettingsImportFailedPrefix = "İçe aktarılamadı: ";
+
+    // ---- ScanDetailControl ----
+    public static string DetailMajorOnlyCheck = "Yalnızca büyük motorlar";
+    public static string DetailSharedIocCampaignFormat = "{0} taranmış dosyayla ortak ağ göstergesi paylaşıyor (aynı kampanya olabilir)";
+    public static string DetailSignalsHelpLink = "❓ Sinyaller ne demek?";
+    public static string RecencyToday = "bugün";
+    public static string DetailLocalFirstSeenFormat = "💻 Bu makinede ilk görülme: {0:yyyy-MM-dd} ({1})";
+    public static string MenuCopyEngineResult = "📋  Sonucu kopyala";
+    public static string MenuSearchEngineResult = "🔎  Sonucu internette ara";
+    public static string DetailTrustedSubtitle = "VirusTotal taraması atlandı";
+    public static string DetailSignatureSoftenedFormat = "🔓 Geçerli imza nedeniyle muhtemel yanlış pozitif: {0} — ‘Temiz olarak işaretle’ ile onayla";
+    public static string DetailSignedFallback = "imzalı";
+    public static string DetailCommunitySoftenedFormat = "👍 Topluluk çoğunlukla zararsız oyladı ({0}/{1} oy) — muhtemel yanlış pozitif";
+    public static string DetailBehaviourDigestHeader = "🧪 Bu dosya çalışırsa PC'ne ne yapar:";
+    public static string DetailActionQuarantine = "🛡  Karantinaya al";
+    public static string DetailActionRescanFirst = "🔄  Önce yeniden tara";
+    public static string DetailActionVtReport = "🔗  VT raporu";
+
+    // ---- ScanOverviewControl ----
+    public static string OverviewDropHint = "🛡  Taramak için dosya/klasörü buraya sürükle";
+    public static string BtnScanDownloads = "⬇  İndirilenleri tara";
+    public static string BtnRecheckShort = "🔁  Yeniden denetle";
+    public static string OnboardCardTitle = "🚀 Başlangıç — kurulumu tamamla";
+    public static string BtnHide = "Gizle";
+    public static string OnboardStepApiKey = "API anahtarı / anahtarsız mod";
+    public static string ActionGoSettings = "Ayarlar →";
+    public static string OnboardStepInstallMenu = "Sağ-tık menüsünü kur";
+    public static string OnboardStepWatchDownloads = "İndirilenleri izlemeyi aç";
+    public static string ActionEnable = "Aç";
+    public static string OnboardStepFirstScan = "İlk taramanı yap";
+    public static string ActionScanDownloads = "İndirilenleri tara";
+    public static string CoverageCardTitle = "🛡 Korumam ne kadar açık?";
+    public static string CoverageWatchDownloads = "İndirilenler izleniyor";
+    public static string CoverageUsbAutoScan = "USB otomatik tarama";
+    public static string CoverageScheduledScan = "Zamanlı tarama";
+    public static string CoverageContextMenu = "Sağ-tık menüsü";
+    public static string TileCaptionFormat = "{0}  ›";
+    public static string RecentScansTitle = "Son taramalar";
+    public static string RecentEmptyHint = "Henüz tarama yok — yukarıdan bir dosya bırak.";
+    public static string LastScanNever = "Son tarama: hiç";
+    public static string RecencyYesterday = "dün";
+    public static string LastScanPrefix = "Son tarama: ";
+    public static string OverviewKeyAvailableFormat = "   •   Anahtar: {0}/{1} kullanılabilir";
+    public static string OverviewKeylessOnSuffix = "  •  anahtarsız (GUI) mod açık";
+    public static string OverviewWatchingSuffixFormat = "  •  👁 {0} dosya izleniyor";
+    public static string HistoryReopenHeadFormat = "{0} — {1} {2}\n\nTam ayrıntı önbellekte yok";
+    public static string HistoryReopenRescanSuffix = ".\nDosyayı yeniden taramak ister misin?";
+    public static string ReopenFileGoneSuffix = " ve dosya artık şurada değil:\n";
+    public static string ReopenNoPath = "(yol yok)";
+    public static string BannerTitleAttention = "🔴  Dikkat gerek";
+    public static string BannerLiveThreatFormat = "Bilinen zararlı bir dosya hâlâ diskte: {0}";
+    public static string BtnOpenHistory = "Geçmişi aç →";
+    public static string BannerTitlePending = "🟡  Beklemede";
+    public static string BannerNoKeyRationale = "Kullanılabilir anahtar yok ve anahtarsız mod kapalı — tarama yapılamıyor.";
+    public static string BannerBitQuarantinedFormat = "{0} dosya karantinada";
+    public static string BannerBitOfflineQueueFormat = "{0} dosya çevrimdışı sırada";
+    public static string BannerBitWatchingFormat = "{0} dosya izlemede";
+    public static string BtnRecheckPlain = "Yeniden denetle";
+    public static string BannerTitleProtected = "🟢  Korunuyorsun";
+    public static string BannerProtectedRationale = "Diskte bilinen canlı tehdit yok.";
+    public static string AttentionEscalationsFormat = "🔴 {0} dosya bir zamanlar temizdi, sonradan tehdide dönüştü (Geçmiş sekmesine bak).";
+    public static string AttentionStaleMsg = "Bir süredir tarama yapılmadı — 'İndirilenleri tara' ya da 'Yeniden denetle' ile güncel tut.";
+    public static string AttentionNoKeyMsg = "Kullanılabilir API anahtarı yok — Ayarlar'dan anahtar ekle ya da anahtarsız modu aç.";
+    public static string AttentionQuarantinedFormat = "{0} dosya karantinada (geri yüklenebilir).";
+    public static string AttentionOfflineQueueFormat = "📤 {0} dosya çevrimdışı sırada (internet gelince denenecek).";
+    public static string AttentionPrefixFormat = "⚠  {0}";
+
+    // ---- ScanHistoryControl ----
+    public static string HistoryThreatsOnlyLabel = "Sadece tehditler";
+    public static string HistoryStarredOnlyLabel = "★ Yıldızlılar";
+    public static string BtnHistoryClear = "🗑  Geçmişi temizle";
+    public static string HistoryClearConfirm = "Tüm tarama geçmişi silinsin mi? (önbellek etkilenmez)";
+    public static string BtnHistoryReverdict = "⚠  Sonradan tehdit oldu mu?";
+    public static string BtnHistoryExportReport = "📄  Rapor olarak ver…";
+    public static string HistoryNoRecordsInRange = "Bu aralıkta kayıt yok.";
+    public static string HistoryReportFilter = "HTML|*.html|CSV|*.csv|JSON|*.json";
+    public static string HistoryReportFileName = "guvenlik-raporu.html";
+    public static string HistoryReportWrittenFormat = "Rapor yazıldı: {0} kayıt ({1}).";
+    public static string HistoryRangeLast7Days = "Son 7 gün";
+    public static string HistoryRangeLast30Days = "Son 30 gün";
+    public static string HistoryRangeLast90Days = "Son 90 gün";
+    public static string BtnHistoryRecurring = "🔁  Tekrar eden tehditler";
+    public static string BtnHistoryHotspots = "🎯  Tehdit odakları";
+    public static string HistoryEscalationBannerFormat = "🔴 Sonradan tehdit oldu: {0} dosya bir zamanlar temizdi, şimdi işaretli (en son: {1} {2}).  İncelemek için tıkla.";
+    public static string ColHistoryStar = "★";
+    public static string ColHistoryDate = "Tarih";
+    public static string ColHistorySource = "Kaynak";
+    public static string ColHistoryNote = "Not";
+    public static string ColPath = "Yol";
+    public static string MenuHistoryRescan = "🔁  Tekrar tara";
+    public static string MenuHistoryOpenDetails = "🔎  Ayrıntıyı aç";
+    public static string BtnEscalationCopySha = "📋  SHA-256 kopyala";
+    public static string MenuHistoryToggleStar = "⭐  Yıldız aç/kapat";
+    public static string MenuHistoryEditNote = "📝  Not ekle/düzenle…";
+    public static string HistoryNotePrompt = "Bu tarama için not:";
+    public static string HistoryCountFormat = "{0} kayıt";
+    public static string HistoryCountTotalSuffixFormat = " / {0} toplam";
+    public static string HistoryFileGoneFormat = "Dosya artık şurada değil:\n";
+    public static string HistoryNoPathInfo = "Bu kaydın dosya yolu yok.";
+
+    // ---- QuotaDashboardControl ----
+    public static string QuotaBtnRefreshFromServer = "↻  Sunucudan kotayı yenile";
+    public static string QuotaPerKeyLimitsHint = "  4 sorgu/dk • 500/gün • 15.5K/ay (anahtar başına)";
+    public static string QuotaNoKeysHint = "Henüz API anahtarı yok. Ayarlar sekmesinden ekleyin.";
+    public static string QuotaMeterMinute = "Dakika";
+    public static string QuotaMeterDaily = "Günlük";
+    public static string QuotaMeterMonthly = "Aylık";
+    public static string QuotaStatusDisabledPrefix = "● Devre dışı: ";
+    public static string QuotaStatusAuthFallback = "auth";
+    public static string QuotaStatusExhausted = "● Dolu — bekleniyor";
+    public static string QuotaStatusActive = "● Aktif";
+    public static string QuotaAllExhaustedBannerFormat = "Tüm anahtarlar dolu — {0} sonra otomatik devam edilecek…";
+    public static string QuotaCountdownHoursFormat = "{0}sa {1}dk";
+    public static string QuotaCountdownMinutesFormat = "{0}dk {1}sn";
+    public static string QuotaCountdownSecondsFormat = "{0}sn";
+
+    // ---- LogViewerControl ----
+    public static string BtnLogClear = "Temizle";
+    public static string BtnLogCopyAll = "Tümünü kopyala";
+    public static string BtnLogOpenFolder = "Log klasörünü aç";
+
+    // ---- MainForm ----
+    public static string ToastUsbScanningTitle = "USB sürücü taranıyor";
+    public static string ToastUsbScanningTextFormat = "{0}: takıldı, otomatik taranıyor…";
+    public static string ToastUsbInsertedTitle = "USB sürücü takıldı";
+    public static string ToastUsbInsertedTextFormat = "{0}: sürücüsünü taramak için bu bildirime tıkla.";
+    public static string TabOverview = "🏠  Genel Bakış";
+    public static string TabHistory = "🕘  Geçmiş";
+    public static string TrayScanClipboard = "📋 Panodaki yolu tara";
+    public static string ToastQuietThreatsTitle = "Sessiz modda tehdit bulundu";
+    public static string ToastQuietThreatsTextFormat = "{0} tehdit bulundu — incelemek için tıkla.";
+    public static string FileRestoredInfo = "Dosya geri yüklendi.";
+    public static string ToastScanDoneThreatTitle = "Tarama bitti — tehdit bulundu";
+    public static string ToastScanDoneCleanTitle = "Tarama bitti — temiz";
+    public static string ToastScanDoneTextFormat = "{0} dosya tarandı, {1} tehdit.";
+    public static string ToastThreatTextFormat = "{0}{1}: {2} ({3}/{4})";
+    public static string ToastAutoQuarantineTitle = "Tehdit otomatik karantinaya alındı";
+    public static string ToastAutoQuarantineTextFormat = "{0}{1} ({2}/{3}) — geri almak için tıkla.";
+    public static string ToastQuarantineFallbackTextFormat = "{0}: {1} ({2}/{3})";
+    public static string ToastDriftAlarmTitle = "Bütünlük uyarısı!";
+    public static string ToastDriftAlarmTextFormat = "{0} izlenen dosya değişti ve güvenini kaybetti: {1}";
+    public static string OverviewSweepNoticeFormat = "🌙 Zamanlı tarama {0} tehdit buldu — kuyruğa yüklemek için bildirime tıkla.";
+    public static string ToastSweepThreatsTitle = "Zamanlı tarama tehdit buldu";
+    public static string ToastSweepThreatsTextFormat = "{0} tehdit bulundu. Kuyruğa yüklemek için tıkla.";
+    public static string ToastWatchEscalationTitle = "İzlenen dosya artık daha tehlikeli!";
+    public static string ToastWatchEscalationOneFormat = "{0}: {1} → {2} motor tespit ediyor.";
+    public static string ToastWatchEscalationManyFormat = "{0} izlenen dosyanın tespiti arttı (ör. {1}).";
+    public static string AllowlistReasonAutoActionRule = "oto-eylem kuralı";
+
+    // ---- CommandPaletteForm ----
+    public static string CmdPaletteSearchPlaceholder = "⌘  Komut ara…  (örn. kopya, karantina, drift)";
+
+    // ---- QuarantineVaultDialog ----
+    public static string BtnVaultPurge = "🗑  Kalıcı sil";
+    public static string BtnVaultPurgeAll = "🗑  Tümünü kalıcı sil";
+    public static string BtnVaultCleanupOld = "🧹  Eski kayıtları temizle…";
+    public static string VaultRecoveredSuffixFormat = "  •  {0} kurtarılan";
+    public static string VaultSizeLabelFormat = "{0} dosya  •  geri kazanılabilir {1}{2}";
+    public static string VaultPurgeOneConfirmFormat = "{0} kalıcı olarak silinsin mi?\nBu geri ALINAMAZ (dosya kasadan tamamen kaldırılır).";
+    public static string VaultPurgeManyConfirmFormat = "Seçili {0} dosya kalıcı olarak silinsin mi?\nBu geri ALINAMAZ.";
+    public static string VaultPurgedResultFormat = "{0}/{1} kalıcı silindi.";
+    public static string VaultAlreadyEmpty = "Kasa zaten boş.";
+    public static string VaultPurgeAllConfirmFormat = "Kasadaki TÜM {0} dosya kalıcı olarak silinsin mi?\nBu geri ALINAMAZ.";
+    public static string VaultCleanupPrompt = "Kaç günden eski karantina kayıtları kalıcı silinsin?";
+    public static string VaultCleanupTitle = "Eski kayıtları temizle";
+    public static string VaultCleanupResultFormat = "{0} kayıt kalıcı silindi.";
+    public static string VaultRestoreManyConfirmFormat = "Seçili {0} dosya orijinal konumlarına geri yüklensin mi?";
+    public static string VaultRestoreManyResultFormat = "{0}/{1} geri yüklendi.";
+
+    // ---- EscalationDossierDialog ----
+    public static string DlgEscalationTitle = "🔴 Sonradan tehdit oldu — dosya geçmişi";
+    public static string BtnEscalationLiveReverdict = "🔄  Canlı yeniden denetle (kota)";
+    public static string BtnEscalationReveal = "📁  Konumu aç";
+    public static string BtnEscalationOpenVt = "🌐  VT'de aç";
+    public static string EscalationPresenceOnDisk = "✓ diskte";
+    public static string EscalationPresenceGone = "— yok";
+    public static string ColEscalationFlippedDate = "Tehdit oldu";
+    public static string ColReverdictOldRatio = "Eskiden";
+    public static string ColReverdictNewRatio = "Şimdi";
+    public static string ColEscalationDaysClean = "Temiz kaldı (gün)";
+    public static string EscalationNoRecords = "Kayıtlı sonradan-tehdit dönüşü yok.";
+    public static string EscalationSummaryFormat = "{0} dosya sonradan tehdide döndü — {1} tanesi hâlâ diskte.";
+    public static string EscalationCannotQuarantineGone = "Bu dosya artık diskte değil — karantinaya alınamaz.";
+    public static string EscalationQuarantinedFormat = "Karantinaya alındı: {0}";
+    public static string EscalationQuarantineFailedPrefix = "Karantinaya alınamadı: ";
+    public static string EscalationFileNotOnDisk = "Dosya diskte bulunamadı.";
+    public static string EscalationShaCopied = "SHA-256 kopyalandı.";
+    public static string EscalationOpenFailedPrefix = "Açılamadı: ";
+
+    // ---- HelpDialog ----
+    public static string HelpDlgTitle = "❓ Yardım — sinyaller ne anlama geliyor?";
+    public static string HelpTermShortcuts = "⌨ Klavye kısayolları";
+    public static string HelpMeaningShortcuts = "Ctrl+K komut paleti · Ctrl+F ara · Ctrl+C SHA-256 kopyala · Ctrl+Shift+C verdikt görseli (pano) · Ctrl+R yeniden tara · Ctrl+Q karantina · Ctrl+Shift+J tüm tehditleri seç · J/K tehdide atla · Enter VT raporunu aç · Boşluk duraklat/sürdür · F5 verdikt yeniden denetle.";
+    public static string HelpTermVerdict = "Verdikt (Temiz/Şüpheli/Zararlı)";
+    public static string HelpMeaningVerdict = "Kaç motorun dosyayı işaretlediğine göre verilen sonuç. Eşikleri ve adları Ayarlar'dan değiştirebilirsin.";
+    public static string HelpTermConsensus = "Konsensüs — büyük vs küçük motorlar";
+    public static string HelpMeaningConsensus = "Tespiti yapanlar büyük/itibarlı motorlar mı, yoksa yalnızca küçük motorlar mı? Sadece küçük motorlar işaretlediyse büyük olasılıkla yanlış pozitiftir.";
+    public static string HelpTermSignatureHeuristic = "İmza vs sezgisel/ML";
+    public static string HelpMeaningSignatureHeuristic = "İmza eşleşmesi = bilinen bir zararlının parmak izi (kesin). Sezgisel/ML = tahmin (kesin değil). Tüm tespitler sezgiselse temkinli ol.";
+    public static string HelpTermFirstSeen = "İlk görülme / nadirlik";
+    public static string HelpMeaningFirstSeen = "Dosyanın dünyada ilk ne zaman görüldüğü. Dakikalar önce ilk kez görülen bir dosya, yıllardır bilinen bir dosyadan daha risklidir.";
+    public static string HelpTermFamily = "Aile etiketi";
+    public static string HelpMeaningFamily = "Motorların ortak adlandırdığı zararlı ailesi (ör. truva atı, fidye). Ne tür bir tehdit olduğunu özetler.";
+    public static string HelpTermSignatureTrust = "İmza güveni (İmzalı)";
+    public static string HelpMeaningSignatureTrust = "Geçerli bir kod imzası = yayıncının kim olduğu doğrulandı. Bu 'temiz' garantisi DEĞİLDİR; sadece kimliği doğrular. İmzalılar kota harcamamak için VT'ye gönderilmez.";
+    public static string HelpTermDownloadSource = "İndirme kaynağı (Zone.Identifier)";
+    public static string HelpMeaningDownloadSource = "Dosya internetten mi indirildi ve hangi siteden? İnternetten gelen dosyalar daha dikkatli incelenmeli.";
+    public static string HelpTermBehaviour = "Davranış / yetenek özeti";
+    public static string HelpMeaningBehaviour = "Dosyanın ne yaptığı: ağ iletişimi, kalıcılık, anti-analiz, tuş kaydı vb. (VT etiketlerinden, çalıştırmadan).";
+    public static string HelpTermOverlay = "Overlay (imza sonrası ek bayt)";
+    public static string HelpMeaningOverlay = "İmzalı bir dosyaya imzadan sonra eklenmiş veri. Kurulumcularda normaldir ama doldurulmuş/trojanlı bir dosyanın işareti de olabilir.";
+    public static string HelpTermStale = "Eski imza (stale)";
+    public static string HelpMeaningStale = "Tespit aylarca eski imzalardan geliyorsa, güncel motorlarla yeniden denetlemek mantıklı olabilir.";
+    public static string HelpTermQuarantine = "Karantina (.VIRUS)";
+    public static string HelpMeaningQuarantine = "Şüpheli dosyanın uzantısını .VIRUS yaparak çalıştırılamaz hale getirir. Geri dönüşü vardır — Karantina kasasından geri yükleyebilirsin.";
+    public static string HelpTermKeyless = "Anahtarsız (GUI) mod";
+    public static string HelpMeaningKeyless = "API anahtarı yerine gizli bir tarayıcı ile VT'nin web arayüzünü kullanır: kotasız ama daha yavaş.";
+
+    // ---- DownloadsTriageDialog ----
+    public static string DlgDownloadsTriageTitle = "📥 İndirilenler triyajı";
+    public static string IncidentWindowItemFormat = "Son {0} gün";
+    public static string BtnDownloadsRefresh = "🔄  Yenile";
+    public static string BtnScanUnscanned = "🔎  Taranmamışları tara";
+    public static string DownloadsNoUnscanned = "Taranmamış dosya yok.";
+    public static string IncidentWindowLabel = "Pencere:";
+    public static string ColDownloadSource = "Kaynak (indirme)";
+    public static string ColSignature = "İmza";
+    public static string DownloadsSameSourceBadgeFormat = "{0}  ⚑ aynı kaynak ×{1}";
+    public static string IncidentScanning = "Taranıyor…";
+    public static string IncidentScanningProgressFormat = "Taranıyor… {0}/{1}";
+    public static string DownloadsSummaryFormat = "{0} dosya • {1} taranmamış • {2} tehdit (önbellekten)";
+    public static string DownloadsErrorFormat = "Hata: {0}";
+
+    // ---- HistoryReverdictDialog ----
+    public static string DlgReverdictTitle = "⚠ Sonradan tehdit oldu mu?";
+    public static string BtnReverdictRecheck = "🔄  Yeniden denetle";
+    public static string BtnRescanSelected = "🔁  Seçileni yeniden tara";
+    public static string ReverdictSelectRowOnDisk = "Diskte bulunan bir satır seç.";
+    public static string ColReverdictFirstScan = "İlk tarama";
+    public static string ReverdictNeedKeyless = "Anahtarsız (GUI) mod kapalı — bu denetim kotasız yeniden sorgu gerektirir.";
+    public static string ReverdictChecking = "Geçmiş yeniden denetleniyor…";
+    public static string ReverdictProgressFormat = "Yeniden denetleniyor… {0}/{1}";
+    public static string ReverdictNoneFound = "Sonradan tehdide dönüşen, hâlâ diskte olan dosya bulunamadı.";
+    public static string ReverdictFoundFormat = "{0} dosya bir zamanlar temizdi, şimdi işaretli ve hâlâ diskte.";
+
+    // ---- ThreatHotspotDialog ----
+    public static string DlgThreatHotspotTitle = "🎯 Tehdit odakları";
+    public static string ThreatHotspotNone = "Tekrar tehdit üreten bir klasör bulunamadı.";
+    public static string ThreatHotspotHeaderFormat = "{0} klasör tekrar tehdit üretti — tek dosyayı silmek yerine kaynağı kapatmayı düşün.";
+    public static string ColDistinctThreats = "Farklı tehdit";
+    public static string ColSpan = "Aralık";
+    public static string ColSamples = "Örnekler";
+    public static string BtnRescanFolder = "🔁  Klasörü yeniden tara";
+    public static string BtnOpenFolder = "📁  Klasörü aç";
+
+    // ---- IncidentTimelineDialog ----
+    public static string DlgIncidentTimelineTitle = "🕓 Olay Zaman Çizelgesi";
+    public static string BtnIncidentScan = "🔍  Tara";
+    public static string ColDay = "Gün";
+    public static string ColTime = "Saat";
+    public static string IncidentSummaryFormat = "{0} gün • {1} çalıştırılabilir • {2} tehdit (önbellekten)";
+
+    // ---- PersistenceHooksDialog ----
+    public static string PersistHooksTitleFormat = "🔗 Autostart kancaları — {0}";
+    public static string PersistHooksColCommand = "Komut";
+    public static string BtnPersistRemoveHook = "🗑  Seçili kancayı kaldır";
+    public static string PersistHooksHeaderFormat = "{0} kalıcılık kancası bulundu. Kaldırma geri alınabilir: kayıt değeri quarantine\\autostart-restore.log'a yazılır, Başlangıç .lnk'i kasaya taşınır.";
+    public static string PersistHookRemoveConfirmFormat = "Bu autostart kancası kaldırılsın mı?\n[{0}] {1}";
+    public static string PersistHookRemovedInfo = "Kanca kaldırıldı (geri alınabilir).";
+    public static string PersistUnknownError = "bilinmeyen hata";
+    public static string PersistHookRemoveFailedHklmNote = "\n(HKLM kancaları yönetici hakları gerektirir.)";
+
+    // ---- RecurrenceDialog ----
+    public static string DlgRecurrenceTitle = "🔁 Tekrar eden tehditler";
+    public static string RecurrenceNone = "Aynı tehdit birden fazla taramada tekrarlanmadı.";
+    public static string RecurrenceHeaderFormat = "{0} tehdit ayrı taramalarda tekrar belirdi — kaynağı hâlâ canlı olabilir.";
+    public static string ColRecurrenceTimes = "Kez";
+    public static string BtnOpenLastLocation = "📁  Son konumu aç";
+
+    // ---- CliRunner ----
+    public static string CliSweepResultWriteErrorPrefix = "Tarama sonucu yazılamadı: ";
+    public static string CliSecMitre = "MITRE ATT&CK";
+    public static string CliWatchListEmpty = "İzleme listesi boş.";
+    public static string CliWatchRecheckingFormat = "{0} izlenen dosya yeniden denetleniyor (anahtarsız)…";
+    public static string CliWatchNoEscalation = "Tespit artışı yok.";
+    public static string CliWatchEscalationFormat = "[ARTIŞ] {0}: {1} → {2}/{3} motor";
+    public static string CliTimelineScanningFormat = "Son {0} günde gelen çalıştırılabilirler taranıyor (verdikt önbellekten)…";
+    public static string CliTimelineSummaryFormat = "{0} gün • {1} çalıştırılabilir • {2} tehdit (önbellekten)\n";
+    public static string CliTimelineDayFormat = "{0}  —  {1} dosya, {2} tehdit, {3} internetten";
+    public static string CliVerdictError = "HATA";
+
+    // ---- ReportWriter ----
+    public static string ReportCsvHeader = "Dosya,Verdikt,Zararlı,Şüpheli,Toplam,Aile,MD5,SHA256,RaporURL";
+    public static string ReportTextTitleFormat = "{0} v{1} — tarama raporu";
+    public static string ReportTextSummaryFormat = "Dosya: {0}   Tehdit: {1}   İmzalı-atlandı: {2}   Hata: {3}";
+    public static string ReportTextErrorPrefix = "    hata: ";
+    public static string ReportHtmlDocTitleFormat = "{0} raporu";
+    public static string ReportHtmlPrintLink = "🖨 Yazdır / PDF";
+    public static string ReportHtmlHeadingFormat = "{0} — tarama raporu";
+    public static string ReportHtmlSummaryFormat = "Dosya: {0} &nbsp; Tehdit: <b class=\"threat\">{1}</b> &nbsp; İmzalı-atlandı: {2} &nbsp; Hata: {3}";
+    public static string ReportHtmlTableHead = "<table><thead><tr><th>Verdikt</th><th>Tespit</th><th>Dosya</th><th>Konsensüs / ayrıntı</th></tr></thead><tbody>";
+    public static string ReportHtmlTrustedSignature = "güvenilen imza";
+    public static string ReportHistoryCsvHeader = "Tarih,Dosya,Verdikt,Tespit,Toplam,Kaynak,MD5,SHA256,RaporURL";
+    public static string ReportHistoryTitleFormat = "{0} — güvenlik raporu";
+    public static string ReportHistorySummaryFormat = "Aralık: <b>{0}</b> &nbsp;•&nbsp; Tarandı: {1} &nbsp;•&nbsp; Tehdit: <b class=\"threat\">{2}</b> &nbsp;•&nbsp; Temiz: <b class=\"clean\">{3}</b>";
+    public static string ReportHistorySourceBreakdownHeading = "<h2>Kaynak kırılımı</h2><div class=\"sum\">";
+    public static string ReportHistoryWeeklyTrendHead = "<h2>Haftalık eğilim</h2><table><thead><tr><th>Hafta başı</th><th>Tarandı</th><th>Tehdit</th></tr></thead><tbody>";
+    public static string ReportHistoryThreatsHeadingFormat = "Tehditler ({0})";
+    public static string ReportHistoryThreatsTableHead = "<table><thead><tr><th>Tarih</th><th>Dosya</th><th>Tespit</th><th>Kaynak</th><th>SHA-256</th></tr></thead><tbody>";
+
+    // ---- ShareCard ----
+    public static string ShareCardDetectedFormat = "{0}/{1} motor tespit etti";
+    public static string ShareCardSignedSkipped = "İmzalı — VT taraması atlandı";
+    public static string ShareCardSha256Label = "SHA-256  ";
+    public static string ShareCardFamilyLabel = "Aile: ";
+    public static string ShareCardLocalFirstSeenFormat = "Bu makinede ilk görülme: {0:yyyy-MM-dd}";
+    public static string ShareCardMd5Label = "MD5    ";
+    public static string ShareCardSha256TextLabel = "SHA256 ";
+    public static string ShareCardMdTypeLabel = "- **Tür:** ";
+    public static string ShareCardMdFamilyLabel = "- **Aile:** ";
+    public static string ShareCardMdReportLink = "- [VirusTotal raporu](";
+    public static string ShareCardThreatTagPrefix = "🏷 ";
+
+    // ---- MitreGlossary ----
+    public static string MitreTacticPersistence = "Kalıcılığı sağlama";
+    public static string MitreMeaningT1547 = "Windows açılışta kendini otomatik başlatacak şekilde yerleşiyor";
+    public static string MitreMeaningT1053 = "Zamanlanmış görev oluşturarak kalıcı oluyor";
+    public static string MitreMeaningT1543 = "Bir sistem servisi kurarak kalıcı oluyor";
+    public static string MitreMeaningT1546 = "Bir olay tetikleyicisine kendini bağlıyor (açılışta çalışır)";
+    public static string MitreTacticDefenseEvasion = "Savunmayı atlatma";
+    public static string MitreMeaningT1055 = "Kendini başka bir sürecin içine enjekte ediyor (gizlenme)";
+    public static string MitreMeaningT1027 = "Kodunu gizliyor/şifreliyor, analizden kaçıyor";
+    public static string MitreMeaningT1112 = "Kayıt defterini değiştiriyor";
+    public static string MitreMeaningT1070 = "İzlerini siliyor (log/dosya temizleme)";
+    public static string MitreMeaningT1562 = "Güvenlik araçlarını/korumaları devre dışı bırakmaya çalışıyor";
+    public static string MitreMeaningT1497 = "Sanal makine/sandbox tespit edip davranışını gizliyor";
+    public static string MitreTacticImpact = "Etki";
+    public static string MitreMeaningT1486 = "Dosyaları şifreleyip fidye isteyebilir (ransomware)";
+    public static string MitreMeaningT1490 = "Sistem kurtarmayı engelliyor (gölge kopyaları siliyor)";
+    public static string MitreMeaningT1489 = "Servisleri durduruyor";
+    public static string MitreTacticCommandControl = "Komuta-kontrol";
+    public static string MitreMeaningT1071 = "Uzak bir sunucuyla ağ üzerinden haberleşiyor";
+    public static string MitreMeaningT1105 = "İnternetten ek dosya/yük indiriyor";
+    public static string MitreMeaningT1095 = "Standart olmayan bir protokolle dışarı bağlanıyor";
+    public static string MitreTacticExfiltration = "Veri sızdırma";
+    public static string MitreMeaningT1041 = "Veriyi komuta kanalı üzerinden dışarı çıkarıyor";
+    public static string MitreTacticCredentialTheft = "Kimlik bilgisi çalma";
+    public static string MitreMeaningT1056 = "Klavye girişlerini kaydedebiliyor (keylogger)";
+    public static string MitreMeaningT1003 = "Sistemden parola/kimlik bilgisi çıkarmaya çalışıyor";
+    public static string MitreTacticExecution = "Çalıştırma";
+    public static string MitreMeaningT1059 = "Komut satırı/script ile komut çalıştırıyor";
+    public static string MitreMeaningT1204 = "Kullanıcının dosyayı açmasıyla çalışıyor";
+    public static string MitreTacticDiscovery = "Keşif";
+    public static string MitreMeaningT1082 = "Sistem bilgilerini topluyor";
+    public static string MitreMeaningT1083 = "Dosya ve dizinleri tarıyor";
+    public static string MitreMeaningT1057 = "Çalışan süreçleri listeliyor";
+    public static string MitreMeaningT1518 = "Yüklü güvenlik yazılımlarını araştırıyor";
+    public static string MitreMeaningT1016 = "Ağ yapılandırmasını inceliyor";
+    public static string MitreTacticLateralMovement = "Yatay hareket";
+    public static string MitreMeaningT1021 = "Ağdaki diğer makinelere yayılmaya çalışıyor";
+    public static string MitreMeaningT1036 = "Meşru bir dosya gibi görünmeye çalışıyor (masquerading)";
+    public static string MitreTacticOther = "Diğer teknikler";
+
+    // ---- BehaviourDigest ----
+    public static string DigestNetworkFormat = "{0} ağ adresine/sunucuya bağlanıyor";
+    public static string DigestFilesWrittenFormat = "{0} dosya yazıyor/bırakıyor";
+    public static string DigestPersistence = "Otomatik başlatma/kalıcılık anahtarı yazıyor — yeniden başlatmada hayatta kalır";
+    public static string DigestRegistryFormat = "{0} kayıt defteri anahtarı değiştiriyor";
+    public static string DigestProcessesFormat = "{0} başka süreç başlatıyor";
+    public static string DigestMitreFormat = "{0}: {1}";
+    public static string DigestNoImpact = "Kayda değer bir sistem etkisi gözlenmedi";
+
+    // ---- VerdictCategories ----
+    public static string VerdictCatCleanName = "TEMİZ";
+    public static string VerdictCatSuspiciousName = "ŞÜPHELİ";
+    public static string VerdictCatVirusName = "VİRÜS";
+
+    // ---- ConfirmGate ----
+    public static string GateQuarantineTitle = "Karantina";
+    public static string GateQuarantineQuestion = "Bu dosya karantinaya alınsın mı? (çalıştırılamasın diye uzantısı .VIRUS yapılır)";
+    public static string GateContextMenuInstallTitle = "Sağ tuş menüsü kurulumu";
+    public static string GateContextMenuInstallQuestion = "Sağ tuş menüsüne 'VirusTotal ile tara' eklensin mi? (yönetici gerekebilir)";
+    public static string GateClearCacheQuestion = "Yerel tarama önbelleği (cache.json) temizlensin mi?";
+    public static string GateDeleteKeyTitle = "Anahtar sil";
+    public static string GateDeleteKeyQuestion = "Bu API anahtarı silinsin mi?";
+    public static string ConfirmDontAskAgain = "Bir daha sorma";
+
+    // ---- PersistenceHunter ----
+    public static string PersistLocStartupUser = "Başlangıç (kullanıcı)";
+    public static string PersistLocStartupCommon = "Başlangıç (ortak)";
+    public static string PersistTaskNameFallback = "(görev)";
+    public static string PersistLocScheduledTask = "Zamanlanmış görev";
+    public static string PersistTaskDeleteExitFormat = "schtasks çıkış {0}";
+
+    // ---- ScanScheduler ----
+    public static string SkipReasonTooLargeFormat = "çok büyük (>{0} MB)";
+    public static string SkipReasonKnownGoodList = "Bilinen temiz (yerel liste)";
+    public static string SkipReasonDevFolder = "Geliştirme klasörü (kullanıcı onayı)";
+    public static string ItemErrorNoReport = "VT'de bulunamadı veya sorgu sonuç vermedi (yükleme için API anahtarı gerekir).";
+    public static string UploadProgressDetailFormat = "Yükleniyor… {0:F0}%  {1}/{2}  ({3}/s)";
+    public static string PollProgressDetailFormat = "Analiz bekleniyor… (durum: {0}, {1}. yoklama)";
+
+    // ---- GuiScrapeService ----
+    public static string CaptchaWindowTitle = "VirusTotal — reCAPTCHA";
+    public static string CaptchaBarPrompt = "  VirusTotal reCAPTCHA istedi. Lütfen aşağıda çözün, sonra sağdaki düğmeye basın.";
+    public static string CaptchaBtnSolved = "Çözdüm, devam et";
+    public static string CaptchaBtnSwitchToApi = "API anahtarına geç";
+
+    // ---- DownloadsTriageService ----
+    public static string DownloadsTriageSignedFormat = "✓ {0}";
+
+    // ---- AllowlistStore ----
+    public static string AllowlistHealthStale = "⚠ ARTIK İŞARETLİ";
+    public static string AllowlistHealthUnchecked = "denetlenmedi";
+    public static string AllowlistHealthClean = "temiz";
+    public static string AllowlistReasonImportedFromHistory = "Geçmişten içe aktarıldı (temiz)";
+
+    // ---- BaselineStore ----
+    public static string BaselineDriftMissing = "dosya artık yok";
+    public static string BaselineDriftUnchanged = "değişmedi";
+    public static string BaselineDriftLostTrustFormat = "DEĞİŞTİ ve imza sürekliliği kayboldu: '{0}' → '{1}'";
+    public static string BaselineSignerInvalid = "imzasız/geçersiz";
+    public static string BaselineDriftSamePublisher = "değişti (aynı yayıncı imzaladı — normal güncelleme)";
+    public static string BaselineDriftWasUnsigned = "değişti (zaten imzasızdı)";
+
+    // ---- QuarantineVault ----
+    public static string VaultNoSpaceFormat = "Kasada yer yok — en az {0} MB boşaltın.";
+    public static string VaultVerdictRecovered = "kurtarıldı";
+    public static string VaultFileNotFound = "Kasa dosyası bulunamadı.";
+    public static string VaultTamperedNoRestore = "Kasa dosyası karantinaya alındığından beri değişmiş — geri yükleme güvenli değil. Bunun yerine 'Kalıcı sil' kullanın.";
+    public static string VaultOriginalPathOccupied = "Orijinal konumda zaten bir dosya var.";
+
+    // ---- Program ----
+    public static string FatalUnexpectedErrorFormat = "Beklenmeyen hata:\n{0}";
+    public static string UiThreadExceptionFormat = "Beklenmeyen bir hata oluştu (loglandı):\n{0}";
+    public static string CliFatalFormat = "FATAL: {0}";
+
+    // ---- DownloadsWatcher ----
+    public static string WatcherLureLabel = "çift uzantı tuzağı";
+    public static string WatcherArchiveMemberFormat = "› {0}";
+
+    // ---- ZoneIdentifier ----
+    public static string ZoneLocalMachine = "Yerel makine";
+    public static string ZoneLocalNetwork = "Yerel ağ (intranet)";
+    public static string ZoneTrustedSite = "Güvenilen site";
+    public static string ZoneInternet = "İnternet";
+    public static string ZoneRestrictedSite = "Kısıtlı site";
+    public static string ZoneDownloadedWarn = "  ⚠ internetten indirildi";
+    public static string ZoneSummaryBothFormat = "📥 Kaynak bölgesi: {0}{1}\n   Kaynak (CDN/host): {2}\n   Yönlendiren sayfa: {3}";
+    public static string ZoneSummaryFormat = "📥 Kaynak bölgesi: {0}{1}{2}";
+    public static string ZoneSourceSuffixFormat = " — {0}";
 }
