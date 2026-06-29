@@ -36,9 +36,11 @@
     <PackageReference Include="System.Management" Version="9.0.0" />
   </ItemGroup>
 
-  <!-- Ship the English language file next to the exe (Turkish is written at first run). -->
+  <!-- Language files live under lang\ in the repo. Link copies lang.en.xml to the output
+       ROOT (next to the exe) so LocManager finds it in the exe folder at runtime.
+       Turkish uses the compiled-in Strings defaults; lang.tr.xml is written on first run. -->
   <ItemGroup>
-    <Content Include="lang.en.xml">
+    <Content Include="lang\lang.en.xml" Link="lang.en.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
