@@ -103,12 +103,12 @@ internal static class BaselineStore
             ct.ThrowIfCancellationRequested();
             onProgress?.Invoke(++i, all.Count);
 
-            if (!File.Exists(r.Path)) { results.Add(new DriftResult(r.Path, DriftKind.Missing, "dosya artık yok")); continue; }
+            if (!File.Exists(r.Path)) { results.Add(new DriftResult(r.Path, DriftKind.Missing, Strings.BaselineDriftMissing)); continue; }
 
             var (_, sha) = await HashService.ComputeAsync(r.Path, ct);
             if (string.Equals(sha, r.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                results.Add(new DriftResult(r.Path, DriftKind.Unchanged, "değişmedi"));
+                results.Add(new DriftResult(r.Path, DriftKind.Unchanged, Strings.BaselineDriftUnchanged));
                 continue;
             }
 
@@ -118,11 +118,11 @@ internal static class BaselineStore
 
             if (wasSigned && !sameSigner)
                 results.Add(new DriftResult(r.Path, DriftKind.ChangedLostTrust,
-                    $"DEĞİŞTİ ve imza sürekliliği kayboldu: '{r.Signer}' → '{(trust.Trusted ? trust.Publisher : "imzasız/geçersiz")}'"));
+                    string.Format(Strings.BaselineDriftLostTrustFormat, r.Signer, trust.Trusted ? trust.Publisher : Strings.BaselineSignerInvalid)));
             else
             {
                 results.Add(new DriftResult(r.Path, DriftKind.ChangedStillUntrusted,
-                    wasSigned ? "değişti (aynı yayıncı imzaladı — normal güncelleme)" : "değişti (zaten imzasızdı)"));
+                    wasSigned ? Strings.BaselineDriftSamePublisher : Strings.BaselineDriftWasUnsigned));
                 // Benign drift: refresh the stored hash/size so the next verify is quiet.
                 r.Sha256 = sha;
                 try { r.Size = new FileInfo(r.Path).Length; } catch { /* keep old size */ }

@@ -43,7 +43,7 @@ internal static class PeIdentityService
                     bool signedBySame = trust.Trusted && trust.Publisher != null &&
                         trust.Publisher.Contains(claimed, StringComparison.OrdinalIgnoreCase);
                     if (!signedBySame)
-                        notes.Add($"⚠ '{company}' olduğunu iddia ediyor ama imza {(trust.Trusted ? "farklı: " + trust.Publisher : "yok/geçersiz")} — TAKLİT olabilir");
+                        notes.Add(string.Format(Strings.PeImpersonationFormat, company, trust.Trusted ? Strings.PeSigDifferentPrefix + trust.Publisher : Strings.PeSigMissingInvalid));
                 }
             }
 
@@ -51,7 +51,7 @@ internal static class PeIdentityService
             if (!string.IsNullOrEmpty(orig) &&
                 orig.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(orig, onDisk, StringComparison.OrdinalIgnoreCase))
-                notes.Add($"📛 gömülü ad '{orig}' ≠ disk adı '{onDisk}'");
+                notes.Add(string.Format(Strings.PeNameMismatchFormat, orig, onDisk));
 
             // Cross-history: this product was previously seen signed by a publisher it no longer matches.
             var continuity = ProductSignerRegistry.ContinuityWarning(path, trust);

@@ -15,7 +15,7 @@ internal sealed class RecurrenceDialog : Form
     public RecurrenceDialog(List<RecurrenceService.Recurrence> items)
     {
         _items = items;
-        Text = "🔁 Tekrar eden tehditler";
+        Text = Strings.DlgRecurrenceTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(880, 480);
         MinimumSize = new Size(640, 340);
@@ -26,8 +26,8 @@ internal sealed class RecurrenceDialog : Form
             Height = 32,
             Padding = new Padding(10, 9, 10, 0),
             Text = items.Count == 0
-                ? "Aynı tehdit birden fazla taramada tekrarlanmadı."
-                : $"{items.Count} tehdit ayrı taramalarda tekrar belirdi — kaynağı hâlâ canlı olabilir.",
+                ? Strings.RecurrenceNone
+                : string.Format(Strings.RecurrenceHeaderFormat, items.Count),
         };
 
         _grid.Dock = DockStyle.Fill;
@@ -36,19 +36,19 @@ internal sealed class RecurrenceDialog : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(RecurrenceService.Recurrence.Name), Width = 200 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kez", DataPropertyName = nameof(RecurrenceService.Recurrence.Events), Width = 55 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Aralık", DataPropertyName = nameof(RecurrenceService.Recurrence.Span), Width = 180 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Konum", DataPropertyName = nameof(RecurrenceService.Recurrence.Locations), Width = 60 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Yollar", DataPropertyName = nameof(RecurrenceService.Recurrence.PathsText), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(RecurrenceService.Recurrence.Name), Width = 200 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColRecurrenceTimes, DataPropertyName = nameof(RecurrenceService.Recurrence.Events), Width = 55 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColSpan, DataPropertyName = nameof(RecurrenceService.Recurrence.Span), Width = 180 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColLocations, DataPropertyName = nameof(RecurrenceService.Recurrence.Locations), Width = 60 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColPaths, DataPropertyName = nameof(RecurrenceService.Recurrence.PathsText), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _grid.DataSource = items;
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) RevealSelected(); };
 
-        var rescan = ThemeManager.MakeButton("🔁  Seçileni yeniden tara", (_, _) =>
+        var rescan = ThemeManager.MakeButton(Strings.BtnRescanSelected, (_, _) =>
         {
             if (Selected()?.LastPath is { Length: > 0 } p && File.Exists(p)) { ScanRequested?.Invoke([p]); Close(); }
         });
-        var reveal = ThemeManager.MakeButton("📁  Son konumu aç", (_, _) => RevealSelected());
+        var reveal = ThemeManager.MakeButton(Strings.BtnOpenLastLocation, (_, _) => RevealSelected());
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 100 };
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 6, 8, 4) };

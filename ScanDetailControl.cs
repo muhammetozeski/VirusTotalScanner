@@ -23,7 +23,7 @@ internal sealed class ScanDetailControl : UserControl
     readonly Label _sha = new();
     readonly LinkLabel _link = new();
     readonly CheckBox _showAll = new();
-    readonly CheckBox _majorOnly = new() { Text = "Yalnızca büyük motorlar", AutoSize = true, Margin = new Padding(10, 4, 0, 0) };
+    readonly CheckBox _majorOnly = new() { Text = Strings.DetailMajorOnlyCheck, AutoSize = true, Margin = new Padding(10, 4, 0, 0) };
     readonly DataGridView _engines = new();
     readonly Label _empty = new();
 
@@ -118,18 +118,18 @@ internal sealed class ScanDetailControl : UserControl
                 var conns = IocStore.Connections(sha, iocs);
                 if (conns.Count > 0)
                     digest.Lines.Add(new DigestLine(conns.Any(c => c.Malicious) ? "🔴" : "🔗",
-                        $"{conns.Count} taranmış dosyayla ortak ağ göstergesi paylaşıyor (aynı kampanya olabilir)", conns.Any(c => c.Malicious)));
+                        string.Format(Strings.DetailSharedIocCampaignFormat, conns.Count), conns.Any(c => c.Malicious)));
                 BehaviourDigestCache.Put(sha, digest);
                 RenderBehaviour(digest);
             }
-            catch (Exception ex) { NativeMessageBox.Error("Davranış alınamadı: " + ex.Message); }
+            catch (Exception ex) { NativeMessageBox.Error(Strings.BehaviourFailedPrefix + ex.Message); }
             finally { behaviourBtn.Enabled = true; behaviourBtn.Text = old; }
         };
         ThemeManager.StyleButton(behaviourBtn);
 
         togglePanel.Controls.Add(_showAll);
         togglePanel.Controls.Add(_majorOnly);
-        var signalsHelp = new LinkLabel { Text = "❓ Sinyaller ne demek?", AutoSize = true, Margin = new Padding(14, 5, 0, 0) };
+        var signalsHelp = new LinkLabel { Text = Strings.DetailSignalsHelpLink, AutoSize = true, Margin = new Padding(14, 5, 0, 0) };
         signalsHelp.LinkClicked += (_, _) => { using var d = new HelpDialog("Konsensüs"); d.ShowDialog(FindForm()); };
         togglePanel.Controls.Add(signalsHelp);
         togglePanel.Controls.Add(_link);
@@ -199,8 +199,8 @@ internal sealed class ScanDetailControl : UserControl
         // Right-click an engine row: copy the engine name, its result, or search the result online.
         var menu = new ContextMenuStrip();
         menu.Items.Add(Strings.MenuCopyEngineName, null, (_, _) => CopyEngine(r => r.EngineName));
-        menu.Items.Add("📋  Sonucu kopyala", null, (_, _) => CopyEngine(r => r.Result));
-        menu.Items.Add("🔎  Sonucu internette ara", null, (_, _) => SearchEngineResult());
+        menu.Items.Add(Strings.MenuCopyEngineResult, null, (_, _) => CopyEngine(r => r.Result));
+        menu.Items.Add(Strings.MenuSearchEngineResult, null, (_, _) => SearchEngineResult());
         _engines.ContextMenuStrip = menu;
 
         ThemeManager.StyleGrid(_engines);
@@ -229,8 +229,8 @@ internal sealed class ScanDetailControl : UserControl
     {
         if (AppServices.Cache.LocalFirstSeen(item.Md5 ?? item.Report?.Md5) is not { } utc) return null;
         int days = Math.Max(0, (int)(DateTime.UtcNow - utc).TotalDays);
-        string ago = days == 0 ? "bugün" : $"{days} gün önce";
-        return $"💻 Bu makinede ilk görülme: {utc.ToLocalTime():yyyy-MM-dd} ({ago})";
+        string ago = days == 0 ? Strings.RecencyToday : string.Format(Strings.AgeDaysFormat, days);
+        return string.Format(Strings.DetailLocalFirstSeenFormat, utc.ToLocalTime().ToString("yyyy-MM-dd"), ago);
     }
 
     static bool IsStaleSig(VtEngineResult r)
@@ -287,7 +287,7 @@ internal sealed class ScanDetailControl : UserControl
 
         if (trustedSkip)
         {
-            _hero.Set(Strings.StatusSignedShort, "VirusTotal taraması atlandı",
+            _hero.Set(Strings.StatusSignedShort, Strings.DetailTrustedSubtitle,
                 RecommendationService.Build(item!).Headline, "✓", Theme.Current.Accent);
             _actionStrip.Visible = false;
             _meta.Text =
@@ -326,8 +326,8 @@ internal sealed class ScanDetailControl : UserControl
             (LocalFirstSeenLine(item) is { } lfs ? $"\n{lfs}" : "") +
             (report.ConsensusText != null ? $"\n{report.ConsensusText}" : "") +
             (report.ConfidenceText != null ? $"\n{report.ConfidenceText}" : "") +
-            (item.SignatureSoftened ? $"\n🔓 Geçerli imza nedeniyle muhtemel yanlış pozitif: {item.Trust?.Publisher ?? item.Publisher ?? "imzalı"} — ‘Temiz olarak işaretle’ ile onayla" : "") +
-            (item.CommunitySoftened ? $"\n👍 Topluluk çoğunlukla zararsız oyladı ({report.VotesHarmless}/{report.VotesHarmless + report.VotesMalicious} oy) — muhtemel yanlış pozitif" : "") +
+            (item.SignatureSoftened ? "\n" + string.Format(Strings.DetailSignatureSoftenedFormat, item.Trust?.Publisher ?? item.Publisher ?? Strings.DetailSignedFallback) : "") +
+            (item.CommunitySoftened ? "\n" + string.Format(Strings.DetailCommunitySoftenedFormat, report.VotesHarmless, report.VotesHarmless + report.VotesMalicious) : "") +
             (report.StaleText != null ? $"\n{report.StaleText}" : "") +
             (report.CommunityRulesText != null ? $"\n{report.CommunityRulesText}" : "") +
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +
@@ -357,7 +357,7 @@ internal sealed class ScanDetailControl : UserControl
     void RenderBehaviour(BehaviourDigest d)
     {
         _behaviourPanel.Controls.Clear();
-        _behaviourPanel.Controls.Add(new Label { Text = "🧪 Bu dosya çalışırsa PC'ne ne yapar:", AutoSize = true, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Margin = new Padding(0, 2, 0, 4) });
+        _behaviourPanel.Controls.Add(new Label { Text = Strings.DetailBehaviourDigestHeader, AutoSize = true, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), Margin = new Padding(0, 2, 0, 4) });
         foreach (var line in d.Lines)
         {
             bool hasDetails = line.Details is { Count: > 0 };
@@ -407,14 +407,14 @@ internal sealed class ScanDetailControl : UserControl
         if (reco.Level == RecommendationService.Level.Keep) { _actionStrip.Visible = false; return; }
 
         bool remove = reco.Level == RecommendationService.Level.Remove;
-        var quar = ThemeManager.MakeButton("🛡  Karantinaya al", (_, _) => { if (_item != null) QuarantineRequested?.Invoke(_item); }, accent: remove);
-        var rescan = ThemeManager.MakeButton("🔄  Önce yeniden tara", (_, _) => { if (_item != null) RescanRequested?.Invoke(_item); }, accent: !remove);
-        var vt = ThemeManager.MakeButton("🔗  VT raporu", (_, _) => { if (_item?.Report != null) OpenUrlInBrowser(_item.Report.ReportUrl); });
+        var quar = ThemeManager.MakeButton(Strings.DetailActionQuarantine, (_, _) => { if (_item != null) QuarantineRequested?.Invoke(_item); }, accent: remove);
+        var rescan = ThemeManager.MakeButton(Strings.DetailActionRescanFirst, (_, _) => { if (_item != null) RescanRequested?.Invoke(_item); }, accent: !remove);
+        var vt = ThemeManager.MakeButton(Strings.DetailActionVtReport, (_, _) => { if (_item?.Report != null) OpenUrlInBrowser(_item.Report.ReportUrl); });
         if (remove) { _actionStrip.Controls.Add(quar); _actionStrip.Controls.Add(rescan); }
         else { _actionStrip.Controls.Add(rescan); _actionStrip.Controls.Add(quar); }
         _actionStrip.Controls.Add(vt);
         // False-positive escape hatch: vouch the file is clean so it stops being re-flagged every scan.
-        var markClean = ThemeManager.MakeButton("✓  Temiz olarak işaretle", (_, _) => { if (_item != null) MarkCleanRequested?.Invoke(_item); });
+        var markClean = ThemeManager.MakeButton(Strings.MenuMarkClean, (_, _) => { if (_item != null) MarkCleanRequested?.Invoke(_item); });
         _actionStrip.Controls.Add(markClean);
         _actionStrip.Visible = true;
     }

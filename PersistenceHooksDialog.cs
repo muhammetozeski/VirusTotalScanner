@@ -12,7 +12,7 @@ internal sealed class PersistenceHooksDialog : Form
     public PersistenceHooksDialog(string fileName, List<PersistenceHunter.Hook> hooks)
     {
         _hooks = hooks;
-        Text = "🔗 Autostart kancaları — " + fileName;
+        Text = string.Format(Strings.PersistHooksTitleFormat, fileName);
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(820, 420);
         MinimumSize = new Size(600, 320);
@@ -23,16 +23,16 @@ internal sealed class PersistenceHooksDialog : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Konum", DataPropertyName = nameof(PersistenceHunter.Hook.Location), Width = 160 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Ad", DataPropertyName = nameof(PersistenceHunter.Hook.Name), Width = 170 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Komut", DataPropertyName = nameof(PersistenceHunter.Hook.Command), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColLocations, DataPropertyName = nameof(PersistenceHunter.Hook.Location), Width = 160 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColName, DataPropertyName = nameof(PersistenceHunter.Hook.Name), Width = 170 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.PersistHooksColCommand, DataPropertyName = nameof(PersistenceHunter.Hook.Command), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         RefreshGrid();
 
-        var remove = ThemeManager.MakeButton("🗑  Seçili kancayı kaldır", (_, _) => RemoveSelected(), accent: true);
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Width = 90 };
+        var remove = ThemeManager.MakeButton(Strings.BtnPersistRemoveHook, (_, _) => RemoveSelected(), accent: true);
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(8) };
-        top.Controls.Add(new Label { Text = $"{hooks.Count} kalıcılık kancası bulundu. Kaldırma geri alınabilir: kayıt değeri quarantine\\autostart-restore.log'a yazılır, Başlangıç .lnk'i kasaya taşınır.", AutoSize = true, Margin = new Padding(0, 4, 0, 0) });
+        top.Controls.Add(new Label { Text = string.Format(Strings.PersistHooksHeaderFormat, hooks.Count), AutoSize = true, Margin = new Padding(0, 4, 0, 0) });
 
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(10, 6, 10, 6) };
         remove.Dock = DockStyle.Left;
@@ -56,13 +56,13 @@ internal sealed class PersistenceHooksDialog : Form
     void RemoveSelected()
     {
         if (_grid.CurrentRow?.DataBoundItem is not PersistenceHunter.Hook h) return;
-        if (!ConfirmGates.Quarantine.Ask(this, $"Bu autostart kancası kaldırılsın mı?\n[{h.Location}] {h.Name}")) return;
+        if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.PersistHookRemoveConfirmFormat, h.Location, h.Name))) return;
         if (PersistenceHunter.Remove(h, out var err))
         {
             _hooks.Remove(h);
             RefreshGrid();
-            NativeMessageBox.Info("Kanca kaldırıldı (geri alınabilir).");
+            NativeMessageBox.Info(Strings.PersistHookRemovedInfo);
         }
-        else NativeMessageBox.Error("Kaldırılamadı: " + (err ?? "bilinmeyen hata") + "\n(HKLM kancaları yönetici hakları gerektirir.)");
+        else NativeMessageBox.Error(Strings.SweepRemoveFailedPrefix + (err ?? Strings.PersistUnknownError) + Strings.PersistHookRemoveFailedHklmNote);
     }
 }

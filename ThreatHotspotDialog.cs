@@ -13,7 +13,7 @@ internal sealed class ThreatHotspotDialog : Form
 
     public ThreatHotspotDialog(List<ThreatHotspotService.Hotspot> items)
     {
-        Text = "🎯 Tehdit odakları";
+        Text = Strings.DlgThreatHotspotTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(900, 480);
         MinimumSize = new Size(660, 340);
@@ -24,8 +24,8 @@ internal sealed class ThreatHotspotDialog : Form
             Height = 32,
             Padding = new Padding(10, 9, 10, 0),
             Text = items.Count == 0
-                ? "Tekrar tehdit üreten bir klasör bulunamadı."
-                : $"{items.Count} klasör tekrar tehdit üretti — tek dosyayı silmek yerine kaynağı kapatmayı düşün.",
+                ? Strings.ThreatHotspotNone
+                : string.Format(Strings.ThreatHotspotHeaderFormat, items.Count),
         };
 
         _grid.Dock = DockStyle.Fill;
@@ -34,18 +34,18 @@ internal sealed class ThreatHotspotDialog : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Klasör", DataPropertyName = nameof(ThreatHotspotService.Hotspot.Directory), Width = 260 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Farklı tehdit", DataPropertyName = nameof(ThreatHotspotService.Hotspot.DistinctThreats), Width = 90 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Aralık", DataPropertyName = nameof(ThreatHotspotService.Hotspot.Span), Width = 180 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Örnekler", DataPropertyName = nameof(ThreatHotspotService.Hotspot.SamplesText), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFolder, DataPropertyName = nameof(ThreatHotspotService.Hotspot.Directory), Width = 260 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDistinctThreats, DataPropertyName = nameof(ThreatHotspotService.Hotspot.DistinctThreats), Width = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColSpan, DataPropertyName = nameof(ThreatHotspotService.Hotspot.Span), Width = 180 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColSamples, DataPropertyName = nameof(ThreatHotspotService.Hotspot.SamplesText), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _grid.DataSource = items;
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) Reveal(); };
 
-        var rescan = ThemeManager.MakeButton("🔁  Klasörü yeniden tara", (_, _) =>
+        var rescan = ThemeManager.MakeButton(Strings.BtnRescanFolder, (_, _) =>
         {
             if (Selected()?.Directory is { Length: > 0 } d && Directory.Exists(d)) { ScanRequested?.Invoke([d]); Close(); }
         });
-        var reveal = ThemeManager.MakeButton("📁  Klasörü aç", (_, _) => Reveal());
+        var reveal = ThemeManager.MakeButton(Strings.BtnOpenFolder, (_, _) => Reveal());
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 100 };
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 6, 8, 4) };

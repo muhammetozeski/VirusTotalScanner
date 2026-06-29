@@ -37,7 +37,7 @@ internal sealed class CommandPaletteForm : Form
         _search.Dock = DockStyle.Top;
         _search.Font = new Font("Segoe UI", 13f);
         _search.BorderStyle = BorderStyle.FixedSingle;
-        _search.PlaceholderText = "⌘  Komut ara…  (örn. kopya, karantina, drift)";
+        _search.PlaceholderText = Strings.CmdPaletteSearchPlaceholder;
         _search.TextChanged += (_, _) => Filter();
 
         _list.Dock = DockStyle.Fill;

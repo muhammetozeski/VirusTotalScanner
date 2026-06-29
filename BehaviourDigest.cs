@@ -26,25 +26,25 @@ internal static class BehaviourDigestBuilder
     {
         var d = new BehaviourDigest();
         if (b.Network.Count > 0)
-            d.Lines.Add(new("🌐", $"{b.Network.Count} ağ adresine/sunucuya bağlanıyor", false, b.Network.Take(8).ToList()));
+            d.Lines.Add(new("🌐", string.Format(Strings.DigestNetworkFormat, b.Network.Count), false, b.Network.Take(8).ToList()));
         if (b.FilesWritten.Count > 0)
-            d.Lines.Add(new("📄", $"{b.FilesWritten.Count} dosya yazıyor/bırakıyor", false, b.FilesWritten.Take(8).ToList()));
+            d.Lines.Add(new("📄", string.Format(Strings.DigestFilesWrittenFormat, b.FilesWritten.Count), false, b.FilesWritten.Take(8).ToList()));
 
         var persistKeys = b.Registry.Where(r => PersistMarkers.Any(m => (r ?? "").ToLowerInvariant().Contains(m))).ToList();
         if (persistKeys.Count > 0)
-            d.Lines.Add(new("⛔", "Otomatik başlatma/kalıcılık anahtarı yazıyor — yeniden başlatmada hayatta kalır", true, persistKeys.Take(8).ToList()));
+            d.Lines.Add(new("⛔", Strings.DigestPersistence, true, persistKeys.Take(8).ToList()));
         else if (b.Registry.Count > 0)
-            d.Lines.Add(new("🔧", $"{b.Registry.Count} kayıt defteri anahtarı değiştiriyor", false, b.Registry.Take(8).ToList()));
+            d.Lines.Add(new("🔧", string.Format(Strings.DigestRegistryFormat, b.Registry.Count), false, b.Registry.Take(8).ToList()));
 
         if (b.Processes.Count > 0)
-            d.Lines.Add(new("⚙", $"{b.Processes.Count} başka süreç başlatıyor", false, b.Processes.Take(8).ToList()));
+            d.Lines.Add(new("⚙", string.Format(Strings.DigestProcessesFormat, b.Processes.Count), false, b.Processes.Take(8).ToList()));
 
         // Decode MITRE technique ids into plain-Turkish statements grouped by tactic, instead of a bare count.
         foreach (var (tactic, meanings) in MitreGlossary.Decode(b.Mitre))
-            d.Lines.Add(new("🎯", $"{tactic}: {string.Join("; ", meanings)}", MitreGlossary.IsAlarmTactic(tactic)));
+            d.Lines.Add(new("🎯", string.Format(Strings.DigestMitreFormat, tactic, string.Join("; ", meanings)), MitreGlossary.IsAlarmTactic(tactic)));
 
         if (d.Lines.Count == 0)
-            d.Lines.Add(new("✓", "Kayda değer bir sistem etkisi gözlenmedi", false));
+            d.Lines.Add(new("✓", Strings.DigestNoImpact, false));
         return d;
     }
 }

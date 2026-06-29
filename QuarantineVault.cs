@@ -93,7 +93,7 @@ internal static class QuarantineVault
                 long need = new FileInfo(path).Length;
                 var drive = new DriveInfo(Path.GetPathRoot(Folder)!);
                 if (drive.IsReady && drive.AvailableFreeSpace < need + 8L * 1024 * 1024)
-                { error = $"Kasada yer yok — en az {(need / (1024 * 1024)) + 8} MB boşaltın."; return false; }
+                { error = string.Format(Strings.VaultNoSpaceFormat, (need / (1024 * 1024)) + 8); return false; }
             }
             catch { /* can't measure → let the move attempt decide */ }
 
@@ -162,7 +162,7 @@ internal static class QuarantineVault
                     {
                         Id = id,
                         OriginalPath = f, // the held file itself: Restore is a natural no-op, Purge works
-                        Verdict = "kurtarıldı",
+                        Verdict = Strings.VaultVerdictRecovered,
                         QuarantinedUtc = SafeWriteTime(f),
                     });
                     recovered++;
@@ -184,7 +184,7 @@ internal static class QuarantineVault
         try
         {
             string src = VaultFile(e.Id);
-            if (!File.Exists(src)) { error = "Kasa dosyası bulunamadı."; return false; }
+            if (!File.Exists(src)) { error = Strings.VaultFileNotFound; return false; }
 
             // Anti-tamper: if the held file changed since quarantine, something swapped/edited it — refuse to
             // re-arm a tampered binary at a trusted path. Older entries (null VaultSha) skip the check.
@@ -193,12 +193,12 @@ internal static class QuarantineVault
                 var now = HashFile(src);
                 if (now != null && !string.Equals(now, e.VaultSha, StringComparison.OrdinalIgnoreCase))
                 {
-                    error = "Kasa dosyası karantinaya alındığından beri değişmiş — geri yükleme güvenli değil. Bunun yerine 'Kalıcı sil' kullanın.";
+                    error = Strings.VaultTamperedNoRestore;
                     return false;
                 }
             }
 
-            if (File.Exists(e.OriginalPath)) { error = "Orijinal konumda zaten bir dosya var."; return false; }
+            if (File.Exists(e.OriginalPath)) { error = Strings.VaultOriginalPathOccupied; return false; }
 
             string? dir = Path.GetDirectoryName(e.OriginalPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);

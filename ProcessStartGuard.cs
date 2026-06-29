@@ -80,7 +80,7 @@ internal sealed class ProcessStartGuard : IDisposable
             if (report != null && report.TotalEngines > 0) _cache.Put(md5, report, path);
 
             if (report?.IsMalicious == true)
-                ThreatFound?.Invoke(new ScanItem(path) { Report = report, Md5 = md5, Sha256 = sha, OriginNote = "çalıştırılırken yakalandı" });
+                ThreatFound?.Invoke(new ScanItem(path) { Report = report, Md5 = md5, Sha256 = sha, OriginNote = Strings.OriginNoteCaughtAtLaunch });
         }
         catch (Exception ex) { Log("Process-start verdict failed for " + path + ": " + ex.Message, LogLevel.Warning); }
         finally { lock (_lock) { _inflight.Remove(path); } }

@@ -30,9 +30,9 @@ internal sealed class QuarantineVaultDialog : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColOriginalPath, DataPropertyName = nameof(QuarantineEntry.OriginalPath), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
         var restore = ThemeManager.MakeButton(Strings.BtnRestore, (_, _) => _ = RestoreSelectedAsync());
-        var purge = ThemeManager.MakeButton("🗑  Kalıcı sil", (_, _) => PurgeSelected());
-        var purgeAll = ThemeManager.MakeButton("🗑  Tümünü kalıcı sil", (_, _) => PurgeAll());
-        var cleanup = ThemeManager.MakeButton("🧹  Eski kayıtları temizle…", (_, _) => CleanupOld());
+        var purge = ThemeManager.MakeButton(Strings.BtnVaultPurge, (_, _) => PurgeSelected());
+        var purgeAll = ThemeManager.MakeButton(Strings.BtnVaultPurgeAll, (_, _) => PurgeAll());
+        var cleanup = ThemeManager.MakeButton(Strings.BtnVaultCleanupOld, (_, _) => CleanupOld());
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Dock = DockStyle.Right, Width = 100 };
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
         actions.Controls.Add(restore);
@@ -65,8 +65,8 @@ internal sealed class QuarantineVaultDialog : Form
     {
         var list = QuarantineVault.List().ToList();
         _grid.DataSource = list;
-        string recovered = _recovered > 0 ? $"  •  {_recovered} kurtarılan" : "";
-        _sizeLabel.Text = $"{list.Count} dosya  •  geri kazanılabilir {FormatBytes(QuarantineVault.ReclaimableBytes())}{recovered}";
+        string recovered = _recovered > 0 ? string.Format(Strings.VaultRecoveredSuffixFormat, _recovered) : "";
+        _sizeLabel.Text = string.Format(Strings.VaultSizeLabelFormat, list.Count, FormatBytes(QuarantineVault.ReclaimableBytes()), recovered);
     }
 
     List<QuarantineEntry> SelectedEntries() =>
@@ -77,30 +77,30 @@ internal sealed class QuarantineVaultDialog : Form
         var entries = SelectedEntries();
         if (entries.Count == 0) return;
         string prompt = entries.Count == 1
-            ? $"{entries[0].FileName} kalıcı olarak silinsin mi?\nBu geri ALINAMAZ (dosya kasadan tamamen kaldırılır)."
-            : $"Seçili {entries.Count} dosya kalıcı olarak silinsin mi?\nBu geri ALINAMAZ.";
+            ? string.Format(Strings.VaultPurgeOneConfirmFormat, entries[0].FileName)
+            : string.Format(Strings.VaultPurgeManyConfirmFormat, entries.Count);
         if (!ConfirmGates.Quarantine.Ask(this, prompt)) return;
         int ok = entries.Count(e => QuarantineVault.Purge(e, out _));
-        NativeMessageBox.Info($"{ok}/{entries.Count} kalıcı silindi.");
+        NativeMessageBox.Info(string.Format(Strings.VaultPurgedResultFormat, ok, entries.Count));
         Refresh2();
     }
 
     void PurgeAll()
     {
         var all = QuarantineVault.List().ToList();
-        if (all.Count == 0) { NativeMessageBox.Info("Kasa zaten boş."); return; }
-        if (!ConfirmGates.Quarantine.Ask(this, $"Kasadaki TÜM {all.Count} dosya kalıcı olarak silinsin mi?\nBu geri ALINAMAZ.")) return;
+        if (all.Count == 0) { NativeMessageBox.Info(Strings.VaultAlreadyEmpty); return; }
+        if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.VaultPurgeAllConfirmFormat, all.Count))) return;
         int ok = all.Count(e => QuarantineVault.Purge(e, out _));
-        NativeMessageBox.Info($"{ok}/{all.Count} kalıcı silindi.");
+        NativeMessageBox.Info(string.Format(Strings.VaultPurgedResultFormat, ok, all.Count));
         Refresh2();
     }
 
     void CleanupOld()
     {
-        string? input = Dialogs.InputBox("Kaç günden eski karantina kayıtları kalıcı silinsin?", "Eski kayıtları temizle", "30");
+        string? input = Dialogs.InputBox(Strings.VaultCleanupPrompt, Strings.VaultCleanupTitle, "30");
         if (!int.TryParse(input, out int days) || days <= 0) return;
         int n = QuarantineVault.PurgeOlderThan(days);
-        NativeMessageBox.Info($"{n} kayıt kalıcı silindi.");
+        NativeMessageBox.Info(string.Format(Strings.VaultCleanupResultFormat, n));
         Refresh2();
     }
 
@@ -139,9 +139,9 @@ internal sealed class QuarantineVaultDialog : Form
         }
 
         // Batch: one confirm for the whole set, then an aggregate result line.
-        if (!NativeMessageBox.Confirm($"Seçili {entries.Count} dosya orijinal konumlarına geri yüklensin mi?")) return;
+        if (!NativeMessageBox.Confirm(string.Format(Strings.VaultRestoreManyConfirmFormat, entries.Count))) return;
         int ok = entries.Count(e => QuarantineVault.Restore(e, out _));
-        NativeMessageBox.Info($"{ok}/{entries.Count} geri yüklendi.");
+        NativeMessageBox.Info(string.Format(Strings.VaultRestoreManyResultFormat, ok, entries.Count));
         Refresh2();
     }
 }

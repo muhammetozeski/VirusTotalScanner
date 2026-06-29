@@ -45,8 +45,8 @@ internal static class Program
         catch (Exception ex)
         {
             Log("Fatal: " + ex, LogLevel.Error);
-            if (mode == LaunchMode.Cli) { try { Console.Error.WriteLine("FATAL: " + ex.Message); } catch { } return 2; }
-            try { NativeMessageBox.Error("Beklenmeyen hata:\n" + ex.Message); } catch { }
+            if (mode == LaunchMode.Cli) { try { Console.Error.WriteLine(string.Format(Strings.CliFatalFormat, ex.Message)); } catch { } return 2; }
+            try { NativeMessageBox.Error(string.Format(Strings.FatalUnexpectedErrorFormat, ex.Message)); } catch { }
             return 1;
         }
     }
@@ -99,7 +99,7 @@ internal static class Program
         Application.ThreadException += (_, e) =>
         {
             Log("UNHANDLED UI exception: " + e.Exception, LogLevel.Error);
-            try { NativeMessageBox.Error("Beklenmeyen bir hata oluştu (loglandı):\n" + e.Exception.Message); }
+            try { NativeMessageBox.Error(string.Format(Strings.UiThreadExceptionFormat, e.Exception.Message)); }
             catch (Exception ex) { Log("Error dialog failed: " + ex.Message, LogLevel.Warning); }
         };
         var form = new MainForm(startHidden: opts.Tray);

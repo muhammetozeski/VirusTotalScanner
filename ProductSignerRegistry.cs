@@ -72,6 +72,6 @@ internal static class ProductSignerRegistry
         string? key = ProductKey(filePath);
         if (key == null || !_map.TryGetValue(key, out var known) || string.IsNullOrWhiteSpace(known)) return null;
         if (trust.Trusted && string.Equals(trust.Publisher, known, StringComparison.OrdinalIgnoreCase)) return null;
-        return $"⚠ '{key}' normalde '{known}' tarafından imzalı; bu dosya {(trust.Trusted ? "farklı yayıncı: " + trust.Publisher : "imzasız/geçersiz")} — olası sahte/trojanlı sürüm";
+        return string.Format(Strings.SignerContinuityFormat, key, known, trust.Trusted ? Strings.SignerDifferentPublisherPrefix + trust.Publisher : Strings.BaselineSignerInvalid);
     }
 }

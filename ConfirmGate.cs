@@ -29,16 +29,16 @@ internal sealed class ConfirmGate(string title, string question)
 internal static class ConfirmGates
 {
     public static readonly ConfirmGate Quarantine =
-        new("Karantina", "Bu dosya karantinaya alınsın mı? (çalıştırılamasın diye uzantısı .VIRUS yapılır)");
+        new(Strings.GateQuarantineTitle, Strings.GateQuarantineQuestion);
 
     public static readonly ConfirmGate ContextMenuInstall =
-        new("Sağ tuş menüsü kurulumu", "Sağ tuş menüsüne 'VirusTotal ile tara' eklensin mi? (yönetici gerekebilir)");
+        new(Strings.GateContextMenuInstallTitle, Strings.GateContextMenuInstallQuestion);
 
     public static readonly ConfirmGate ClearCache =
-        new("Önbelleği temizle", "Yerel tarama önbelleği (cache.json) temizlensin mi?");
+        new(Strings.CmdClearCacheName, Strings.GateClearCacheQuestion);
 
     public static readonly ConfirmGate DeleteKey =
-        new("Anahtar sil", "Bu API anahtarı silinsin mi?");
+        new(Strings.GateDeleteKeyTitle, Strings.GateDeleteKeyQuestion);
 }
 
 /// <summary>
@@ -102,9 +102,9 @@ internal static class ConfirmDialog
             ClientSize = new Size(460, 160),
         };
         var lbl = new Label { Text = question, Left = 14, Top = 14, Width = 432, Height = 64, AutoSize = false };
-        var dontAsk = new CheckBox { Text = "Bir daha sorma", Left = 14, Top = 86, AutoSize = true };
-        var yes = new Button { Text = "Evet", DialogResult = DialogResult.Yes, Left = 270, Top = 116, Width = 80 };
-        var no = new Button { Text = "Hayır", DialogResult = DialogResult.No, Left = 360, Top = 116, Width = 80 };
+        var dontAsk = new CheckBox { Text = Strings.ConfirmDontAskAgain, Left = 14, Top = 86, AutoSize = true };
+        var yes = new Button { Text = Strings.GateYes, DialogResult = DialogResult.Yes, Left = 270, Top = 116, Width = 80 };
+        var no = new Button { Text = Strings.GateNo, DialogResult = DialogResult.No, Left = 360, Top = 116, Width = 80 };
         form.Controls.AddRange([lbl, dontAsk, yes, no]);
         form.AcceptButton = yes;
         form.CancelButton = no;

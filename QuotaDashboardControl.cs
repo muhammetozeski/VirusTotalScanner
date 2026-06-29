@@ -53,8 +53,8 @@ internal sealed class QuotaDashboardControl : UserControl
         _banner.Visible = false;
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 0, 0, 6) };
-        top.Controls.Add(ThemeManager.MakeButton("↻  Sunucudan kotayı yenile", (_, _) => _ = RefreshFromServerAsync()));
-        top.Controls.Add(ThemeManager.MakeLabel("  4 sorgu/dk • 500/gün • 15.5K/ay (anahtar başına)", subtle: true));
+        top.Controls.Add(ThemeManager.MakeButton(Strings.QuotaBtnRefreshFromServer, (_, _) => _ = RefreshFromServerAsync()));
+        top.Controls.Add(ThemeManager.MakeLabel(Strings.QuotaPerKeyLimitsHint, subtle: true));
 
         _flow.Dock = DockStyle.Fill;
         _flow.AutoScroll = true;
@@ -85,7 +85,7 @@ internal sealed class QuotaDashboardControl : UserControl
         var keys = AppServices.Vault.Keys;
         if (keys.Count == 0)
         {
-            var empty = ThemeManager.MakeLabel("Henüz API anahtarı yok. Ayarlar sekmesinden ekleyin.", subtle: true);
+            var empty = ThemeManager.MakeLabel(Strings.QuotaNoKeysHint, subtle: true);
             _flow.Controls.Add(empty);
         }
         foreach (var entry in keys)
@@ -104,7 +104,7 @@ internal sealed class QuotaDashboardControl : UserControl
 
         var title = new Label
         {
-            Text = (string.IsNullOrWhiteSpace(entry.Label) ? "Key" : entry.Label) + "  •  " + entry.Masked,
+            Text = (string.IsNullOrWhiteSpace(entry.Label) ? Strings.ColKey : entry.Label) + "  •  " + entry.Masked,
             Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
             AutoSize = true,
             Location = new Point(12, 10),
@@ -114,18 +114,18 @@ internal sealed class QuotaDashboardControl : UserControl
         card.Controls.Add(title);
         card.Controls.Add(status);
 
-        var (mMeter, mLabel) = AddMeter(card, "Dakika", 58, Theme.Current.Accent);
-        var (dMeter, dLabel) = AddMeter(card, "Günlük", 98, Theme.Current.Success);
-        var (yMeter, yLabel) = AddMeter(card, "Aylık", 138, Color.MediumPurple);
+        var (mMeter, mLabel) = AddMeter(card, Strings.QuotaMeterMinute, 58, Theme.Current.Accent);
+        var (dMeter, dLabel) = AddMeter(card, Strings.QuotaMeterDaily, 98, Theme.Current.Success);
+        var (yMeter, yLabel) = AddMeter(card, Strings.QuotaMeterMonthly, 138, Color.MediumPurple);
 
         _updaters.Add(nowUtc =>
         {
             entry.Minute.Roll(nowUtc); entry.Daily.Roll(nowUtc); entry.Monthly.Roll(nowUtc);
-            SetMeter(mMeter, mLabel, entry.Minute, nowUtc, "dk");
-            SetMeter(dMeter, dLabel, entry.Daily, nowUtc, "gün");
-            SetMeter(yMeter, yLabel, entry.Monthly, nowUtc, "ay");
-            status.Text = entry.Disabled ? "● Devre dışı: " + (entry.LastError ?? "auth")
-                : entry.IsExhausted(nowUtc) ? "● Dolu — bekleniyor" : "● Aktif";
+            SetMeter(mMeter, mLabel, entry.Minute, nowUtc, Strings.QuotaUnitMinute);
+            SetMeter(dMeter, dLabel, entry.Daily, nowUtc, Strings.QuotaUnitDay);
+            SetMeter(yMeter, yLabel, entry.Monthly, nowUtc, Strings.QuotaUnitMonth);
+            status.Text = entry.Disabled ? Strings.QuotaStatusDisabledPrefix + (entry.LastError ?? Strings.QuotaStatusAuthFallback)
+                : entry.IsExhausted(nowUtc) ? Strings.QuotaStatusExhausted : Strings.QuotaStatusActive;
             status.ForeColor = entry.Disabled ? Theme.Current.Danger
                 : entry.IsExhausted(nowUtc) ? Theme.Current.Warning : Theme.Current.Success;
         });
@@ -167,7 +167,7 @@ internal sealed class QuotaDashboardControl : UserControl
                 _banner.Visible = true;
                 _banner.BackColor = Theme.Current.Warning;
                 _banner.ForeColor = Color.Black;
-                _banner.Text = $"Tüm anahtarlar dolu — {FormatCountdown(left)} sonra otomatik devam edilecek…";
+                _banner.Text = string.Format(Strings.QuotaAllExhaustedBannerFormat, FormatCountdown(left));
             }
         }
     }
@@ -190,9 +190,9 @@ internal sealed class QuotaDashboardControl : UserControl
     static string FormatCountdown(TimeSpan t)
     {
         if (t < TimeSpan.Zero) t = TimeSpan.Zero;
-        if (t.TotalHours >= 1) return $"{(int)t.TotalHours}sa {t.Minutes}dk";
-        if (t.TotalMinutes >= 1) return $"{t.Minutes}dk {t.Seconds}sn";
-        return $"{t.Seconds}sn";
+        if (t.TotalHours >= 1) return string.Format(Strings.QuotaCountdownHoursFormat, (int)t.TotalHours, t.Minutes);
+        if (t.TotalMinutes >= 1) return string.Format(Strings.QuotaCountdownMinutesFormat, t.Minutes, t.Seconds);
+        return string.Format(Strings.QuotaCountdownSecondsFormat, t.Seconds);
     }
 
     void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }

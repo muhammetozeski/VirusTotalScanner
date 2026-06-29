@@ -34,26 +34,26 @@ internal sealed class DownloadsTriageDialog : Form
 
     public DownloadsTriageDialog()
     {
-        Text = "📥 İndirilenler triyajı";
+        Text = Strings.DlgDownloadsTriageTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(900, 520);
         MinimumSize = new Size(640, 360);
 
-        foreach (var d in WindowDays) _window.Items.Add($"Son {d} gün");
+        foreach (var d in WindowDays) _window.Items.Add(string.Format(Strings.IncidentWindowItemFormat, d));
         _window.SelectedIndex = 1; // 30 days
 
-        var refreshBtn = ThemeManager.MakeButton("🔄  Yenile", (_, _) => _ = RunAsync(), accent: true);
-        _scanUnscanned = ThemeManager.MakeButton("🔎  Taranmamışları tara", (_, _) =>
+        var refreshBtn = ThemeManager.MakeButton(Strings.BtnDownloadsRefresh, (_, _) => _ = RunAsync(), accent: true);
+        _scanUnscanned = ThemeManager.MakeButton(Strings.BtnScanUnscanned, (_, _) =>
         {
             var unscanned = _items.Where(i => !i.Scanned && File.Exists(i.Path)).Select(i => i.Path).ToArray();
-            if (unscanned.Length == 0) { _status.Text = "Taranmamış dosya yok."; return; }
+            if (unscanned.Length == 0) { _status.Text = Strings.DownloadsNoUnscanned; return; }
             ScanRequested?.Invoke(unscanned);
             Close();
         });
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Width = 90 };
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 8, 8, 4) };
-        top.Controls.Add(new Label { Text = "Pencere:", AutoSize = true, Margin = new Padding(0, 8, 6, 0) });
+        top.Controls.Add(new Label { Text = Strings.IncidentWindowLabel, AutoSize = true, Margin = new Padding(0, 8, 6, 0) });
         top.Controls.Add(_window);
         top.Controls.Add(refreshBtn);
         top.Controls.Add(_scanUnscanned);
@@ -87,25 +87,25 @@ internal sealed class DownloadsTriageDialog : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih", DataPropertyName = nameof(DownloadItem.ArrivalLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(DownloadItem.Name), Width = 190 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kaynak (indirme)", DataPropertyName = nameof(DownloadItem.Host), Width = 170 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "İmza", DataPropertyName = nameof(DownloadItem.Signature), Width = 140 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Verdikt", DataPropertyName = nameof(DownloadItem.Verdict), Width = 90 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Yol", DataPropertyName = nameof(DownloadItem.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColHistoryDate, DataPropertyName = nameof(DownloadItem.ArrivalLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(DownloadItem.Name), Width = 190 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDownloadSource, DataPropertyName = nameof(DownloadItem.Host), Width = 170 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColSignature, DataPropertyName = nameof(DownloadItem.Signature), Width = 140 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVerdict, DataPropertyName = nameof(DownloadItem.Verdict), Width = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColPath, DataPropertyName = nameof(DownloadItem.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
         _grid.CellFormatting += (_, e) =>
         {
             if (_grid.Rows[e.RowIndex].DataBoundItem is not DownloadItem d) return;
             if (d.Detections > 0) e.CellStyle!.ForeColor = Theme.Current.Danger;
-            else if (e.ColumnIndex == 3 && d.Signature == "imzasız") e.CellStyle!.ForeColor = Theme.Current.Warning;
+            else if (e.ColumnIndex == 3 && d.Signature == Strings.TrustUnsigned) e.CellStyle!.ForeColor = Theme.Current.Warning;
 
             // Same-source cluster: 2+ downloads from one registrable domain (classic bad-distribution
             // pattern). Badge + color the source cell; if any sibling is flagged, the whole group goes red
             // so an as-yet-unscanned neighbor is pulled up by its suspect shared origin.
             if (e.ColumnIndex == 2 && SourceDomain(d.Host) is { } dom && _sourceClusters.TryGetValue(dom, out var cl))
             {
-                if (e.Value is string hv && !hv.Contains('⚑')) e.Value = $"{hv}  ⚑ aynı kaynak ×{cl.Count}";
+                if (e.Value is string hv && !hv.Contains('⚑')) e.Value = string.Format(Strings.DownloadsSameSourceBadgeFormat, hv, cl.Count);
                 e.CellStyle!.ForeColor = cl.Suspect ? Theme.Current.Danger : Theme.Current.Accent;
             }
         };
@@ -124,12 +124,12 @@ internal sealed class DownloadsTriageDialog : Form
         int days = WindowDays[_window.SelectedIndex];
 
         _window.Enabled = false;
-        _status.Text = "Taranıyor…";
+        _status.Text = Strings.IncidentScanning;
         _grid.DataSource = null;
         try
         {
             _items = await DownloadsTriageService.BuildAsync(AppServices.Cache, days,
-                (d, t) => { try { BeginInvoke(() => _status.Text = $"Taranıyor… {d}/{t}"); } catch { } }, ct);
+                (d, t) => { try { BeginInvoke(() => _status.Text = string.Format(Strings.IncidentScanningProgressFormat, d, t)); } catch { } }, ct);
             if (ct.IsCancellationRequested) return;
             _sourceClusters = _items
                 .Select(i => (Dom: SourceDomain(i.Host), i.Detections))
@@ -140,10 +140,10 @@ internal sealed class DownloadsTriageDialog : Form
             _grid.DataSource = _items;
             int unscanned = _items.Count(i => !i.Scanned);
             int threats = _items.Count(i => i.Detections > 0);
-            _status.Text = $"{_items.Count} dosya • {unscanned} taranmamış • {threats} tehdit (önbellekten)";
+            _status.Text = string.Format(Strings.DownloadsSummaryFormat, _items.Count, unscanned, threats);
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { _status.Text = "Hata: " + ex.Message; Log("Downloads triage failed: " + ex, LogLevel.Warning); }
+        catch (Exception ex) { _status.Text = string.Format(Strings.DownloadsErrorFormat, ex.Message); Log("Downloads triage failed: " + ex, LogLevel.Warning); }
         finally { _window.Enabled = true; }
     }
 }

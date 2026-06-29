@@ -30,9 +30,9 @@ internal static class VerdictCategories
 
     public static List<VerdictCategory> Defaults() =>
     [
-        new() { MinDetections = 0, Name = "TEMİZ", ColorHex = "#3FB950" },
-        new() { MinDetections = 2, Name = "ŞÜPHELİ", ColorHex = "#E3B341" },
-        new() { MinDetections = 3, Name = "VİRÜS", ColorHex = "#F85149" },
+        new() { MinDetections = 0, Name = Strings.VerdictCatCleanName, ColorHex = "#3FB950" },
+        new() { MinDetections = 2, Name = Strings.VerdictCatSuspiciousName, ColorHex = "#E3B341" },
+        new() { MinDetections = 3, Name = Strings.VerdictCatVirusName, ColorHex = "#F85149" },
     ];
 
     public static IReadOnlyList<VerdictCategory> All => _cats;
@@ -67,7 +67,7 @@ internal static class VerdictCategories
         foreach (var c in list) byThreshold[Math.Max(0, c.MinDetections)] = c;
         var result = byThreshold.Values.OrderBy(c => c.MinDetections).ToList();
         if (result.Count == 0 || result[0].MinDetections != 0)
-            result.Insert(0, new VerdictCategory { MinDetections = 0, Name = "TEMİZ", ColorHex = "#3FB950" });
+            result.Insert(0, new VerdictCategory { MinDetections = 0, Name = Strings.VerdictCatCleanName, ColorHex = "#3FB950" });
         return result;
     }
 

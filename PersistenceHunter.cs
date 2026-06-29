@@ -26,8 +26,8 @@ internal static class PersistenceHunter
         ScanRunKey(Registry.CurrentUser, false, @"Software\Microsoft\Windows\CurrentVersion\RunOnce", "HKCU\\RunOnce", needles, hooks);
         ScanRunKey(Registry.LocalMachine, true, @"Software\Microsoft\Windows\CurrentVersion\Run", "HKLM\\Run", needles, hooks);
         ScanRunKey(Registry.LocalMachine, true, @"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run", "HKLM\\Run (WOW64)", needles, hooks);
-        ScanStartup(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Başlangıç (kullanıcı)", needles, hooks);
-        ScanStartup(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup), "Başlangıç (ortak)", needles, hooks);
+        ScanStartup(Environment.GetFolderPath(Environment.SpecialFolder.Startup), Strings.PersistLocStartupUser, needles, hooks);
+        ScanStartup(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup), Strings.PersistLocStartupCommon, needles, hooks);
         ScanTasks(needles, hooks);
         return hooks;
     }
@@ -83,9 +83,9 @@ internal static class PersistenceHunter
             {
                 if (!Matches(line, needles)) continue;
                 var fields = SplitCsv(line);
-                string name = fields.Count > 1 ? fields[1] : "(görev)";
+                string name = fields.Count > 1 ? fields[1] : Strings.PersistTaskNameFallback;
                 string cmd = fields.Count > 8 ? fields[8] : line;
-                hooks.Add(new Hook("Zamanlanmış görev", name, cmd, HookKind.Task));
+                hooks.Add(new Hook(Strings.PersistLocScheduledTask, name, cmd, HookKind.Task));
             }
             p.WaitForExit(15000);
         }
@@ -166,7 +166,7 @@ internal static class PersistenceHunter
             p.Start();
             string err = p.StandardError.ReadToEnd();
             p.WaitForExit(15000);
-            if (p.ExitCode != 0) { error = string.IsNullOrWhiteSpace(err) ? $"schtasks çıkış {p.ExitCode}" : err.Trim(); return false; }
+            if (p.ExitCode != 0) { error = string.IsNullOrWhiteSpace(err) ? string.Format(Strings.PersistTaskDeleteExitFormat, p.ExitCode) : err.Trim(); return false; }
             return true;
         }
         catch (Exception ex) { error = ex.Message; return false; }

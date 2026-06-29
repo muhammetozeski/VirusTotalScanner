@@ -17,25 +17,25 @@ internal sealed class HistoryReverdictDialog : Form
 
     public HistoryReverdictDialog()
     {
-        Text = "⚠ Sonradan tehdit oldu mu?";
+        Text = Strings.DlgReverdictTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(880, 500);
         MinimumSize = new Size(640, 360);
 
-        var refreshBtn = ThemeManager.MakeButton("🔄  Yeniden denetle", (_, _) => _ = RunAsync(), accent: true);
-        _rescan = ThemeManager.MakeButton("🔁  Seçileni yeniden tara", (_, _) =>
+        var refreshBtn = ThemeManager.MakeButton(Strings.BtnReverdictRecheck, (_, _) => _ = RunAsync(), accent: true);
+        _rescan = ThemeManager.MakeButton(Strings.BtnRescanSelected, (_, _) =>
         {
             var paths = SelectedPaths();
-            if (paths.Length == 0) { _status.Text = "Diskte bulunan bir satır seç."; return; }
+            if (paths.Length == 0) { _status.Text = Strings.ReverdictSelectRowOnDisk; return; }
             ScanRequested?.Invoke(paths);
             Close();
         });
-        var reveal = ThemeManager.MakeButton("📁  Konumu aç", (_, _) =>
+        var reveal = ThemeManager.MakeButton(Strings.BtnEscalationReveal, (_, _) =>
         {
             if (_grid.CurrentRow?.DataBoundItem is ReverdictEscalation e && !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path))
                 try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + e.Path + "\""); } catch { }
         });
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Width = 90 };
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 8, 8, 4) };
         top.Controls.Add(refreshBtn);
@@ -78,11 +78,11 @@ internal sealed class HistoryReverdictDialog : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "İlk tarama", DataPropertyName = nameof(ReverdictEscalation.FirstSeenLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(ReverdictEscalation.Name), Width = 190 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eskiden", DataPropertyName = nameof(ReverdictEscalation.OldRatio), Width = 80 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Şimdi", DataPropertyName = nameof(ReverdictEscalation.NewRatio), Width = 80 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Konum", DataPropertyName = nameof(ReverdictEscalation.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColReverdictFirstScan, DataPropertyName = nameof(ReverdictEscalation.FirstSeenLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(ReverdictEscalation.Name), Width = 190 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColReverdictOldRatio, DataPropertyName = nameof(ReverdictEscalation.OldRatio), Width = 80 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColReverdictNewRatio, DataPropertyName = nameof(ReverdictEscalation.NewRatio), Width = 80 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColLocations, DataPropertyName = nameof(ReverdictEscalation.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
         _grid.CellFormatting += (_, e) =>
         {
@@ -103,23 +103,23 @@ internal sealed class HistoryReverdictDialog : Form
 
         if (!(Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable))
         {
-            _status.Text = "Anahtarsız (GUI) mod kapalı — bu denetim kotasız yeniden sorgu gerektirir.";
+            _status.Text = Strings.ReverdictNeedKeyless;
             return;
         }
 
-        _status.Text = "Geçmiş yeniden denetleniyor…";
+        _status.Text = Strings.ReverdictChecking;
         _grid.DataSource = null;
         try
         {
             _items = await HistoryReverdictService.CheckAsync(
-                (d, t) => { try { BeginInvoke(() => _status.Text = $"Yeniden denetleniyor… {d}/{t}"); } catch { } }, ct);
+                (d, t) => { try { BeginInvoke(() => _status.Text = string.Format(Strings.ReverdictProgressFormat, d, t)); } catch { } }, ct);
             if (ct.IsCancellationRequested) return;
             _grid.DataSource = _items;
             _status.Text = _items.Count == 0
-                ? "Sonradan tehdide dönüşen, hâlâ diskte olan dosya bulunamadı."
-                : $"{_items.Count} dosya bir zamanlar temizdi, şimdi işaretli ve hâlâ diskte.";
+                ? Strings.ReverdictNoneFound
+                : string.Format(Strings.ReverdictFoundFormat, _items.Count);
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { _status.Text = "Hata: " + ex.Message; Log("History re-verdict failed: " + ex, LogLevel.Warning); }
+        catch (Exception ex) { _status.Text = Strings.ApiKeyErrorPrefix + ex.Message; Log("History re-verdict failed: " + ex, LogLevel.Warning); }
     }
 }

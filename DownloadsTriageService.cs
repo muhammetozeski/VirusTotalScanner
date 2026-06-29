@@ -75,7 +75,7 @@ internal static class DownloadsTriageService
                     Path = p,
                     ArrivalLocal = fi.CreationTime,
                     Host = zone?.HostUrl,
-                    Signature = trust.Trusted ? "✓ " + (trust.Publisher ?? "imzalı") : "imzasız",
+                    Signature = trust.Trusted ? string.Format(Strings.DownloadsTriageSignedFormat, trust.Publisher ?? Strings.DetailSignedFallback) : Strings.TrustUnsigned,
                 };
                 if (fi.Length <= MaxHashBytes && cachedSizes.Contains(fi.Length))
                 {

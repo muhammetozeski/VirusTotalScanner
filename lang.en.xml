@@ -1093,4 +1093,16 @@
   <s name="ZoneSummaryBothFormat">📥 Source zone: {0}{1}\n   Source (CDN/host): {2}\n   Referring page: {3}</s>
   <s name="ZoneSummaryFormat">📥 Source zone: {0}{1}{2}</s>
   <s name="ZoneSourceSuffixFormat"> — {0}</s>
+  <!-- PE identity / signer continuity / process-start / key rotation / quota units -->
+  <s name="PeImpersonationFormat">⚠ Claims to be '{0}' but the signature is {1} — could be IMPERSONATION</s>
+  <s name="PeSigDifferentPrefix">different: </s>
+  <s name="PeSigMissingInvalid">missing/invalid</s>
+  <s name="PeNameMismatchFormat">📛 embedded name '{0}' ≠ on-disk name '{1}'</s>
+  <s name="SignerContinuityFormat">⚠ '{0}' is normally signed by '{1}'; this file is {2} — possibly a fake/trojanized build</s>
+  <s name="SignerDifferentPublisherPrefix">different publisher: </s>
+  <s name="OriginNoteCaughtAtLaunch">caught while launching</s>
+  <s name="ErrNoKeysDefined">No API key is defined. Add a VirusTotal key from Settings.</s>
+  <s name="QuotaUnitMinute">min</s>
+  <s name="QuotaUnitDay">day</s>
+  <s name="QuotaUnitMonth">month</s>
 </strings>

@@ -89,7 +89,7 @@ internal static class CliRunner
         if (opts.SweepResultPath != null)
         {
             try { SweepResultStore.Write(opts.SweepResultPath, scheduler.Items); }
-            catch (Exception ex) { Console.Error.WriteLine("Sweep result write error: " + ex.Message); }
+            catch (Exception ex) { Console.Error.WriteLine(Strings.CliSweepResultWriteErrorPrefix + ex.Message); }
         }
 
         // Verdict-delta gate: compare against a prior --report json baseline (keyed by sha256).
@@ -171,7 +171,7 @@ internal static class CliRunner
         Section(Strings.CliSecFiles, b.FilesWritten);
         Section(Strings.CliSecRegistry, b.Registry);
         Section(Strings.CliSecProcesses, b.Processes);
-        Section("MITRE ATT&CK", b.Mitre);
+        Section(Strings.CliSecMitre, b.Mitre);
         return 0;
     }
 
@@ -231,28 +231,28 @@ internal static class CliRunner
     static async Task<int> WatchCheckCmd()
     {
         int n = ReverdictWatchStore.Count;
-        if (n == 0) { Console.WriteLine("İzleme listesi boş."); return 0; }
-        Console.WriteLine($"{n} izlenen dosya yeniden denetleniyor (anahtarsız)…");
+        if (n == 0) { Console.WriteLine(Strings.CliWatchListEmpty); return 0; }
+        Console.WriteLine(string.Format(Strings.CliWatchRecheckingFormat, n));
         var escalations = await WatchService.CheckAllAsync();
-        if (escalations.Count == 0) { Console.WriteLine("Tespit artışı yok."); return 0; }
+        if (escalations.Count == 0) { Console.WriteLine(Strings.CliWatchNoEscalation); return 0; }
         foreach (var (e, oldD, newD) in escalations)
-            Console.WriteLine($"[ARTIŞ] {e.Name}: {oldD} → {newD}/{e.LastTotal} motor");
+            Console.WriteLine(string.Format(Strings.CliWatchEscalationFormat, e.Name, oldD, newD, e.LastTotal));
         return 1;
     }
 
     static async Task<int> TimelineCmd(int days)
     {
-        Console.WriteLine($"Son {days} günde gelen çalıştırılabilirler taranıyor (verdikt önbellekten)…");
+        Console.WriteLine(string.Format(Strings.CliTimelineScanningFormat, days));
         var result = await IncidentTimelineService.BuildAsync(AppServices.Cache, days,
             (d, t) => { if (d % 250 == 0 || d == t) { try { Console.Error.Write($"\r  {d}/{t}   "); } catch { } } }, default);
         try { Console.Error.WriteLine(); } catch { }
 
         int totalFiles = result.Sum(d => d.Count);
         int totalThreats = result.Sum(d => d.Threats);
-        Console.WriteLine($"{result.Count} gün • {totalFiles} çalıştırılabilir • {totalThreats} tehdit (önbellekten)\n");
+        Console.WriteLine(string.Format(Strings.CliTimelineSummaryFormat, result.Count, totalFiles, totalThreats));
         foreach (var d in result.Take(90))
         {
-            Console.WriteLine($"{d.DayText}  —  {d.Count} dosya, {d.Threats} tehdit, {d.FromNet} internetten");
+            Console.WriteLine(string.Format(Strings.CliTimelineDayFormat, d.DayText, d.Count, d.Threats, d.FromNet));
             foreach (var f in d.Files.Where(f => f.Detections > 0).Take(10))
                 Console.WriteLine($"   [{f.Verdict} {f.Detections}] {f.ArrivalLocal:HH:mm}  {f.Name}{(f.Host != null ? "  <- " + f.Host : "")}");
         }
@@ -335,7 +335,7 @@ internal static class CliRunner
         }
 
         var r = item.Report;
-        string verdict = r?.Verdict ?? (item.Status == ScanStatus.Failed ? "HATA" : "?");
+        string verdict = r?.Verdict ?? (item.Status == ScanStatus.Failed ? Strings.CliVerdictError : "?");
         var color = verdict switch
         {
             "ZARARLI" => ConsoleColor.Red,

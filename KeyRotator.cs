@@ -35,7 +35,7 @@ internal sealed class KeyRotator
 
             string? key = TryConsumeOne(out DateTime? soonest, out bool noKeys);
             if (noKeys)
-                throw new InvalidOperationException("Hiç API anahtarı tanımlı değil. Ayarlar'dan bir VirusTotal anahtarı ekleyin.");
+                throw new InvalidOperationException(Strings.ErrNoKeysDefined);
 
             if (key != null)
             {

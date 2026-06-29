@@ -34,8 +34,8 @@ internal static class ShareCard
         using (var white = new SolidBrush(Color.White))
         {
             g.DrawString(verdict, vf, white, 18, 12);
-            string sub = total > 0 ? $"{det}/{total} motor tespit etti"
-                : item.Status == ScanStatus.TrustedSkipped ? "İmzalı — VT taraması atlandı" : "bilinmiyor";
+            string sub = total > 0 ? string.Format(Strings.ShareCardDetectedFormat, det, total)
+                : item.Status == ScanStatus.TrustedSkipped ? Strings.ShareCardSignedSkipped : Strings.StatusUnknown;
             using var sf = new Font("Segoe UI", 10.5f);
             g.DrawString(sub, sf, white, 20, 46);
         }
@@ -73,7 +73,7 @@ internal static class ShareCard
 
         // Hashes + footer.
         string sha = item.Sha256 ?? report?.Sha256 ?? "";
-        if (sha.Length > 0) g.DrawString("SHA-256  " + sha, mono, subtle, 18, H - 50);
+        if (sha.Length > 0) g.DrawString(Strings.ShareCardSha256Label + sha, mono, subtle, 18, H - 50);
         using (var fpen = new Pen(Blend(t.SubtleText, t.Background, 0.4f))) g.DrawLine(fpen, 18, H - 28, W - 18, H - 28);
         g.DrawString($"{AppConstants.AppTitle} • {DateTime.Now:yyyy-MM-dd}", bodyFont, subtle, 18, H - 22);
 
@@ -86,12 +86,12 @@ internal static class ShareCard
         var sb = new StringBuilder();
         string verdict = item.Verdict.Length > 0 ? item.Verdict : (r?.Verdict ?? "?");
         sb.AppendLine($"[{verdict}{(r != null && r.TotalEngines > 0 ? $" {r.DetectionCount}/{r.TotalEngines}" : "")}] {item.FileName}");
-        if (r?.ThreatLabel is { Length: > 0 } tl) sb.AppendLine("Tür: " + tl);
-        else if (r?.Family is { Length: > 0 } fam) sb.AppendLine("Aile: " + fam);
+        if (r?.ThreatLabel is { Length: > 0 } tl) sb.AppendLine(Strings.DetailLblType + tl);
+        else if (r?.Family is { Length: > 0 } fam) sb.AppendLine(Strings.ShareCardFamilyLabel + fam);
         if (r?.FirstSeenText is { } fs) sb.AppendLine(fs);
-        if (AppServices.Cache.LocalFirstSeen(item.Md5 ?? r?.Md5) is { } lf) sb.AppendLine($"Bu makinede ilk görülme: {lf.ToLocalTime():yyyy-MM-dd}");
-        if (item.Md5 is { Length: > 0 } md5) sb.AppendLine("MD5    " + md5);
-        if ((item.Sha256 ?? r?.Sha256) is { Length: > 0 } sha) sb.AppendLine("SHA256 " + sha);
+        if (AppServices.Cache.LocalFirstSeen(item.Md5 ?? r?.Md5) is { } lf) sb.AppendLine(string.Format(Strings.ShareCardLocalFirstSeenFormat, lf.ToLocalTime()));
+        if (item.Md5 is { Length: > 0 } md5) sb.AppendLine(Strings.ShareCardMd5Label + md5);
+        if ((item.Sha256 ?? r?.Sha256) is { Length: > 0 } sha) sb.AppendLine(Strings.ShareCardSha256TextLabel + sha);
         if (r != null) sb.AppendLine(r.ReportUrl);
         return sb.ToString().TrimEnd();
     }
@@ -106,12 +106,12 @@ internal static class ShareCard
         string ratio = r != null && r.TotalEngines > 0 ? $" {r.DetectionCount}/{r.TotalEngines}" : "";
         sb.AppendLine($"### [{verdict}{ratio}] {item.FileName}");
         sb.AppendLine();
-        if (r?.ThreatLabel is { Length: > 0 } tl) sb.AppendLine("- **Tür:** " + tl);
-        else if (r?.Family is { Length: > 0 } fam) sb.AppendLine("- **Aile:** " + fam);
+        if (r?.ThreatLabel is { Length: > 0 } tl) sb.AppendLine(Strings.ShareCardMdTypeLabel + tl);
+        else if (r?.Family is { Length: > 0 } fam) sb.AppendLine(Strings.ShareCardMdFamilyLabel + fam);
         if (r?.FirstSeenText is { } fs) sb.AppendLine("- " + fs);
         if (item.Md5 is { Length: > 0 } md5) sb.AppendLine("- **MD5:** `" + md5 + "`");
         if ((item.Sha256 ?? r?.Sha256) is { Length: > 0 } sha) sb.AppendLine("- **SHA-256:** `" + sha + "`");
-        if (r != null && !string.IsNullOrEmpty(r.ReportUrl)) sb.AppendLine("- [VirusTotal raporu](" + r.ReportUrl + ")");
+        if (r != null && !string.IsNullOrEmpty(r.ReportUrl)) sb.AppendLine(Strings.ShareCardMdReportLink + r.ReportUrl + ")");
         return sb.ToString().TrimEnd();
     }
 
@@ -120,7 +120,7 @@ internal static class ShareCard
         var r = item.Report;
         var lines = new List<string>();
         if (r == null) return lines;
-        if (r.ThreatLabel is { Length: > 0 } tl) lines.Add("🏷 " + tl);
+        if (r.ThreatLabel is { Length: > 0 } tl) lines.Add(Strings.ShareCardThreatTagPrefix + tl);
         else if (r.FamilyLabel is { } fl) lines.Add(fl);
         if (r.ConsensusText is { } c) lines.Add(c);
         if (r.FirstSeenText is { } fs) lines.Add(fs);

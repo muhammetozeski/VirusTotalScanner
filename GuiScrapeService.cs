@@ -235,7 +235,7 @@ internal static class GuiScrapeService
                     FormBorderStyle = FormBorderStyle.None,
                     StartPosition = FormStartPosition.Manual,
                     Location = new Point(-4000, -4000),
-                    Text = "VirusTotal — reCAPTCHA",
+                    Text = Strings.CaptchaWindowTitle,
                 };
                 _form.FormClosing += (_, e) =>
                 {
@@ -289,7 +289,7 @@ internal static class GuiScrapeService
         _bar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.FromArgb(0xE3, 0xB3, 0x41), Visible = false };
         var lbl = new Label
         {
-            Text = "  VirusTotal reCAPTCHA istedi. Lütfen aşağıda çözün, sonra sağdaki düğmeye basın.",
+            Text = Strings.CaptchaBarPrompt,
             ForeColor = Color.Black,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -297,7 +297,7 @@ internal static class GuiScrapeService
         };
         var btn = new Button
         {
-            Text = "Çözdüm, devam et",
+            Text = Strings.CaptchaBtnSolved,
             Dock = DockStyle.Right,
             Width = 170,
             FlatStyle = FlatStyle.Flat,
@@ -307,7 +307,7 @@ internal static class GuiScrapeService
         btn.Click += (_, _) => OnSolvedClicked();
         var apiBtn = new Button
         {
-            Text = "API anahtarına geç",
+            Text = Strings.CaptchaBtnSwitchToApi,
             Dock = DockStyle.Right,
             Width = 160,
             FlatStyle = FlatStyle.Flat,

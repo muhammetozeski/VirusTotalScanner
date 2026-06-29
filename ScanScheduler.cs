@@ -100,7 +100,7 @@ internal sealed class ScanScheduler
             if (oversize.Count > 0)
             {
                 int capMb = (int)(opts.MaxFileSizeBytes / (1024 * 1024));
-                var skipped = oversize.Select(f => new ScanItem(f) { Status = ScanStatus.Skipped, SkipReason = $"çok büyük (>{capMb} MB)" }).ToList();
+                var skipped = oversize.Select(f => new ScanItem(f) { Status = ScanStatus.Skipped, SkipReason = string.Format(Strings.SkipReasonTooLargeFormat, capMb) }).ToList();
                 UiPost(() => BulkAdd(skipped));
                 for (int n = 0; n < oversize.Count; n++) Bump(ref _skipped);
                 Log($"{oversize.Count} file(s) skipped by the {capMb} MB size cap.", LogLevel.Info);
@@ -199,7 +199,7 @@ internal sealed class ScanScheduler
             // Known-good list check needs the hash, so it stays after hashing.
             if (opts.SkipTrusted && !opts.BypassTrust && KnownGoodDb.Contains(md5, sha256))
             {
-                TrustSkip(item, "Bilinen temiz (yerel liste)", null);
+                TrustSkip(item, Strings.SkipReasonKnownGoodList, null);
                 return;
             }
 
@@ -207,7 +207,7 @@ internal sealed class ScanScheduler
             // user forced a full re-scan with BypassTrust.
             if (!opts.BypassTrust && AllowlistStore.Contains(md5, sha256))
             {
-                TrustSkip(item, "Kullanıcı temiz dedi", null);
+                TrustSkip(item, Strings.SkipReasonUserSaidClean, null);
                 return;
             }
 
@@ -215,7 +215,7 @@ internal sealed class ScanScheduler
             // can't cover.
             if (!opts.BypassTrust && FolderSuppressionStore.Contains(item.FilePath))
             {
-                TrustSkip(item, "Geliştirme klasörü (kullanıcı onayı)", null);
+                TrustSkip(item, Strings.SkipReasonDevFolder, null);
                 return;
             }
 
@@ -241,7 +241,7 @@ internal sealed class ScanScheduler
 
             if (report == null)
             {
-                item.Error = "VT'de bulunamadı veya sorgu sonuç vermedi (yükleme için API anahtarı gerekir).";
+                item.Error = Strings.ItemErrorNoReport;
                 SetStatus(item, ScanStatus.Failed);
                 Bump(ref _failed);
                 // Offline self-heal: if we're offline, remember the file to retry when connectivity returns
@@ -298,7 +298,7 @@ internal sealed class ScanScheduler
                 var progress = new ActionProgress<UploadProgress>(p => UiPost(() =>
                 {
                     item.Progress = (int)Math.Round(p.Percent);
-                    item.Detail = $"Yükleniyor… {p.Percent:F0}%  {FormatBytes(p.BytesSent)}/{FormatBytes(p.TotalBytes)}  ({FormatBytes(p.BytesPerSecond)}/s)";
+                    item.Detail = string.Format(Strings.UploadProgressDetailFormat, p.Percent, FormatBytes(p.BytesSent), FormatBytes(p.TotalBytes), FormatBytes(p.BytesPerSecond));
                 }));
                 await _uploadGate!.WaitAsync(ct);
                 string analysisId;
@@ -329,7 +329,7 @@ internal sealed class ScanScheduler
             await Task.Delay(TimeSpan.FromSeconds(15), ct);
 
             var info = await CallWithRotation(key => _api.GetAnalysisAsync(analysisId, key, ct), ct);
-            UiPost(() => item.Detail = $"Analiz bekleniyor… (durum: {info.Status}, {i + 1}. yoklama)");
+            UiPost(() => item.Detail = string.Format(Strings.PollProgressDetailFormat, info.Status, i + 1));
             if (info.IsCompleted)
                 return await CallWithRotation(key => _api.GetFileReportAsync(sha256, key, ct), ct);
         }

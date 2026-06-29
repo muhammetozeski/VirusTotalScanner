@@ -26,29 +26,29 @@ internal sealed class EscalationDossierDialog : Form
         public string OldRatio => Rec.OldRatio;
         public string NewRatio => Rec.NewRatio;
         public int DaysClean => Math.Max(0, (int)(Rec.FlipUtc - Rec.FirstScanUtc).TotalDays);
-        public string Presence => OnDisk ? "✓ diskte" : "— yok";
+        public string Presence => OnDisk ? Strings.EscalationPresenceOnDisk : Strings.EscalationPresenceGone;
         public string Sha => Rec.Hash;
     }
 
     public EscalationDossierDialog()
     {
-        Text = "🔴 Sonradan tehdit oldu — dosya geçmişi";
+        Text = Strings.DlgEscalationTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(900, 500);
         MinimumSize = new Size(680, 360);
 
-        var live = ThemeManager.MakeButton("🔄  Canlı yeniden denetle (kota)", (_, _) =>
+        var live = ThemeManager.MakeButton(Strings.BtnEscalationLiveReverdict, (_, _) =>
         {
             using var dlg = new HistoryReverdictDialog();
             dlg.ScanRequested += p => ScanRequested?.Invoke(p);
             dlg.ShowDialog(this);
             Load2(); // a re-check may have added new flips
         });
-        var quarantine = ThemeManager.MakeButton("🛡  Karantinaya al", (_, _) => QuarantineSelected());
-        var reveal = ThemeManager.MakeButton("📁  Konumu aç", (_, _) => RevealSelected());
-        var copySha = ThemeManager.MakeButton("📋  SHA-256 kopyala", (_, _) => CopyShaSelected());
-        var openVt = ThemeManager.MakeButton("🌐  VT'de aç", (_, _) => OpenVtSelected());
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Width = 90 };
+        var quarantine = ThemeManager.MakeButton(Strings.DetailActionQuarantine, (_, _) => QuarantineSelected());
+        var reveal = ThemeManager.MakeButton(Strings.BtnEscalationReveal, (_, _) => RevealSelected());
+        var copySha = ThemeManager.MakeButton(Strings.BtnEscalationCopySha, (_, _) => CopyShaSelected());
+        var openVt = ThemeManager.MakeButton(Strings.BtnEscalationOpenVt, (_, _) => OpenVtSelected());
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(8, 8, 8, 4) };
         top.Controls.Add(live);
@@ -84,13 +84,13 @@ internal sealed class EscalationDossierDialog : Form
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tehdit oldu", DataPropertyName = nameof(DossierRow.FlipLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(DossierRow.Name), Width = 180 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Eskiden", DataPropertyName = nameof(DossierRow.OldRatio), Width = 75 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Şimdi", DataPropertyName = nameof(DossierRow.NewRatio), Width = 75 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Temiz kaldı (gün)", DataPropertyName = nameof(DossierRow.DaysClean), Width = 115 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Durum", DataPropertyName = nameof(DossierRow.Presence), Width = 90 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "SHA-256", DataPropertyName = nameof(DossierRow.Sha), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColEscalationFlippedDate, DataPropertyName = nameof(DossierRow.FlipLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(DossierRow.Name), Width = 180 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColReverdictOldRatio, DataPropertyName = nameof(DossierRow.OldRatio), Width = 75 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColReverdictNewRatio, DataPropertyName = nameof(DossierRow.NewRatio), Width = 75 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColEscalationDaysClean, DataPropertyName = nameof(DossierRow.DaysClean), Width = 115 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(DossierRow.Presence), Width = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.MenuCopySha256, DataPropertyName = nameof(DossierRow.Sha), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
         _grid.CellFormatting += (_, e) =>
         {
@@ -114,8 +114,8 @@ internal sealed class EscalationDossierDialog : Form
         _grid.DataSource = _rows;
         int live = _rows.Count(r => r.OnDisk);
         _status.Text = _rows.Count == 0
-            ? "Kayıtlı sonradan-tehdit dönüşü yok."
-            : $"{_rows.Count} dosya sonradan tehdide döndü — {live} tanesi hâlâ diskte.";
+            ? Strings.EscalationNoRecords
+            : string.Format(Strings.EscalationSummaryFormat, _rows.Count, live);
     }
 
     DossierRow? Selected() => _grid.CurrentRow?.DataBoundItem as DossierRow;
@@ -124,9 +124,9 @@ internal sealed class EscalationDossierDialog : Form
     {
         var r = Selected();
         if (r == null) return;
-        if (!r.OnDisk || string.IsNullOrEmpty(r.FilePath)) { _status.Text = "Bu dosya artık diskte değil — karantinaya alınamaz."; return; }
-        if (QuarantineVault.Quarantine(r.FilePath, null, r.Rec.Hash, null, out var err)) { _status.Text = $"Karantinaya alındı: {r.Name}"; Load2(); }
-        else _status.Text = "Karantinaya alınamadı: " + err;
+        if (!r.OnDisk || string.IsNullOrEmpty(r.FilePath)) { _status.Text = Strings.EscalationCannotQuarantineGone; return; }
+        if (QuarantineVault.Quarantine(r.FilePath, null, r.Rec.Hash, null, out var err)) { _status.Text = string.Format(Strings.EscalationQuarantinedFormat, r.Name); Load2(); }
+        else _status.Text = Strings.EscalationQuarantineFailedPrefix + err;
     }
 
     void RevealSelected()
@@ -134,14 +134,14 @@ internal sealed class EscalationDossierDialog : Form
         var r = Selected();
         if (r?.OnDisk == true && !string.IsNullOrEmpty(r.FilePath))
             try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + r.FilePath + "\""); } catch { }
-        else _status.Text = "Dosya diskte bulunamadı.";
+        else _status.Text = Strings.EscalationFileNotOnDisk;
     }
 
     void CopyShaSelected()
     {
         var r = Selected();
         if (r == null || string.IsNullOrEmpty(r.Sha)) return;
-        try { Clipboard.SetText(r.Sha); _status.Text = "SHA-256 kopyalandı."; } catch { }
+        try { Clipboard.SetText(r.Sha); _status.Text = Strings.EscalationShaCopied; } catch { }
     }
 
     void OpenVtSelected()
@@ -149,6 +149,6 @@ internal sealed class EscalationDossierDialog : Form
         var r = Selected();
         if (r == null || string.IsNullOrEmpty(r.Sha)) return;
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://www.virustotal.com/gui/file/" + r.Sha) { UseShellExecute = true }); }
-        catch (Exception ex) { _status.Text = "Açılamadı: " + ex.Message; }
+        catch (Exception ex) { _status.Text = Strings.EscalationOpenFailedPrefix + ex.Message; }
     }
 }

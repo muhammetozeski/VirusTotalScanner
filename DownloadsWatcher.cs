@@ -97,7 +97,7 @@ internal sealed class DownloadsWatcher : IDisposable
                 {
                     var members = ArchiveExpander.ExpandToTemp(path, out tempDir);
                     foreach (var m in members)
-                        await VerdictOne(m, containerPath: path, originNote: "› " + Path.GetFileName(m));
+                        await VerdictOne(m, containerPath: path, originNote: string.Format(Strings.WatcherArchiveMemberFormat, Path.GetFileName(m)));
                 }
                 finally { if (tempDir != null) ArchiveExpander.CleanupTemp(tempDir); }
                 return;
@@ -141,7 +141,7 @@ internal sealed class DownloadsWatcher : IDisposable
         if (report?.IsMalicious == true || lure)
         {
             Interlocked.Increment(ref Flagged);
-            string? note = lure ? "çift uzantı tuzağı" + (originNote != null ? " " + originNote : "") : originNote;
+            string? note = lure ? Strings.WatcherLureLabel + (originNote != null ? " " + originNote : "") : originNote;
             ThreatFound?.Invoke(new ScanItem(containerPath) { Report = report, Md5 = md5, Sha256 = sha, OriginNote = note });
         }
         else Interlocked.Increment(ref Cleared);

@@ -10,34 +10,34 @@ internal static class MitreGlossary
     // technique id (base, no sub-technique suffix) → (tactic heading, one-sentence meaning)
     static readonly Dictionary<string, (string Tactic, string Meaning)> Map = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["T1547"] = ("Kalıcılığı sağlama", "Windows açılışta kendini otomatik başlatacak şekilde yerleşiyor"),
-        ["T1053"] = ("Kalıcılığı sağlama", "Zamanlanmış görev oluşturarak kalıcı oluyor"),
-        ["T1543"] = ("Kalıcılığı sağlama", "Bir sistem servisi kurarak kalıcı oluyor"),
-        ["T1546"] = ("Kalıcılığı sağlama", "Bir olay tetikleyicisine kendini bağlıyor (açılışta çalışır)"),
-        ["T1055"] = ("Savunmayı atlatma", "Kendini başka bir sürecin içine enjekte ediyor (gizlenme)"),
-        ["T1027"] = ("Savunmayı atlatma", "Kodunu gizliyor/şifreliyor, analizden kaçıyor"),
-        ["T1112"] = ("Savunmayı atlatma", "Kayıt defterini değiştiriyor"),
-        ["T1070"] = ("Savunmayı atlatma", "İzlerini siliyor (log/dosya temizleme)"),
-        ["T1562"] = ("Savunmayı atlatma", "Güvenlik araçlarını/korumaları devre dışı bırakmaya çalışıyor"),
-        ["T1497"] = ("Savunmayı atlatma", "Sanal makine/sandbox tespit edip davranışını gizliyor"),
-        ["T1486"] = ("Etki", "Dosyaları şifreleyip fidye isteyebilir (ransomware)"),
-        ["T1490"] = ("Etki", "Sistem kurtarmayı engelliyor (gölge kopyaları siliyor)"),
-        ["T1489"] = ("Etki", "Servisleri durduruyor"),
-        ["T1071"] = ("Komuta-kontrol", "Uzak bir sunucuyla ağ üzerinden haberleşiyor"),
-        ["T1105"] = ("Komuta-kontrol", "İnternetten ek dosya/yük indiriyor"),
-        ["T1095"] = ("Komuta-kontrol", "Standart olmayan bir protokolle dışarı bağlanıyor"),
-        ["T1041"] = ("Veri sızdırma", "Veriyi komuta kanalı üzerinden dışarı çıkarıyor"),
-        ["T1056"] = ("Kimlik bilgisi çalma", "Klavye girişlerini kaydedebiliyor (keylogger)"),
-        ["T1003"] = ("Kimlik bilgisi çalma", "Sistemden parola/kimlik bilgisi çıkarmaya çalışıyor"),
-        ["T1059"] = ("Çalıştırma", "Komut satırı/script ile komut çalıştırıyor"),
-        ["T1204"] = ("Çalıştırma", "Kullanıcının dosyayı açmasıyla çalışıyor"),
-        ["T1082"] = ("Keşif", "Sistem bilgilerini topluyor"),
-        ["T1083"] = ("Keşif", "Dosya ve dizinleri tarıyor"),
-        ["T1057"] = ("Keşif", "Çalışan süreçleri listeliyor"),
-        ["T1518"] = ("Keşif", "Yüklü güvenlik yazılımlarını araştırıyor"),
-        ["T1016"] = ("Keşif", "Ağ yapılandırmasını inceliyor"),
-        ["T1021"] = ("Yatay hareket", "Ağdaki diğer makinelere yayılmaya çalışıyor"),
-        ["T1036"] = ("Savunmayı atlatma", "Meşru bir dosya gibi görünmeye çalışıyor (masquerading)"),
+        ["T1547"] = (Strings.MitreTacticPersistence, Strings.MitreMeaningT1547),
+        ["T1053"] = (Strings.MitreTacticPersistence, Strings.MitreMeaningT1053),
+        ["T1543"] = (Strings.MitreTacticPersistence, Strings.MitreMeaningT1543),
+        ["T1546"] = (Strings.MitreTacticPersistence, Strings.MitreMeaningT1546),
+        ["T1055"] = (Strings.MitreTacticDefenseEvasion, Strings.MitreMeaningT1055),
+        ["T1027"] = (Strings.MitreTacticDefenseEvasion, Strings.MitreMeaningT1027),
+        ["T1112"] = (Strings.MitreTacticDefenseEvasion, Strings.MitreMeaningT1112),
+        ["T1070"] = (Strings.MitreTacticDefenseEvasion, Strings.MitreMeaningT1070),
+        ["T1562"] = (Strings.MitreTacticDefenseEvasion, Strings.MitreMeaningT1562),
+        ["T1497"] = (Strings.MitreTacticDefenseEvasion, Strings.MitreMeaningT1497),
+        ["T1486"] = (Strings.MitreTacticImpact, Strings.MitreMeaningT1486),
+        ["T1490"] = (Strings.MitreTacticImpact, Strings.MitreMeaningT1490),
+        ["T1489"] = (Strings.MitreTacticImpact, Strings.MitreMeaningT1489),
+        ["T1071"] = (Strings.MitreTacticCommandControl, Strings.MitreMeaningT1071),
+        ["T1105"] = (Strings.MitreTacticCommandControl, Strings.MitreMeaningT1105),
+        ["T1095"] = (Strings.MitreTacticCommandControl, Strings.MitreMeaningT1095),
+        ["T1041"] = (Strings.MitreTacticExfiltration, Strings.MitreMeaningT1041),
+        ["T1056"] = (Strings.MitreTacticCredentialTheft, Strings.MitreMeaningT1056),
+        ["T1003"] = (Strings.MitreTacticCredentialTheft, Strings.MitreMeaningT1003),
+        ["T1059"] = (Strings.MitreTacticExecution, Strings.MitreMeaningT1059),
+        ["T1204"] = (Strings.MitreTacticExecution, Strings.MitreMeaningT1204),
+        ["T1082"] = (Strings.MitreTacticDiscovery, Strings.MitreMeaningT1082),
+        ["T1083"] = (Strings.MitreTacticDiscovery, Strings.MitreMeaningT1083),
+        ["T1057"] = (Strings.MitreTacticDiscovery, Strings.MitreMeaningT1057),
+        ["T1518"] = (Strings.MitreTacticDiscovery, Strings.MitreMeaningT1518),
+        ["T1016"] = (Strings.MitreTacticDiscovery, Strings.MitreMeaningT1016),
+        ["T1021"] = (Strings.MitreTacticLateralMovement, Strings.MitreMeaningT1021),
+        ["T1036"] = (Strings.MitreTacticDefenseEvasion, Strings.MitreMeaningT1036),
     };
 
     static readonly Regex IdRx = new(@"T\d{4}", RegexOptions.Compiled);
@@ -61,7 +61,7 @@ internal static class MitreGlossary
             if (string.IsNullOrWhiteSpace(entry)) continue;
             string tactic, meaning;
             if (Map.TryGetValue(BaseId(entry), out var hit)) { tactic = hit.Tactic; meaning = hit.Meaning; }
-            else { tactic = "Diğer teknikler"; meaning = Description(entry); }
+            else { tactic = Strings.MitreTacticOther; meaning = Description(entry); }
             if (!groups.TryGetValue(tactic, out var list)) { list = []; groups[tactic] = list; order.Add(tactic); }
             if (!list.Contains(meaning)) list.Add(meaning);
         }
@@ -70,5 +70,5 @@ internal static class MitreGlossary
 
     /// <summary>The tactics that mean real damage — coloured as an alarm in the digest.</summary>
     public static bool IsAlarmTactic(string tactic) =>
-        tactic is "Etki" or "Kalıcılığı sağlama" or "Kimlik bilgisi çalma";
+        tactic == Strings.MitreTacticImpact || tactic == Strings.MitreTacticPersistence || tactic == Strings.MitreTacticCredentialTheft;
 }

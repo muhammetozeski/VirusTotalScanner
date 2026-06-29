@@ -16,7 +16,7 @@ internal sealed class AllowlistEntry
     public bool IsStale { get; set; } // re-validation found this once-clean hash is now flagged
 
     [System.Text.Json.Serialization.JsonIgnore] public DateTime AddedLocal => AddedUtc.ToLocalTime();
-    [System.Text.Json.Serialization.JsonIgnore] public string Health => IsStale ? "⚠ ARTIK İŞARETLİ" : (LastVerifiedUtc == default ? "denetlenmedi" : "temiz");
+    [System.Text.Json.Serialization.JsonIgnore] public string Health => IsStale ? Strings.AllowlistHealthStale : (LastVerifiedUtc == default ? Strings.AllowlistHealthUnchecked : Strings.AllowlistHealthClean);
 }
 
 /// <summary>
@@ -123,7 +123,7 @@ internal static class AllowlistStore
             foreach (var h in ScanHistoryStore.All().Where(e => e.Detections == 0 && !string.IsNullOrEmpty(e.Sha256)))
             {
                 if (Entries.Any(x => string.Equals(x.Hash, h.Sha256, StringComparison.OrdinalIgnoreCase))) continue;
-                Entries.Add(new AllowlistEntry { Hash = h.Sha256!, Md5 = h.Md5, FileName = h.Name, Reason = "Geçmişten içe aktarıldı (temiz)", AddedUtc = DateTime.UtcNow, LastVerifiedUtc = h.WhenUtc });
+                Entries.Add(new AllowlistEntry { Hash = h.Sha256!, Md5 = h.Md5, FileName = h.Name, Reason = Strings.AllowlistReasonImportedFromHistory, AddedUtc = DateTime.UtcNow, LastVerifiedUtc = h.WhenUtc });
                 added++;
             }
             if (added > 0) Save();

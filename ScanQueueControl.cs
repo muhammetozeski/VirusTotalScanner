@@ -82,12 +82,12 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFolderRollup, (_, _) => ShowFolderRollup()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFamilyClusters, (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnQuarantineVault, (_, _) => ShowQuarantineVault()));
-        bar.Controls.Add(ThemeManager.MakeButton("🕓  Olay zaman çizelgesi", (_, _) => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); }));
-        bar.Controls.Add(ThemeManager.MakeButton("📥  İndirilenler triyajı", (_, _) => { using var d = new DownloadsTriageDialog(); d.ScanRequested += paths => StartScan(paths, recurse: false); d.ShowDialog(FindForm()); }));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnIncidentTimeline, (_, _) => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); }));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnDownloadsTriage, (_, _) => { using var d = new DownloadsTriageDialog(); d.ScanRequested += paths => StartScan(paths, recurse: false); d.ShowDialog(FindForm()); }));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
-        bar.Controls.Add(ThemeManager.MakeButton("❓  Yardım", (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
-        bar.Controls.Add(ThemeManager.MakeButton("⌨  Ctrl+K · Tüm komutlar", (_, _) => OpenPalette()));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHelp, (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnAllCommands, (_, _) => OpenPalette()));
         var hint = ThemeManager.MakeLabel(Strings.DropHint, subtle: true);
         bar.Controls.Add(hint);
         AttachBarTooltips(bar);
@@ -161,19 +161,19 @@ internal sealed class ScanQueueControl : UserControl
     {
         var strip = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(8, 2, 6, 4) };
 
-        _search.PlaceholderText = "🔎  Ara (ad/yol)…";
+        _search.PlaceholderText = Strings.SearchPlaceholder;
         _search.Margin = new Padding(0, 4, 8, 4);
         _search.TextChanged += (_, _) => { _filterTimer.Stop(); _filterTimer.Start(); }; // debounce
         _filterTimer.Tick += (_, _) => { _filterTimer.Stop(); ApplyFilter(); };
         _search.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { _search.Clear(); e.Handled = true; } };
         strip.Controls.Add(_search);
 
-        AddChip(strip, Bucket.All, "Tümü", null);
-        AddChip(strip, Bucket.Clean, "Temiz", Theme.Current.Success);
-        AddChip(strip, Bucket.Suspicious, "Şüpheli", Theme.Current.Warning);
-        AddChip(strip, Bucket.Malicious, "Zararlı", Theme.Current.Danger);
-        AddChip(strip, Bucket.Skipped, "Atlandı", null);
-        AddChip(strip, Bucket.Error, "Hata", null);
+        AddChip(strip, Bucket.All, Strings.ChipAll, null);
+        AddChip(strip, Bucket.Clean, Strings.ColClean, Theme.Current.Success);
+        AddChip(strip, Bucket.Suspicious, Strings.ColSuspicious, Theme.Current.Warning);
+        AddChip(strip, Bucket.Malicious, Strings.RecoMalwareWord, Theme.Current.Danger);
+        AddChip(strip, Bucket.Skipped, Strings.ChipSkipped, null);
+        AddChip(strip, Bucket.Error, Strings.ChipError, null);
 
         _filterCount.Tag = "subtle";
         strip.Controls.Add(_filterCount);
@@ -342,16 +342,16 @@ internal sealed class ScanQueueControl : UserControl
                 case Bucket.Error: err++; break;
             }
         }
-        SetChip(Bucket.All, "Tümü", all);
-        SetChip(Bucket.Clean, "Temiz", clean);
-        SetChip(Bucket.Suspicious, "Şüpheli", susp);
-        SetChip(Bucket.Malicious, "Zararlı", mal);
-        SetChip(Bucket.Skipped, "Atlandı", skip);
-        SetChip(Bucket.Error, "Hata", err);
-        _filterCount.Text = FilterActive ? $"gösterilen {_grid.Rows.Count} / toplam {all}" : "";
+        SetChip(Bucket.All, Strings.ChipAll, all);
+        SetChip(Bucket.Clean, Strings.ColClean, clean);
+        SetChip(Bucket.Suspicious, Strings.ColSuspicious, susp);
+        SetChip(Bucket.Malicious, Strings.RecoMalwareWord, mal);
+        SetChip(Bucket.Skipped, Strings.ChipSkipped, skip);
+        SetChip(Bucket.Error, Strings.ChipError, err);
+        _filterCount.Text = FilterActive ? string.Format(Strings.FilterCountFormat, _grid.Rows.Count, all) : "";
     }
 
-    void SetChip(Bucket b, string label, int count) { if (_chips.TryGetValue(b, out var c)) c.Text = $"{label} ({count})"; }
+    void SetChip(Bucket b, string label, int count) { if (_chips.TryGetValue(b, out var c)) c.Text = string.Format(Strings.ChipCountFormat, label, count); }
 
     /// <summary>An item just got a verdict: keep counts live and slot it into the active filtered view
     /// without a full rebuild (so scroll position / selection survive during a running scan).</summary>
@@ -401,23 +401,23 @@ internal sealed class ScanQueueControl : UserControl
     {
         var tips = new Dictionary<string, string>
         {
-            [Strings.BtnSelectFiles] = "Taranacak dosya(lar) seç.",
-            [Strings.BtnSelectFolder] = "Bir klasörü, alt klasörleriyle birlikte tara.",
-            [Strings.BtnHashLookup] = "Elindeki bir MD5/SHA hash'ini VirusTotal'de ara (dosya gerekmez).",
-            [Strings.BtnVerifyHash] = "Bir dosyanın beklenen hash ile birebir aynı olduğunu doğrula.",
-            [Strings.BtnScanRunning] = "Şu an çalışan tüm süreçlerin imajlarını tara — 'şu an virüslü müyüm?'.",
-            [Strings.BtnIntegrityCheck] = "İzlemeye aldığın dosyaların değişip değişmediğini (drift) denetle.",
-            [Strings.BtnExportCsv] = "Sonuçları CSV tablosu olarak kaydet.",
-            [Strings.BtnExportReport] = "Sonuçları HTML/CSV/JSON/metin rapora yaz.",
-            [Strings.BtnFolderRollup] = "Taranan klasörleri tehdit/temiz sayılarıyla özetle.",
-            [Strings.BtnFamilyClusters] = "Aynı zararlı ailesini paylaşan farklı dosyaları grupla.",
-            [Strings.BtnQuarantineVault] = "Karantinaya alınanları gör; güvenliyse geri yükle.",
-            [Strings.BtnRecheck] = "Eski önbellek kayıtlarını kotasız (GUI) yeniden sorgula.",
-            [Strings.BtnClearCache] = "Yerel hash önbelleğini temizle (verdiktler tekrar VT'den alınır).",
-            ["🕓  Olay zaman çizelgesi"] = "Diske gelen çalıştırılabilirleri varış gününe göre kümele.",
-            ["⌨  Ctrl+K · Tüm komutlar"] = "Tüm özelliklere tek yerden ulaş (kopya bul, autostart kancaları, aile kümeleri…).",
-            [Strings.BtnPause] = "Devam eden taramayı duraklat / sürdür.",
-            [Strings.BtnCancel] = "Devam eden taramayı iptal et.",
+            [Strings.BtnSelectFiles] = Strings.TipSelectFiles,
+            [Strings.BtnSelectFolder] = Strings.TipSelectFolder,
+            [Strings.BtnHashLookup] = Strings.TipHashLookup,
+            [Strings.BtnVerifyHash] = Strings.TipVerifyHash,
+            [Strings.BtnScanRunning] = Strings.TipScanRunning,
+            [Strings.BtnIntegrityCheck] = Strings.TipIntegrityCheck,
+            [Strings.BtnExportCsv] = Strings.TipExportCsv,
+            [Strings.BtnExportReport] = Strings.TipExportReport,
+            [Strings.BtnFolderRollup] = Strings.TipFolderRollup,
+            [Strings.BtnFamilyClusters] = Strings.TipFamilyClusters,
+            [Strings.BtnQuarantineVault] = Strings.TipQuarantineVault,
+            [Strings.BtnRecheck] = Strings.TipRecheck,
+            [Strings.BtnClearCache] = Strings.TipClearCache,
+            [Strings.BtnIncidentTimeline] = Strings.TipIncidentTimeline,
+            [Strings.BtnAllCommands] = Strings.TipAllCommands,
+            [Strings.BtnPause] = Strings.TipPause,
+            [Strings.BtnCancel] = Strings.TipCancel,
         };
         foreach (Control c in bar.Controls)
             if (c is Button b && tips.TryGetValue(b.Text, out var tip)) _tips.SetToolTip(b, tip);
@@ -438,7 +438,7 @@ internal sealed class ScanQueueControl : UserControl
 
     Panel BuildUndoBar()
     {
-        var undo = ThemeManager.MakeButton("↩  Geri al", (_, _) => DoUndoQuarantine());
+        var undo = ThemeManager.MakeButton(Strings.BtnUndo, (_, _) => DoUndoQuarantine());
         undo.Dock = DockStyle.Right;
         var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand };
         close.FlatAppearance.BorderSize = 0;
@@ -457,7 +457,7 @@ internal sealed class ScanQueueControl : UserControl
         _undoEntry = entry;
         _undoBar.BackColor = RecallBlend(Theme.Current.Success, Theme.Current.Panel, 0.22f);
         _undoLabel.ForeColor = Theme.Current.Text;
-        _undoLabel.Text = $"✓  '{fileName}' karantinaya alındı (.VIRUS).";
+        _undoLabel.Text = string.Format(Strings.UndoQuarantinedFormat, fileName);
         _undoBar.Visible = true;
         _undoTimer.Stop();
         _undoTimer.Start();
@@ -471,7 +471,7 @@ internal sealed class ScanQueueControl : UserControl
         HideUndo();
         if (entry == null) return;
         if (QuarantineVault.Restore(entry, out var err))
-            _summary.Text = $"↩ '{Path.GetFileName(entry.OriginalPath)}' geri yüklendi.";
+            _summary.Text = string.Format(Strings.UndoRestoredFormat, Path.GetFileName(entry.OriginalPath));
         else
             NativeMessageBox.Error(string.Format(Strings.VaultRestoreFailedFormat, err));
     }
@@ -497,7 +497,7 @@ internal sealed class ScanQueueControl : UserControl
             if (priorAtPath != null && !string.Equals(priorAtPath.Md5, md5, StringComparison.OrdinalIgnoreCase))
             {
                 _recallBar.BackColor = RecallBlend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
-                _recallLabel.Text = $"⚠ Bu yolda en son FARKLI bir dosya taramıştın ({priorAtPath.WhenLocal:yyyy-MM-dd} — {priorAtPath.Verdict} {priorAtPath.Ratio}); içerik o zamandan beri DEĞİŞTİ.".TrimEnd();
+                _recallLabel.Text = string.Format(Strings.RecallPathChangedFormat, priorAtPath.WhenLocal, priorAtPath.Verdict, priorAtPath.Ratio).TrimEnd();
                 _recallBar.Visible = true;
                 return;
             }
@@ -508,7 +508,7 @@ internal sealed class ScanQueueControl : UserControl
         if (prior.Count < 2) { _recallBar.Visible = false; return; } // 1 = only the current scan's own record
         var last = prior[^2];
         _recallBar.BackColor = RecallBlend(Theme.Current.Accent, Theme.Current.Panel, 0.22f);
-        _recallLabel.Text = $"🕘 Bu dosyayı daha önce {prior.Count - 1} kez taradın. Önceki: {last.WhenLocal:yyyy-MM-dd HH:mm} — {last.Verdict} {last.Ratio}".TrimEnd();
+        _recallLabel.Text = string.Format(Strings.RecallSeenBeforeFormat, prior.Count - 1, last.WhenLocal, last.Verdict, last.Ratio).TrimEnd();
         _recallBar.Visible = true;
     }
 
@@ -537,24 +537,24 @@ internal sealed class ScanQueueControl : UserControl
         var miOpenVt = (ToolStripMenuItem)menu.Items.Add(Strings.MenuOpenVt, null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
 
         var copyMenu = new ToolStripMenuItem(Strings.MenuCopy);
-        copyMenu.DropDownItems.Add("SHA-256", null, (_, _) => CopySafe(string.Join("\n", SelectedItems().Select(i => i.Sha256).Where(s => !string.IsNullOrEmpty(s)))));
-        copyMenu.DropDownItems.Add("MD5", null, (_, _) => CopySafe(SelectedItem()?.Md5));
+        copyMenu.DropDownItems.Add(Strings.MenuCopySha256, null, (_, _) => CopySafe(string.Join("\n", SelectedItems().Select(i => i.Sha256).Where(s => !string.IsNullOrEmpty(s)))));
+        copyMenu.DropDownItems.Add(Strings.MenuCopyMd5, null, (_, _) => CopySafe(SelectedItem()?.Md5));
         copyMenu.DropDownItems.Add(Strings.MenuCopyFilePath, null, (_, _) => CopySafe(SelectedItem()?.FilePath));
         copyMenu.DropDownItems.Add(Strings.MenuCopyFileName, null, (_, _) => CopySafe(SelectedItem()?.FileName));
         copyMenu.DropDownItems.Add(Strings.MenuCopyVerdictLine, null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(VerdictLine(i)); });
         menu.Items.Add(copyMenu);
 
-        var shareMenu = new ToolStripMenuItem("📤  Paylaş");
-        shareMenu.DropDownItems.Add("🖼  Kart resmi (panoya)", null, (_, _) =>
+        var shareMenu = new ToolStripMenuItem(Strings.MenuShare);
+        shareMenu.DropDownItems.Add(Strings.MenuShareCardImage, null, (_, _) =>
         {
             var i = SelectedItem();
             if (i == null) return;
-            try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = "📋 Kart resmi panoya kopyalandı."; }
-            catch (Exception ex) { NativeMessageBox.Error("Kopyalanamadı: " + ex.Message); }
+            try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = Strings.ShareCardCopiedInfo; }
+            catch (Exception ex) { NativeMessageBox.Error(Strings.CopyFailedPrefix + ex.Message); }
         });
-        shareMenu.DropDownItems.Add("📝  Özet metin (panoya)", null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(ShareCard.Text(i)); });
-        shareMenu.DropDownItems.Add("⬇  Markdown özet (panoya)", null, (_, _) => { var i = SelectedItem(); if (i != null) { CopySafe(ShareCard.Markdown(i)); _summary.Text = "📋 Markdown özet panoya kopyalandı."; } });
-        shareMenu.DropDownItems.Add("💾  Kart resmi kaydet…", null, (_, _) => SaveShareCard());
+        shareMenu.DropDownItems.Add(Strings.MenuShareSummaryText, null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(ShareCard.Text(i)); });
+        shareMenu.DropDownItems.Add(Strings.MenuShareMarkdown, null, (_, _) => { var i = SelectedItem(); if (i != null) { CopySafe(ShareCard.Markdown(i)); _summary.Text = Strings.ShareMarkdownCopiedInfo; } });
+        shareMenu.DropDownItems.Add(Strings.MenuShareSaveCard, null, (_, _) => SaveShareCard());
         menu.Items.Add(shareMenu);
 
         var miReveal = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRevealFile, null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
@@ -562,7 +562,7 @@ internal sealed class ScanQueueControl : UserControl
         var miFindCopies = (ToolStripMenuItem)menu.Items.Add(Strings.MenuFindCopies, null, (_, _) => _ = FindCopiesAsync());
         var miPin = (ToolStripMenuItem)menu.Items.Add(Strings.MenuPinBaseline, null, (_, _) => _ = PinBaselineAsync());
         var miPersist = (ToolStripMenuItem)menu.Items.Add(Strings.MenuHuntPersistence, null, (_, _) => HuntPersistence());
-        var miWatch = (ToolStripMenuItem)menu.Items.Add("👁  İzlemeye al (re-verdict)", null, (_, _) =>
+        var miWatch = (ToolStripMenuItem)menu.Items.Add(Strings.MenuWatchAdd, null, (_, _) =>
         {
             var i = SelectedItem();
             if (i?.Sha256 == null) return;
@@ -571,12 +571,12 @@ internal sealed class ScanQueueControl : UserControl
         });
         menu.Items.Add(new ToolStripSeparator());
         var miRescan = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescan, null, (_, _) => RescanSelected());
-        menu.Items.Add("🔁  Yalnızca hatalıları yeniden tara", null, (_, _) => RescanFailed());
+        menu.Items.Add(Strings.MenuRescanFailed, null, (_, _) => RescanFailed());
         var miRescanNoTrust = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRescanNoTrust, null, (_, _) => RescanIgnoringTrust());
         menu.Items.Add(new ToolStripSeparator());
         var miQuarantine = (ToolStripMenuItem)menu.Items.Add(Strings.MenuQuarantine, null, (_, _) => QuarantineSelected());
-        var miMarkClean = (ToolStripMenuItem)menu.Items.Add("✓  Temiz olarak işaretle", null, (_, _) => MarkCleanSelected());
-        var miSuppressFolder = (ToolStripMenuItem)menu.Items.Add("🔇  Bu klasörü sessizleştir", null, (_, _) => SuppressFolder());
+        var miMarkClean = (ToolStripMenuItem)menu.Items.Add(Strings.MenuMarkClean, null, (_, _) => MarkCleanSelected());
+        var miSuppressFolder = (ToolStripMenuItem)menu.Items.Add(Strings.MenuSuppressFolder, null, (_, _) => SuppressFolder());
 
         // Context-aware: disable actions that don't apply to the selected row's current state.
         menu.Opening += (_, e) =>
@@ -592,7 +592,7 @@ internal sealed class ScanQueueControl : UserControl
             miPin.Enabled = exists;
             miPersist.Enabled = i != null;
             miWatch.Enabled = !string.IsNullOrEmpty(i?.Sha256);
-            miWatch.Text = i?.Sha256 != null && ReverdictWatchStore.Contains(i.Sha256) ? "👁  İzlemeden çıkar" : "👁  İzlemeye al (re-verdict)";
+            miWatch.Text = i?.Sha256 != null && ReverdictWatchStore.Contains(i.Sha256) ? Strings.MenuWatchRemove : Strings.MenuWatchAdd;
             miRescan.Enabled = exists;
             miRescanNoTrust.Enabled = exists;
             miQuarantine.Enabled = exists;
@@ -601,8 +601,8 @@ internal sealed class ScanQueueControl : UserControl
 
             // Count-aware labels when several rows are selected (batch actions).
             int n = SelectedItems().Count;
-            miRescan.Text = n > 1 ? $"🔄  {n} dosyayı yeniden tara" : Strings.MenuRescan;
-            miQuarantine.Text = n > 1 ? $"⚠  {n} dosyayı karantinaya al (.VIRUS)" : Strings.MenuQuarantine;
+            miRescan.Text = n > 1 ? string.Format(Strings.MenuRescanCountFormat, n) : Strings.MenuRescan;
+            miQuarantine.Text = n > 1 ? string.Format(Strings.MenuQuarantineCountFormat, n) : Strings.MenuQuarantine;
         };
         miOpenVt.ShortcutKeyDisplayString = "Enter";
         miRescan.ShortcutKeyDisplayString = "Ctrl+R";
@@ -680,7 +680,7 @@ internal sealed class ScanQueueControl : UserControl
 
     void SelectFiles()
     {
-        using var dlg = new OpenFileDialog { Multiselect = true, Title = "Taranacak dosyalar" };
+        using var dlg = new OpenFileDialog { Multiselect = true, Title = Strings.OpenFilesDialogTitle };
         if (dlg.ShowDialog() == DialogResult.OK) StartScan(dlg.FileNames, recurse: false);
     }
 
@@ -776,12 +776,12 @@ internal sealed class ScanQueueControl : UserControl
     {
         string text = "";
         try { if (Clipboard.ContainsText()) text = (Clipboard.GetText() ?? "").Trim().Trim('"'); } catch { }
-        if (string.IsNullOrEmpty(text)) { NativeMessageBox.Info("Pano boş ya da metin içermiyor."); return; }
+        if (string.IsNullOrEmpty(text)) { NativeMessageBox.Info(Strings.ClipboardEmptyInfo); return; }
         if (File.Exists(text)) { StartScan([text], recurse: false); return; }
         if (Directory.Exists(text)) { StartScan([text], recurse: true); return; }
         string hex = text.ToLowerInvariant();
         if (Regex.IsMatch(hex, "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$")) { _ = HashLookupAsync(hex); return; }
-        NativeMessageBox.Info("Panodaki metin bir dosya yolu, klasör ya da hash değil:\n" + (text.Length > 100 ? text[..100] + "…" : text));
+        NativeMessageBox.Info(string.Format(Strings.ClipboardNotPathInfoFormat, text.Length > 100 ? text[..100] + "…" : text));
     }
 
     void TogglePause()
@@ -808,7 +808,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         var paths = _scheduler.Items.Where(i => BucketOf(i) == Bucket.Error && File.Exists(i.FilePath))
             .Select(i => i.FilePath).Distinct().ToArray();
-        if (paths.Length == 0) { NativeMessageBox.Info("Yeniden taranacak hatalı satır yok."); return; }
+        if (paths.Length == 0) { NativeMessageBox.Info(Strings.NoFailedRowsInfo); return; }
         StartScan(paths, recurse: false);
     }
 
@@ -834,7 +834,7 @@ internal sealed class ScanQueueControl : UserControl
         {
             var hooks = PersistenceHunter.Find(originalPath);
             if (hooks.Count == 0) return;
-            if (!NativeMessageBox.Confirm($"{fileName} karantinaya alındı, ama {hooks.Count} otomatik başlatma kancası hâlâ ona işaret ediyor (her açılışta çalıştırmaya çalışır). Şimdi temizleyelim mi?")) return;
+            if (!NativeMessageBox.Confirm(string.Format(Strings.PersistenceCleanupConfirmFormat, fileName, hooks.Count))) return;
             using var dlg = new PersistenceHooksDialog(fileName, hooks);
             dlg.ShowDialog(FindForm());
         }
@@ -853,7 +853,7 @@ internal sealed class ScanQueueControl : UserControl
         if (holders.Count == 0) return false; // not a lock — surface the original error
 
         string who = string.Join(", ", holders.Select(h => $"{h.Name} (PID {h.Pid})"));
-        if (!ConfirmGates.Quarantine.Ask(this, $"Bu dosya şu an çalışıyor: {who}.\nKarantinaya almak için önce kapatılsın mı?"))
+        if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.QuarantineKillConfirmFormat, who)))
         { err = null; return false; } // user declined the kill — don't show a raw error
 
         foreach (var h in holders)
@@ -865,7 +865,7 @@ internal sealed class ScanQueueControl : UserControl
         // Still locked: neutralize at reboot.
         if (NativeFileOps.ScheduleDeleteOnReboot(i.FilePath))
         {
-            NativeMessageBox.Info($"{i.FileName} hâlâ kilitli; bilgisayar yeniden başlatıldığında silinecek şekilde işaretlendi. Lütfen yeniden başlatın.");
+            NativeMessageBox.Info(string.Format(Strings.QuarantineLockedRebootFormat, i.FileName));
             err = null;
         }
         return false;
@@ -874,12 +874,12 @@ internal sealed class ScanQueueControl : UserControl
     void MarkClean(ScanItem item)
     {
         if (item == null) return;
-        if (!AllowlistStore.Add(item, "Kullanıcı temiz olarak işaretledi"))
+        if (!AllowlistStore.Add(item, Strings.AllowlistReasonUserMarkedClean))
         {
-            NativeMessageBox.Info("Bu dosyanın hash'i henüz yok; temiz olarak işaretlenemiyor.");
+            NativeMessageBox.Info(Strings.MarkCleanNoHashInfo);
             return;
         }
-        item.SkipReason = "Kullanıcı temiz dedi";
+        item.SkipReason = Strings.SkipReasonUserSaidClean;
         item.Status = ScanStatus.TrustedSkipped;
         _detail.Show(item);
     }
@@ -889,9 +889,9 @@ internal sealed class ScanQueueControl : UserControl
         var i = SelectedItem();
         string? folder = string.IsNullOrEmpty(i?.FilePath) ? null : Path.GetDirectoryName(i!.FilePath);
         if (string.IsNullOrEmpty(folder)) return;
-        if (!NativeMessageBox.Confirm($"Bu klasör ve altındaki tüm dosyalar bundan sonra taramada atlanacak:\n{folder}\n\nDevam edilsin mi?")) return;
-        if (FolderSuppressionStore.Add(folder)) NativeMessageBox.Info($"Klasör sessizleştirildi:\n{folder}");
-        else NativeMessageBox.Info("Bu klasör zaten listede.");
+        if (!NativeMessageBox.Confirm(string.Format(Strings.SuppressFolderConfirmFormat, folder))) return;
+        if (FolderSuppressionStore.Add(folder)) NativeMessageBox.Info(string.Format(Strings.FolderMutedInfoFormat, folder));
+        else NativeMessageBox.Info(Strings.FolderAlreadyMutedInfo);
     }
 
     void MarkCleanSelected()
@@ -900,8 +900,8 @@ internal sealed class ScanQueueControl : UserControl
         if (items.Count == 0) return;
         int n = 0;
         foreach (var i in items)
-            if (AllowlistStore.Add(i, "Kullanıcı temiz olarak işaretledi")) { i.SkipReason = "Kullanıcı temiz dedi"; i.Status = ScanStatus.TrustedSkipped; n++; }
-        NativeMessageBox.Info($"{n} dosya temiz olarak işaretlendi (bundan sonra taramada atlanır).");
+            if (AllowlistStore.Add(i, Strings.AllowlistReasonUserMarkedClean)) { i.SkipReason = Strings.SkipReasonUserSaidClean; i.Status = ScanStatus.TrustedSkipped; n++; }
+        NativeMessageBox.Info(string.Format(Strings.MarkedCleanCountInfoFormat, n));
     }
 
     void QuarantineSelected()
@@ -910,7 +910,7 @@ internal sealed class ScanQueueControl : UserControl
         if (items.Count == 0) return;
         string prompt = items.Count == 1
             ? string.Format(Strings.QuarantineConfirmFormat, items[0].FileName)
-            : $"{items.Count} dosya karantinaya alınsın mı? (uzantıları .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)";
+            : string.Format(Strings.QuarantineBatchConfirmFormat, items.Count);
         if (!ConfirmGates.Quarantine.Ask(this, prompt)) return;
 
         int ok = 0;
@@ -927,7 +927,7 @@ internal sealed class ScanQueueControl : UserControl
             else NativeMessageBox.Info(Strings.QuarantineDoneInfo);
         }
         else
-            NativeMessageBox.Info($"{ok}/{items.Count} dosya karantinaya alındı." +
+            NativeMessageBox.Info(string.Format(Strings.QuarantineBatchResultFormat, ok, items.Count) +
                 (errors.Count > 0 ? Strings.ErrorsHeader + string.Join("\n", errors.Take(10)) : ""));
     }
 
@@ -980,10 +980,10 @@ internal sealed class ScanQueueControl : UserControl
     {
         var items = _scheduler.Items.Where(i => i.Report != null).ToList();
         if (items.Count == 0) { NativeMessageBox.Info(Strings.NoResultsToExport); return; }
-        using var dlg = new SaveFileDialog { Filter = "CSV|*.csv", FileName = "virustotal-sonuclar.csv" };
+        using var dlg = new SaveFileDialog { Filter = "CSV|*.csv", FileName = Strings.CsvDefaultFileName };
         if (dlg.ShowDialog() != DialogResult.OK) return;
         var sb = new StringBuilder();
-        sb.AppendLine("Dosya;Verdict;Zararli;Supheli;Toplam;MD5;SHA256;Rapor");
+        sb.AppendLine(Strings.CsvHeaderRow);
         foreach (var i in items)
         {
             var r = i.Report!;
@@ -1172,11 +1172,11 @@ internal sealed class ScanQueueControl : UserControl
         string text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed);
         if (p.Done < p.Total && p.FilesPerSec > 0)
         {
-            string eta = p.Remaining is { } rem ? $"  •  Kalan ~{ShortDuration(rem)}" : "";
-            text += $"{eta}  •  {p.FilesPerSec:0.#} dosya/sn  •  Geçen {ShortDuration(p.Elapsed)}";
+            string eta = p.Remaining is { } rem ? string.Format(Strings.ProgressEtaFormat, ShortDuration(rem)) : "";
+            text += string.Format(Strings.ProgressRateFormat, eta, p.FilesPerSec, ShortDuration(p.Elapsed));
         }
         _summary.Text = text;
-        try { _overallTip.SetToolTip(_overall, $"Zararlı {p.Malicious} · Şüpheli {p.Suspicious} · Temiz {p.Clean} · İmzalı {p.SignedSkipped} · Atlandı {p.Skipped} · Hata {p.Failed}  ({p.Done}/{p.Total})"); } catch { }
+        try { _overallTip.SetToolTip(_overall, string.Format(Strings.OverallBarTooltipFormat, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Skipped, p.Failed, p.Done, p.Total)); } catch { }
     }
 
     /// <summary>Owner-draws the overall bar as stacked verdict segments (red/amber/green/grey) with a
@@ -1217,9 +1217,9 @@ internal sealed class ScanQueueControl : UserControl
 
     static string ShortDuration(TimeSpan t)
     {
-        if (t.TotalHours >= 1) return $"{(int)t.TotalHours} sa {t.Minutes} dk";
-        if (t.TotalMinutes >= 1) return $"{t.Minutes} dk {t.Seconds} sn";
-        return $"{Math.Max(0, (int)t.TotalSeconds)} sn";
+        if (t.TotalHours >= 1) return string.Format(Strings.DurationHoursMinutesFormat, (int)t.TotalHours, t.Minutes);
+        if (t.TotalMinutes >= 1) return string.Format(Strings.DurationMinutesSecondsFormat, t.Minutes, t.Seconds);
+        return string.Format(Strings.DurationSecondsFormat, Math.Max(0, (int)t.TotalSeconds));
     }
 
     void OnItemFinished(ScanItem item)
@@ -1266,9 +1266,9 @@ internal sealed class ScanQueueControl : UserControl
                 if (first < 0) first = row.Index;
                 n++;
             }
-        if (n == 0) { _summary.Text = "Görünür tehdit yok."; return; }
+        if (n == 0) { _summary.Text = Strings.NoVisibleThreatsInfo; return; }
         if (first >= 0) try { _grid.FirstDisplayedScrollingRowIndex = first; } catch { }
-        _summary.Text = $"{n} tehdit seçildi — Ctrl+Q ile karantina";
+        _summary.Text = string.Format(Strings.ThreatsSelectedFormat, n);
     }
 
     /// <summary>Move the selection to the next/previous grid row matching <paramref name="match"/>
@@ -1288,7 +1288,7 @@ internal sealed class ScanQueueControl : UserControl
                 var rows = _grid.Rows.Cast<DataGridViewRow>().ToList();
                 int total = rows.Count(r => r.DataBoundItem is ScanItem s && match(s));
                 int rank = rows.Take(idx + 1).Count(r => r.DataBoundItem is ScanItem s && match(s));
-                _summary.Text = $"{rank}/{total}  —  J/K sonraki/önceki, Shift+J/K hatalar";
+                _summary.Text = string.Format(Strings.JumpVerdictPositionFormat, rank, total);
                 return;
             }
         }
@@ -1316,7 +1316,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         var i = SelectedItem();
         if (i == null) return;
-        try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = "📋 Verdikt görseli panoya kopyalandı."; }
+        try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = Strings.VerdictImageCopiedInfo; }
         catch (Exception ex) { Log("Verdict image copy failed: " + ex.Message, LogLevel.Warning); }
     }
 
@@ -1327,15 +1327,15 @@ internal sealed class ScanQueueControl : UserControl
         _emptyCard.BackColor = Theme.Current.Background;
         var stack = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
         stack.Controls.Add(new Label { Text = "🛡️", AutoSize = true, Font = new Font("Segoe UI Emoji", 30f), ForeColor = Theme.Current.Accent, Margin = new Padding(0, 0, 0, 2) });
-        stack.Controls.Add(ThemeManager.MakeLabel("Taramaya başlamak için bir yol seç"));
-        stack.Controls.Add(ThemeManager.MakeLabel("Dosya/klasörleri buraya sürükleyip de bırakabilirsin", subtle: true));
+        stack.Controls.Add(ThemeManager.MakeLabel(Strings.EmptyStateTitle));
+        stack.Controls.Add(ThemeManager.MakeLabel(Strings.EmptyStateDropHint, subtle: true));
         var row = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
-        row.Controls.Add(ThemeManager.MakeButton("📄  Dosya seç…", (_, _) => SelectFiles(), accent: true));
-        row.Controls.Add(ThemeManager.MakeButton("📁  Klasör seç…", (_, _) => SelectFolder()));
-        row.Controls.Add(ThemeManager.MakeButton("🔎  Hash sorgula…", (_, _) => _ = HashLookupAsync()));
+        row.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFiles, (_, _) => SelectFiles(), accent: true));
+        row.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFolder, (_, _) => SelectFolder()));
+        row.Controls.Add(ThemeManager.MakeButton(Strings.BtnHashLookup, (_, _) => _ = HashLookupAsync()));
         stack.Controls.Add(row);
         if (ContextMenuInstaller.Verify() != MenuState.Ok)
-            stack.Controls.Add(ThemeManager.MakeButton("🖱  Sağ tuş menüsünü kur", (_, _) => _ = System.Threading.Tasks.Task.Run(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out _))));
+            stack.Controls.Add(ThemeManager.MakeButton(Strings.BtnInstallContextMenu, (_, _) => _ = System.Threading.Tasks.Task.Run(() => ContextMenuInstaller.Install(Settings.ContextMenuExcludeSafe, out _))));
         _emptyCard.Controls.Add(stack);
         void Center() => stack.Location = new Point(Math.Max(0, (_emptyCard.ClientSize.Width - stack.Width) / 2), Math.Max(0, (_emptyCard.ClientSize.Height - stack.Height) / 2));
         _emptyCard.Resize += (_, _) => Center();
@@ -1400,50 +1400,50 @@ internal sealed class ScanQueueControl : UserControl
     {
         List<CommandRecord> list =
         [
-        new() { Name = "Dosya seç…", Desc = "Taranacak dosya(lar) seç", Run = SelectFiles },
-        new() { Name = "Klasör seç…", Desc = "Bir klasörü alt klasörleriyle tara", Run = SelectFolder },
-        new() { Name = "Hash sorgula…", Desc = "Bir MD5/SHA hash'ini VirusTotal'de ara", Run = () => _ = HashLookupAsync() },
-        new() { Name = "Yalnızca hatalıları yeniden tara", Desc = "Başarısız (Hata) satırların hepsini yeniden tara", Run = RescanFailed },
-        new() { Name = "Panodaki yolu/hash'i tara", Desc = "Panodaki dosya yolunu, klasörü ya da MD5/SHA hash'ini denetle", Run = ScanClipboard },
-        new() { Name = "Hash doğrula…", Desc = "Bir dosyayı beklenen hash ile karşılaştır", Run = () => _ = VerifyHashAsync() },
-        new() { Name = "Çalışanları tara", Desc = "Çalışan tüm süreç imajlarını tara", Run = ScanRunning },
-        new() { Name = "Bütünlük denetimi", Desc = "İzlenen dosyalarda değişiklik/drift ara", Run = () => _ = VerifyBaselineAsync() },
-        new() { Name = "Aile kümeleri", Desc = "Aynı zararlı ailesini paylaşan dosyaları grupla", Run = () => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); } },
-        new() { Name = "Karantina kasası", Desc = "Karantinaya alınanları görüntüle / geri yükle", Run = ShowQuarantineVault },
-        new() { Name = "Olay zaman çizelgesi", Desc = "Gelen çalıştırılabilirleri varış zamanına göre kümele", Run = () => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); } },
-        new() { Name = "Verdikt yeniden denetle", Desc = "Eski önbellek kayıtlarını kotasız yeniden sorgula", Run = () => _ = RunRecheckAsync() },
-        new() { Name = "Klasör özeti", Desc = "Taranan klasörleri tehdit sayısıyla özetle", Run = ShowFolderRollup },
-        new() { Name = "Rapor (HTML)", Desc = "Sonuçları HTML/CSV/JSON/metin rapora yaz", Run = ExportReport },
-        new() { Name = "Dışa aktar (CSV)", Desc = "Sonuçları CSV olarak kaydet", Run = ExportCsv },
-        new() { Name = "Önbelleği temizle", Desc = "Yerel hash önbelleğini sil", Run = ClearCache },
-        new() { Name = "Diğer kopyaları bul (disk)", Desc = "Seçili dosyanın birebir kopyalarını diskte ara", Run = () => _ = FindCopiesAsync() },
-        new() { Name = "Autostart kancalarını bul", Desc = "Seçili dosya için kalıcılık kayıtlarını ara", Run = HuntPersistence },
-        new() { Name = "Klasör komşuları", Desc = "Seçili dosyanın klasöründeki diğer dosyalar", Run = ShowNeighbors },
+        new() { Name = Strings.CmdSelectFilesName, Desc = Strings.CmdSelectFilesDesc, Run = SelectFiles },
+        new() { Name = Strings.BtnPickFolder, Desc = Strings.CmdSelectFolderDesc, Run = SelectFolder },
+        new() { Name = Strings.CmdHashLookupName, Desc = Strings.CmdHashLookupDesc, Run = () => _ = HashLookupAsync() },
+        new() { Name = Strings.CmdRescanFailedName, Desc = Strings.CmdRescanFailedDesc, Run = RescanFailed },
+        new() { Name = Strings.CmdScanClipboardName, Desc = Strings.CmdScanClipboardDesc, Run = ScanClipboard },
+        new() { Name = Strings.CmdVerifyHashName, Desc = Strings.CmdVerifyHashDesc, Run = () => _ = VerifyHashAsync() },
+        new() { Name = Strings.CmdScanRunningName, Desc = Strings.CmdScanRunningDesc, Run = ScanRunning },
+        new() { Name = Strings.CmdIntegrityCheckName, Desc = Strings.CmdIntegrityCheckDesc, Run = () => _ = VerifyBaselineAsync() },
+        new() { Name = Strings.CmdFamilyClustersName, Desc = Strings.CmdFamilyClustersDesc, Run = () => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); } },
+        new() { Name = Strings.CmdQuarantineVaultName, Desc = Strings.CmdQuarantineVaultDesc, Run = ShowQuarantineVault },
+        new() { Name = Strings.CmdIncidentTimelineName, Desc = Strings.CmdIncidentTimelineDesc, Run = () => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); } },
+        new() { Name = Strings.CmdRecheckName, Desc = Strings.CmdRecheckDesc, Run = () => _ = RunRecheckAsync() },
+        new() { Name = Strings.CmdFolderRollupName, Desc = Strings.CmdFolderRollupDesc, Run = ShowFolderRollup },
+        new() { Name = Strings.CmdExportReportName, Desc = Strings.CmdExportReportDesc, Run = ExportReport },
+        new() { Name = Strings.CmdExportCsvName, Desc = Strings.CmdExportCsvDesc, Run = ExportCsv },
+        new() { Name = Strings.CmdClearCacheName, Desc = Strings.CmdClearCacheDesc, Run = ClearCache },
+        new() { Name = Strings.CmdFindCopiesName, Desc = Strings.CmdFindCopiesDesc, Run = () => _ = FindCopiesAsync() },
+        new() { Name = Strings.CmdHuntPersistenceName, Desc = Strings.CmdHuntPersistenceDesc, Run = HuntPersistence },
+        new() { Name = Strings.CmdNeighborsName, Desc = Strings.CmdNeighborsDesc, Run = ShowNeighbors },
         ];
 
         // Named scan profiles: save the current scan settings, or switch to a saved profile in one keystroke.
-        list.Add(new() { Name = "Profil kaydet… (tarama ayarları)", Desc = "Şu anki tarama ayarlarını adlandırılmış profil olarak kaydet", Run = SaveScanProfile });
+        list.Add(new() { Name = Strings.CmdSaveProfileName, Desc = Strings.CmdSaveProfileDesc, Run = SaveScanProfile });
         foreach (var p in ScanProfileStore.All())
         {
             string name = p.Name;
-            list.Add(new() { Name = $"Profil uygula: {name}", Desc = "Bu profilin tarama ayarlarını uygula", Run = () => ApplyScanProfile(name) });
-            list.Add(new() { Name = $"Profil sil: {name}", Desc = "Bu tarama profilini sil", Run = () => { ScanProfileStore.Delete(name); _summary.Text = $"Profil silindi: {name}"; } });
+            list.Add(new() { Name = string.Format(Strings.CmdApplyProfileNameFormat, name), Desc = Strings.CmdApplyProfileDesc, Run = () => ApplyScanProfile(name) });
+            list.Add(new() { Name = string.Format(Strings.CmdDeleteProfileNameFormat, name), Desc = Strings.CmdDeleteProfileDesc, Run = () => { ScanProfileStore.Delete(name); _summary.Text = string.Format(Strings.ProfileDeletedFormat, name); } });
         }
         return list;
     }
 
     void SaveScanProfile()
     {
-        string? name = Dialogs.InputBox("Profil adı:", "Tarama profili kaydet", "");
+        string? name = Dialogs.InputBox(Strings.SaveProfilePrompt, Strings.SaveProfileTitle, "");
         if (string.IsNullOrWhiteSpace(name)) return;
         ScanProfileStore.Save(name);
-        _summary.Text = $"Profil kaydedildi: {name}";
+        _summary.Text = string.Format(Strings.ProfileSavedFormat, name);
     }
 
     void ApplyScanProfile(string name)
     {
         int n = ScanProfileStore.Apply(name);
-        _summary.Text = n > 0 ? $"Profil uygulandı: {name} ({n} ayar)" : $"Profil bulunamadı: {name}";
+        _summary.Text = n > 0 ? string.Format(Strings.ProfileAppliedFormat, name, n) : string.Format(Strings.ProfileNotFoundFormat, name);
     }
 
     // ---- entry points used by the landing-tab launchpad ----
@@ -1453,6 +1453,6 @@ internal sealed class ScanQueueControl : UserControl
     {
         var dl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
         if (Directory.Exists(dl)) StartScan([dl], recurse: false);
-        else NativeMessageBox.Info("İndirilenler klasörü bulunamadı.");
+        else NativeMessageBox.Info(Strings.DownloadsFolderNotFoundInfo);
     }
 }

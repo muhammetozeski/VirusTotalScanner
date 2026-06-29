@@ -1264,4 +1264,17 @@ internal static class Strings
     public static string ZoneSummaryBothFormat = "📥 Kaynak bölgesi: {0}{1}\n   Kaynak (CDN/host): {2}\n   Yönlendiren sayfa: {3}";
     public static string ZoneSummaryFormat = "📥 Kaynak bölgesi: {0}{1}{2}";
     public static string ZoneSourceSuffixFormat = " — {0}";
+
+    // ---- PE identity / signer continuity / process-start / key rotation / quota units ----
+    public static string PeImpersonationFormat = "⚠ '{0}' olduğunu iddia ediyor ama imza {1} — TAKLİT olabilir";
+    public static string PeSigDifferentPrefix = "farklı: ";
+    public static string PeSigMissingInvalid = "yok/geçersiz";
+    public static string PeNameMismatchFormat = "📛 gömülü ad '{0}' ≠ disk adı '{1}'";
+    public static string SignerContinuityFormat = "⚠ '{0}' normalde '{1}' tarafından imzalı; bu dosya {2} — olası sahte/trojanlı sürüm";
+    public static string SignerDifferentPublisherPrefix = "farklı yayıncı: ";
+    public static string OriginNoteCaughtAtLaunch = "çalıştırılırken yakalandı";
+    public static string ErrNoKeysDefined = "Hiç API anahtarı tanımlı değil. Ayarlar'dan bir VirusTotal anahtarı ekleyin.";
+    public static string QuotaUnitMinute = "dk";
+    public static string QuotaUnitDay = "gün";
+    public static string QuotaUnitMonth = "ay";
 }

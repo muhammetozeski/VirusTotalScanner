@@ -16,15 +16,15 @@ internal sealed class LogViewerControl : UserControl
         Padding = new Padding(8);
 
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true };
-        _enable.Text = "Loglama açık";
+        _enable.Text = Strings.LoggingLabel;
         _enable.AutoSize = true;
         _enable.Checked = LoggerHost.IsEnabled;
         _enable.Margin = new Padding(6, 8, 12, 4);
         _enable.CheckedChanged += (_, _) => LoggerHost.SetEnabled(_enable.Checked);
         bar.Controls.Add(_enable);
-        bar.Controls.Add(ThemeManager.MakeButton("Temizle", (_, _) => { _box.Clear(); _lines = 0; Logger.ClearAllLogs(); }));
-        bar.Controls.Add(ThemeManager.MakeButton("Tümünü kopyala", (_, _) => { try { Clipboard.SetText(Logger.GetAllLogsText()); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } }));
-        bar.Controls.Add(ThemeManager.MakeButton("Log klasörünü aç", (_, _) =>
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnLogClear, (_, _) => { _box.Clear(); _lines = 0; Logger.ClearAllLogs(); }));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnLogCopyAll, (_, _) => { try { Clipboard.SetText(Logger.GetAllLogsText()); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } }));
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnLogOpenFolder, (_, _) =>
         {
             try { Directory.CreateDirectory(ConfigPathResolver.LogsFolder); OpenWithDefaultProgram(ConfigPathResolver.LogsFolder); } catch { }
         }));

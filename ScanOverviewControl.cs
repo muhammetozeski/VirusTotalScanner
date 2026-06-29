@@ -99,13 +99,13 @@ internal sealed class ScanOverviewControl : UserControl
         inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var hint = new Label { Text = "🛡  Taramak için dosya/klasörü buraya sürükle", AutoSize = true, Anchor = AnchorStyles.None, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 13f, FontStyle.Bold), Margin = new Padding(0, 12, 0, 8) };
+        var hint = new Label { Text = Strings.OverviewDropHint, AutoSize = true, Anchor = AnchorStyles.None, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 13f, FontStyle.Bold), Margin = new Padding(0, 12, 0, 8) };
         var buttons = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.None, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Margin = new Padding(0, 0, 0, 10) };
-        buttons.Controls.Add(ThemeManager.MakeButton("📄  Dosya seç…", (_, _) => PickFiles(), accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton("📁  Klasör seç…", (_, _) => PickFolder()));
-        buttons.Controls.Add(ThemeManager.MakeButton("🔬  Çalışanları tara", (_, _) => ScanRunningRequested?.Invoke()));
-        buttons.Controls.Add(ThemeManager.MakeButton("⬇  İndirilenleri tara", (_, _) => ScanDownloadsRequested?.Invoke()));
-        buttons.Controls.Add(ThemeManager.MakeButton("🔁  Yeniden denetle", (_, _) => RecheckRequested?.Invoke()));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFiles, (_, _) => PickFiles(), accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFolder, (_, _) => PickFolder()));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnScanRunning, (_, _) => ScanRunningRequested?.Invoke()));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnScanDownloads, (_, _) => ScanDownloadsRequested?.Invoke()));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheckShort, (_, _) => RecheckRequested?.Invoke()));
         inner.Controls.Add(hint, 0, 0);
         inner.Controls.Add(buttons, 0, 1);
         _drop.Controls.Add(inner);
@@ -131,8 +131,8 @@ internal sealed class ScanOverviewControl : UserControl
         var card = ThemeManager.MakeCard();
         card.Dock = DockStyle.Top; card.AutoSize = true; card.Margin = new Padding(8, 8, 8, 2); card.Visible = false;
         var header = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false };
-        header.Controls.Add(ThemeManager.MakeTitle("🚀 Başlangıç — kurulumu tamamla", 10.5f));
-        header.Controls.Add(ThemeManager.MakeButton("Gizle", (_, _) => { _onboardDismissed = true; if (_onboardCard != null) _onboardCard.Visible = false; }));
+        header.Controls.Add(ThemeManager.MakeTitle(Strings.OnboardCardTitle, 10.5f));
+        header.Controls.Add(ThemeManager.MakeButton(Strings.BtnHide, (_, _) => { _onboardDismissed = true; if (_onboardCard != null) _onboardCard.Visible = false; }));
         card.Controls.Add(_onboardRows);
         card.Controls.Add(header);
         _onboardCard = card;
@@ -152,10 +152,10 @@ internal sealed class ScanOverviewControl : UserControl
         if (_onboardDismissed || (keyOk && menuOk && watchOk && scannedOk)) { _onboardCard.Visible = false; return; }
 
         _onboardRows.Controls.Clear();
-        _onboardRows.Controls.Add(CoverageRow("API anahtarı / anahtarsız mod", keyOk, null, () => GoToTab?.Invoke(5), "Ayarlar →"));
-        _onboardRows.Controls.Add(CoverageRow("Sağ-tık menüsünü kur", menuOk, null, () => GoToTab?.Invoke(5), "Ayarlar →"));
-        _onboardRows.Controls.Add(CoverageRow("İndirilenleri izlemeyi aç", watchOk, () => { Settings.WatchDownloads.Value = true; SettingsManager.SaveSettings(); WatchDownloadsToggled?.Invoke(); Refresh2(); }, null, "Aç"));
-        _onboardRows.Controls.Add(CoverageRow("İlk taramanı yap", scannedOk, () => ScanDownloadsRequested?.Invoke(), null, "İndirilenleri tara"));
+        _onboardRows.Controls.Add(CoverageRow(Strings.OnboardStepApiKey, keyOk, null, () => GoToTab?.Invoke(5), Strings.ActionGoSettings));
+        _onboardRows.Controls.Add(CoverageRow(Strings.OnboardStepInstallMenu, menuOk, null, () => GoToTab?.Invoke(5), Strings.ActionGoSettings));
+        _onboardRows.Controls.Add(CoverageRow(Strings.OnboardStepWatchDownloads, watchOk, () => { Settings.WatchDownloads.Value = true; SettingsManager.SaveSettings(); WatchDownloadsToggled?.Invoke(); Refresh2(); }, null, Strings.ActionEnable));
+        _onboardRows.Controls.Add(CoverageRow(Strings.OnboardStepFirstScan, scannedOk, () => ScanDownloadsRequested?.Invoke(), null, Strings.ActionScanDownloads));
         _onboardCard.Visible = true;
     }
 
@@ -165,7 +165,7 @@ internal sealed class ScanOverviewControl : UserControl
         card.Dock = DockStyle.Top;
         card.AutoSize = true;
         card.Margin = new Padding(8, 8, 8, 2);
-        var title = ThemeManager.MakeTitle("🛡 Korumam ne kadar açık?", 10.5f);
+        var title = ThemeManager.MakeTitle(Strings.CoverageCardTitle, 10.5f);
         title.Dock = DockStyle.Top;
         card.Controls.Add(_coverageRows);
         card.Controls.Add(title);
@@ -178,12 +178,12 @@ internal sealed class ScanOverviewControl : UserControl
     void RefreshCoverage()
     {
         _coverageRows.Controls.Clear();
-        _coverageRows.Controls.Add(CoverageRow("İndirilenler izleniyor", Settings.WatchDownloads,
+        _coverageRows.Controls.Add(CoverageRow(Strings.CoverageWatchDownloads, Settings.WatchDownloads,
             enable: () => { Settings.WatchDownloads.Value = true; SettingsManager.SaveSettings(); WatchDownloadsToggled?.Invoke(); Refresh2(); }, settings: null));
-        _coverageRows.Controls.Add(CoverageRow("USB otomatik tarama", Settings.WatchUsb,
+        _coverageRows.Controls.Add(CoverageRow(Strings.CoverageUsbAutoScan, Settings.WatchUsb,
             enable: () => { Settings.WatchUsb.Value = true; SettingsManager.SaveSettings(); Refresh2(); }, settings: null));
-        _coverageRows.Controls.Add(CoverageRow("Zamanlı tarama", SweepScheduler.IsInstalled(), enable: null, settings: () => GoToTab?.Invoke(5)));
-        _coverageRows.Controls.Add(CoverageRow("Sağ-tık menüsü", Settings.ContextMenuInstalled, enable: null, settings: () => GoToTab?.Invoke(5)));
+        _coverageRows.Controls.Add(CoverageRow(Strings.CoverageScheduledScan, SweepScheduler.IsInstalled(), enable: null, settings: () => GoToTab?.Invoke(5)));
+        _coverageRows.Controls.Add(CoverageRow(Strings.CoverageContextMenu, Settings.ContextMenuInstalled, enable: null, settings: () => GoToTab?.Invoke(5)));
     }
 
     Control CoverageRow(string label, bool on, Action? enable, Action? settings, string? actionLabel = null)
@@ -195,8 +195,8 @@ internal sealed class ScanOverviewControl : UserControl
         row.Controls.Add(new Label { Text = label, AutoSize = false, Width = 240, Height = 28, ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 0, 8, 0) });
         if (!on)
         {
-            if (enable != null) row.Controls.Add(ThemeManager.MakeButton(actionLabel ?? "Aç", (_, _) => enable()));
-            else if (settings != null) row.Controls.Add(ThemeManager.MakeButton(actionLabel ?? "Ayarlar →", (_, _) => settings()));
+            if (enable != null) row.Controls.Add(ThemeManager.MakeButton(actionLabel ?? Strings.ActionEnable, (_, _) => enable()));
+            else if (settings != null) row.Controls.Add(ThemeManager.MakeButton(actionLabel ?? Strings.ActionGoSettings, (_, _) => settings()));
         }
         return row;
     }
@@ -206,9 +206,9 @@ internal sealed class ScanOverviewControl : UserControl
         var row = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 3, RowCount = 1 };
         row.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         for (int i = 0; i < 3; i++) row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
-        row.Controls.Add(Tile("Tehdit", _tehditNum, () => Theme.Current.Danger, () => GoToHistoryFiltered?.Invoke("threat")), 0, 0);
-        row.Controls.Add(Tile("Şüpheli", _supheliNum, () => Theme.Current.Warning, () => GoToHistoryFiltered?.Invoke("suspicious")), 1, 0);
-        row.Controls.Add(Tile("Temiz", _temizNum, () => Theme.Current.Success, () => GoToHistoryFiltered?.Invoke("clean")), 2, 0);
+        row.Controls.Add(Tile(Strings.ColThreat, _tehditNum, () => Theme.Current.Danger, () => GoToHistoryFiltered?.Invoke("threat")), 0, 0);
+        row.Controls.Add(Tile(Strings.ColSuspicious, _supheliNum, () => Theme.Current.Warning, () => GoToHistoryFiltered?.Invoke("suspicious")), 1, 0);
+        row.Controls.Add(Tile(Strings.ColClean, _temizNum, () => Theme.Current.Success, () => GoToHistoryFiltered?.Invoke("clean")), 2, 0);
         return row;
     }
 
@@ -225,7 +225,7 @@ internal sealed class ScanOverviewControl : UserControl
         number.Height = number.Font.Height + 14; // DPI-safe: derived from the rendered font height, not a magic px
         number.TextAlign = ContentAlignment.MiddleCenter;
         number.ForeColor = color();
-        var cap = new Label { Text = label + "  ›", Dock = DockStyle.Bottom, AutoSize = true, TextAlign = ContentAlignment.MiddleCenter, Tag = "subtle", Padding = new Padding(0, 0, 0, 6) };
+        var cap = new Label { Text = string.Format(Strings.TileCaptionFormat, label), Dock = DockStyle.Bottom, AutoSize = true, TextAlign = ContentAlignment.MiddleCenter, Tag = "subtle", Padding = new Padding(0, 0, 0, 6) };
         card.Controls.Add(number);
         card.Controls.Add(cap);
         card.Paint += (_, _) => number.ForeColor = color(); // keep tinted across theme changes
@@ -239,7 +239,7 @@ internal sealed class ScanOverviewControl : UserControl
     Control BuildRecent()
     {
         var panel = new Panel { Dock = DockStyle.Top, Height = 240 }; // bounded; the inner list scrolls for >8 rows
-        var title = ThemeManager.MakeTitle("Son taramalar", 11f);
+        var title = ThemeManager.MakeTitle(Strings.RecentScansTitle, 11f);
         title.Dock = DockStyle.Top;
         panel.Controls.Add(_recent);
         panel.Controls.Add(_quota);
@@ -266,25 +266,25 @@ internal sealed class ScanOverviewControl : UserControl
         foreach (var e in all.Reverse().Take(8))
             _recent.Controls.Add(RecentRow(e));
         if (all.Count == 0)
-            _recent.Controls.Add(ThemeManager.MakeLabel("Henüz tarama yok — yukarıdan bir dosya bırak.", subtle: true));
+            _recent.Controls.Add(ThemeManager.MakeLabel(Strings.RecentEmptyHint, subtle: true));
 
         // Recency: lifetime tiles can't tell "clean today" from "haven't scanned in months".
         DateTime? lastScan = all.Count > 0 ? all.Max(e => e.WhenUtc) : null;
         string recency;
-        if (lastScan == null) { recency = "Son tarama: hiç"; _stale = true; }
+        if (lastScan == null) { recency = Strings.LastScanNever; _stale = true; }
         else
         {
             var ago = DateTime.UtcNow - lastScan.Value;
-            string when = ago.TotalHours < 24 ? "bugün" : ago.TotalDays < 2 ? "dün" : $"{(int)ago.TotalDays} gün önce";
-            recency = "Son tarama: " + when;
+            string when = ago.TotalHours < 24 ? Strings.RecencyToday : ago.TotalDays < 2 ? Strings.RecencyYesterday : string.Format(Strings.AgeDaysFormat, (int)ago.TotalDays);
+            recency = Strings.LastScanPrefix + when;
             _stale = ago.TotalDays > Math.Max(1, Settings.RecheckPeriodDays);
         }
 
         int usable = AppServices.Vault.UsableKeyCount, total = AppServices.Vault.Keys.Count;
         int watching = ReverdictWatchStore.Count;
-        _quota.Text = recency + $"   •   Anahtar: {usable}/{total} kullanılabilir"
-            + (Settings.KeylessGuiLookup ? "  •  anahtarsız (GUI) mod açık" : "")
-            + (watching > 0 ? $"  •  👁 {watching} dosya izleniyor" : "");
+        _quota.Text = recency + string.Format(Strings.OverviewKeyAvailableFormat, usable, total)
+            + (Settings.KeylessGuiLookup ? Strings.OverviewKeylessOnSuffix : "")
+            + (watching > 0 ? string.Format(Strings.OverviewWatchingSuffixFormat, watching) : "");
         _quota.ForeColor = _stale ? Theme.Current.Warning : Theme.Current.Text;
 
         UpdateAttention(tehdit);
@@ -320,9 +320,9 @@ internal sealed class ScanOverviewControl : UserControl
         if (report == null)
         {
             bool here = e.Path != null && File.Exists(e.Path);
-            string head = $"{e.Name} — {e.Verdict} {e.Ratio}\n\nTam ayrıntı önbellekte yok";
-            if (here && NativeMessageBox.Confirm(head + ".\nDosyayı yeniden taramak ister misin?")) ScanRequested?.Invoke([e.Path!]);
-            else if (!here) NativeMessageBox.Info(head + " ve dosya artık şurada değil:\n" + (e.Path ?? "(yol yok)"));
+            string head = string.Format(Strings.HistoryReopenHeadFormat, e.Name, e.Verdict, e.Ratio);
+            if (here && NativeMessageBox.Confirm(head + Strings.HistoryReopenRescanSuffix)) ScanRequested?.Invoke([e.Path!]);
+            else if (!here) NativeMessageBox.Info(head + Strings.ReopenFileGoneSuffix + (e.Path ?? Strings.ReopenNoPath));
             return;
         }
         var item = new ScanItem(e.Path ?? e.Name) { Report = report, Status = ScanStatus.Completed, Md5 = e.Md5, Sha256 = e.Sha256 };
@@ -368,25 +368,25 @@ internal sealed class ScanOverviewControl : UserControl
 
         if (liveThreat != null)
         {
-            SetBanner("🔴  Dikkat gerek", $"Bilinen zararlı bir dosya hâlâ diskte: {liveThreat.Name}", Theme.Current.Danger, "Geçmişi aç →", () => GoToTab?.Invoke(4));
+            SetBanner(Strings.BannerTitleAttention, string.Format(Strings.BannerLiveThreatFormat, liveThreat.Name), Theme.Current.Danger, Strings.BtnOpenHistory, () => GoToTab?.Invoke(4));
             return;
         }
         if (AppServices.Vault.UsableKeyCount == 0 && !Settings.KeylessGuiLookup)
         {
-            SetBanner("🟡  Beklemede", "Kullanılabilir anahtar yok ve anahtarsız mod kapalı — tarama yapılamıyor.", Theme.Current.Warning, "Ayarlar →", () => GoToTab?.Invoke(5));
+            SetBanner(Strings.BannerTitlePending, Strings.BannerNoKeyRationale, Theme.Current.Warning, Strings.ActionGoSettings, () => GoToTab?.Invoke(5));
             return;
         }
         int quar = SafeQuarantineCount(), pending = PendingOutbox.Count, watch = ReverdictWatchStore.Count;
         if (quar > 0 || pending > 0 || watch > 0)
         {
             var bits = new List<string>();
-            if (quar > 0) bits.Add($"{quar} dosya karantinada");
-            if (pending > 0) bits.Add($"{pending} dosya çevrimdışı sırada");
-            if (watch > 0) bits.Add($"{watch} dosya izlemede");
-            SetBanner("🟡  Beklemede", string.Join(" · ", bits), Theme.Current.Warning, "Yeniden denetle", () => RecheckRequested?.Invoke());
+            if (quar > 0) bits.Add(string.Format(Strings.BannerBitQuarantinedFormat, quar));
+            if (pending > 0) bits.Add(string.Format(Strings.BannerBitOfflineQueueFormat, pending));
+            if (watch > 0) bits.Add(string.Format(Strings.BannerBitWatchingFormat, watch));
+            SetBanner(Strings.BannerTitlePending, string.Join(" · ", bits), Theme.Current.Warning, Strings.BtnRecheckPlain, () => RecheckRequested?.Invoke());
             return;
         }
-        SetBanner("🟢  Korunuyorsun", "Diskte bilinen canlı tehdit yok.", Theme.Current.Success, "", null);
+        SetBanner(Strings.BannerTitleProtected, Strings.BannerProtectedRationale, Theme.Current.Success, "", null);
     }
 
     bool _stale; // newest scan older than the recheck period (or never scanned)
@@ -400,19 +400,19 @@ internal sealed class ScanOverviewControl : UserControl
         var msgs = new List<string>();
         if (!string.IsNullOrEmpty(_sweepNotice)) msgs.Add(_sweepNotice);
         int escalations = EscalationStore.Count;
-        if (escalations > 0) msgs.Add($"🔴 {escalations} dosya bir zamanlar temizdi, sonradan tehdide dönüştü (Geçmiş sekmesine bak).");
-        if (_stale) msgs.Add("Bir süredir tarama yapılmadı — 'İndirilenleri tara' ya da 'Yeniden denetle' ile güncel tut.");
+        if (escalations > 0) msgs.Add(string.Format(Strings.AttentionEscalationsFormat, escalations));
+        if (_stale) msgs.Add(Strings.AttentionStaleMsg);
         if (AppServices.Vault.UsableKeyCount == 0 && !Settings.KeylessGuiLookup)
-            msgs.Add("Kullanılabilir API anahtarı yok — Ayarlar'dan anahtar ekle ya da anahtarsız modu aç.");
+            msgs.Add(Strings.AttentionNoKeyMsg);
         int quarantined = SafeQuarantineCount();
-        if (quarantined > 0) msgs.Add($"{quarantined} dosya karantinada (geri yüklenebilir).");
+        if (quarantined > 0) msgs.Add(string.Format(Strings.AttentionQuarantinedFormat, quarantined));
         int pending = PendingOutbox.Count;
-        if (pending > 0) msgs.Add($"📤 {pending} dosya çevrimdışı sırada (internet gelince denenecek).");
+        if (pending > 0) msgs.Add(string.Format(Strings.AttentionOfflineQueueFormat, pending));
 
         if (msgs.Count == 0) { _attention.Visible = false; return; }
         _attention.BackColor = Blend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
         _attentionLabel.ForeColor = Theme.Current.Text;
-        _attentionLabel.Text = "⚠  " + string.Join("   •   ", msgs);
+        _attentionLabel.Text = string.Format(Strings.AttentionPrefixFormat, string.Join("   •   ", msgs));
         _attention.Visible = true;
     }
 
@@ -426,14 +426,14 @@ internal sealed class ScanOverviewControl : UserControl
 
     void PickFiles()
     {
-        using var dlg = new OpenFileDialog { Multiselect = true, Title = "Taranacak dosyalar" };
+        using var dlg = new OpenFileDialog { Multiselect = true, Title = Strings.OpenFilesDialogTitle };
         if (dlg.ShowDialog(FindForm()) == DialogResult.OK && dlg.FileNames.Length > 0)
             ScanRequested?.Invoke(dlg.FileNames);
     }
 
     void PickFolder()
     {
-        using var dlg = new FolderBrowserDialog { Description = "Taranacak klasör (alt klasörler dahil)" };
+        using var dlg = new FolderBrowserDialog { Description = Strings.FolderPickDescription };
         if (dlg.ShowDialog(FindForm()) == DialogResult.OK && !string.IsNullOrEmpty(dlg.SelectedPath))
             ScanRequested?.Invoke([dlg.SelectedPath]);
     }

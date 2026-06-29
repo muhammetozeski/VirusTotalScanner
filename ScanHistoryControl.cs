@@ -12,8 +12,8 @@ internal sealed class ScanHistoryControl : UserControl
     string _categoryFilter = ""; // "", "threat", "suspicious", "clean" — set by an overview tile drill-down
     readonly Panel _escBanner = new() { Dock = DockStyle.Fill, Visible = false, Cursor = Cursors.Hand, Padding = new Padding(12, 6, 12, 6) };
     readonly Label _escLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
-    readonly CheckBox _threatsOnly = new() { Text = "Sadece tehditler", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
-    readonly CheckBox _starredOnly = new() { Text = "★ Yıldızlılar", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
+    readonly CheckBox _threatsOnly = new() { Text = Strings.HistoryThreatsOnlyLabel, AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
+    readonly CheckBox _starredOnly = new() { Text = Strings.HistoryStarredOnlyLabel, AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
     readonly Label _count = new() { AutoSize = true, Margin = new Padding(12, 7, 0, 0), Tag = "subtle" };
 
     /// <summary>Raised when the user asks to rescan a path from history.</summary>
@@ -28,24 +28,24 @@ internal sealed class ScanHistoryControl : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // grid
 
         var strip = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(8, 6, 6, 4) };
-        _search.PlaceholderText = "🔎  Ara (ad/yol)…";
+        _search.PlaceholderText = Strings.SearchPlaceholder;
         _search.Margin = new Padding(0, 4, 8, 4);
         _search.TextChanged += (_, _) => { _categoryFilter = ""; Reload(); };
         _search.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) _search.Clear(); };
         _threatsOnly.CheckedChanged += (_, _) => { _categoryFilter = ""; Reload(); };
         _starredOnly.CheckedChanged += (_, _) => { _categoryFilter = ""; Reload(); };
-        var clear = ThemeManager.MakeButton("🗑  Geçmişi temizle", (_, _) =>
+        var clear = ThemeManager.MakeButton(Strings.BtnHistoryClear, (_, _) =>
         {
-            if (ScanHistoryStore.Count > 0 && NativeMessageBox.Confirm("Tüm tarama geçmişi silinsin mi? (önbellek etkilenmez)"))
+            if (ScanHistoryStore.Count > 0 && NativeMessageBox.Confirm(Strings.HistoryClearConfirm))
                 ScanHistoryStore.Clear();
         });
-        var reverdict = ThemeManager.MakeButton("⚠  Sonradan tehdit oldu mu?", (_, _) =>
+        var reverdict = ThemeManager.MakeButton(Strings.BtnHistoryReverdict, (_, _) =>
         {
             using var dlg = new HistoryReverdictDialog();
             dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
             dlg.ShowDialog(FindForm());
         });
-        var report = ThemeManager.MakeButton("📄  Rapor olarak ver…", (_, _) =>
+        var report = ThemeManager.MakeButton(Strings.BtnHistoryExportReport, (_, _) =>
         {
             var menu = new ContextMenuStrip();
             void AddRange(string label, int? days)
@@ -54,31 +54,31 @@ internal sealed class ScanHistoryControl : UserControl
                 {
                     var cutoff = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : DateTime.MinValue;
                     var rows = ScanHistoryStore.All().Where(e => e.WhenUtc >= cutoff).ToList();
-                    if (rows.Count == 0) { NativeMessageBox.Info("Bu aralıkta kayıt yok."); return; }
-                    using var dlg = new SaveFileDialog { Filter = "HTML|*.html|CSV|*.csv|JSON|*.json", FileName = "guvenlik-raporu.html" };
+                    if (rows.Count == 0) { NativeMessageBox.Info(Strings.HistoryNoRecordsInRange); return; }
+                    using var dlg = new SaveFileDialog { Filter = Strings.HistoryReportFilter, FileName = Strings.HistoryReportFileName };
                     if (dlg.ShowDialog() != DialogResult.OK) return;
                     try
                     {
                         ReportWriter.WriteHistory(dlg.FileName, rows, label);
-                        NativeMessageBox.Info($"Rapor yazıldı: {rows.Count} kayıt ({label}).");
+                        NativeMessageBox.Info(string.Format(Strings.HistoryReportWrittenFormat, rows.Count, label));
                         try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + dlg.FileName + "\""); } catch { }
                     }
-                    catch (Exception ex) { NativeMessageBox.Error("Rapor yazılamadı: " + ex.Message); }
+                    catch (Exception ex) { NativeMessageBox.Error(Strings.ReportWriteErrorPrefix + ex.Message); }
                 });
             }
-            AddRange("Son 7 gün", 7);
-            AddRange("Son 30 gün", 30);
-            AddRange("Son 90 gün", 90);
-            AddRange("Tümü", null);
+            AddRange(Strings.HistoryRangeLast7Days, 7);
+            AddRange(Strings.HistoryRangeLast30Days, 30);
+            AddRange(Strings.HistoryRangeLast90Days, 90);
+            AddRange(Strings.ChipAll, null);
             menu.Show(Cursor.Position);
         });
-        var recurring = ThemeManager.MakeButton("🔁  Tekrar eden tehditler", (_, _) =>
+        var recurring = ThemeManager.MakeButton(Strings.BtnHistoryRecurring, (_, _) =>
         {
             using var dlg = new RecurrenceDialog(RecurrenceService.Find());
             dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
             dlg.ShowDialog(FindForm());
         });
-        var hotspots = ThemeManager.MakeButton("🎯  Tehdit odakları", (_, _) =>
+        var hotspots = ThemeManager.MakeButton(Strings.BtnHistoryHotspots, (_, _) =>
         {
             using var dlg = new ThreatHotspotDialog(ThreatHotspotService.Find());
             dlg.ScanRequested += paths => RescanRequested?.Invoke(paths);
@@ -131,7 +131,7 @@ internal sealed class ScanHistoryControl : UserControl
         _escBanner.BackColor = Color.FromArgb(60, 30, 30);
         _escLabel.ForeColor = Color.FromArgb(255, 140, 140);
         var latest = EscalationStore.All().OrderByDescending(r => r.FlipUtc).First();
-        _escLabel.Text = $"🔴 Sonradan tehdit oldu: {n} dosya bir zamanlar temizdi, şimdi işaretli (en son: {latest.Name} {latest.NewRatio}).  İncelemek için tıkla.";
+        _escLabel.Text = string.Format(Strings.HistoryEscalationBannerFormat, n, latest.Name, latest.NewRatio);
         _escBanner.Visible = true;
     }
 
@@ -149,14 +149,14 @@ internal sealed class ScanHistoryControl : UserControl
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "★", DataPropertyName = nameof(HistoryEntry.Star), Width = 30, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tarih", DataPropertyName = nameof(HistoryEntry.WhenLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(HistoryEntry.Name), Width = 190 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Verdikt", DataPropertyName = nameof(HistoryEntry.Verdict), Width = 90 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tespit", DataPropertyName = nameof(HistoryEntry.Ratio), Width = 60, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kaynak", DataPropertyName = nameof(HistoryEntry.Source), Width = 80 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Not", DataPropertyName = nameof(HistoryEntry.Note), Width = 160 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Yol", DataPropertyName = nameof(HistoryEntry.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColHistoryStar, DataPropertyName = nameof(HistoryEntry.Star), Width = 30, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColHistoryDate, DataPropertyName = nameof(HistoryEntry.WhenLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(HistoryEntry.Name), Width = 190 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVerdict, DataPropertyName = nameof(HistoryEntry.Verdict), Width = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDetections, DataPropertyName = nameof(HistoryEntry.Ratio), Width = 60, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleRight } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColHistorySource, DataPropertyName = nameof(HistoryEntry.Source), Width = 80 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColHistoryNote, DataPropertyName = nameof(HistoryEntry.Note), Width = 160 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColPath, DataPropertyName = nameof(HistoryEntry.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         ThemeManager.StyleGrid(_grid);
 
         // Click the ★ cell to toggle the star.
@@ -179,15 +179,15 @@ internal sealed class ScanHistoryControl : UserControl
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) Reopen(Selected()); };
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("🔁  Tekrar tara", null, (_, _) => { var h = Selected(); if (EnsureFile(h)) RescanRequested?.Invoke([h!.Path!]); });
-        menu.Items.Add("🔎  Ayrıntıyı aç", null, (_, _) => Reopen(Selected()));
-        menu.Items.Add("📁  Dosya konumunu aç", null, (_, _) => { var h = Selected(); if (EnsureFile(h)) try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + h!.Path + "\""); } catch { } });
-        menu.Items.Add("📋  SHA-256 kopyala", null, (_, _) => { var h = Selected(); if (!string.IsNullOrEmpty(h?.Sha256)) try { Clipboard.SetText(h.Sha256); } catch { } });
-        menu.Items.Add("⭐  Yıldız aç/kapat", null, (_, _) => { if (Selected() is { } h) { h.Starred = !h.Starred; ScanHistoryStore.Persist(); } });
-        menu.Items.Add("📝  Not ekle/düzenle…", null, (_, _) =>
+        menu.Items.Add(Strings.MenuHistoryRescan, null, (_, _) => { var h = Selected(); if (EnsureFile(h)) RescanRequested?.Invoke([h!.Path!]); });
+        menu.Items.Add(Strings.MenuHistoryOpenDetails, null, (_, _) => Reopen(Selected()));
+        menu.Items.Add(Strings.MenuRevealFile, null, (_, _) => { var h = Selected(); if (EnsureFile(h)) try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + h!.Path + "\""); } catch { } });
+        menu.Items.Add(Strings.BtnEscalationCopySha, null, (_, _) => { var h = Selected(); if (!string.IsNullOrEmpty(h?.Sha256)) try { Clipboard.SetText(h.Sha256); } catch { } });
+        menu.Items.Add(Strings.MenuHistoryToggleStar, null, (_, _) => { if (Selected() is { } h) { h.Starred = !h.Starred; ScanHistoryStore.Persist(); } });
+        menu.Items.Add(Strings.MenuHistoryEditNote, null, (_, _) =>
         {
             if (Selected() is not { } h) return;
-            string? note = Dialogs.InputBox("Bu tarama için not:", "Not", h.Note ?? "");
+            string? note = Dialogs.InputBox(Strings.HistoryNotePrompt, Strings.ColHistoryNote, h.Note ?? "");
             if (note != null) { h.Note = note; ScanHistoryStore.Persist(); }
         });
         _grid.ContextMenuStrip = menu;
@@ -223,7 +223,7 @@ internal sealed class ScanHistoryControl : UserControl
                 || (e.Path?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
             .ToList();
         _grid.DataSource = rows;
-        _count.Text = $"{rows.Count} kayıt" + (ScanHistoryStore.Count != rows.Count ? $" / {ScanHistoryStore.Count} toplam" : "");
+        _count.Text = string.Format(Strings.HistoryCountFormat, rows.Count) + (ScanHistoryStore.Count != rows.Count ? string.Format(Strings.HistoryCountTotalSuffixFormat, ScanHistoryStore.Count) : "");
     }
 
     /// <summary>Reopen the full result detail by rebuilding a ScanItem from the cached report.</summary>
@@ -235,11 +235,11 @@ internal sealed class ScanHistoryControl : UserControl
         {
             // Evicted from cache: offer to re-scan (if the file is still there) instead of a dead end.
             bool here = e.Path != null && File.Exists(e.Path);
-            string head = $"{e.Name} — {e.Verdict} {e.Ratio}\n\nTam ayrıntı önbellekte yok";
-            if (here && NativeMessageBox.Confirm(head + ".\nDosyayı yeniden taramak ister misin?"))
+            string head = string.Format(Strings.HistoryReopenHeadFormat, e.Name, e.Verdict, e.Ratio);
+            if (here && NativeMessageBox.Confirm(head + Strings.HistoryReopenRescanSuffix))
                 RescanRequested?.Invoke([e.Path!]);
             else if (!here)
-                NativeMessageBox.Info(head + " ve dosya artık şurada değil:\n" + (e.Path ?? "(yol yok)"));
+                NativeMessageBox.Info(head + Strings.ReopenFileGoneSuffix + (e.Path ?? Strings.ReopenNoPath));
             return;
         }
         var item = new ScanItem(e.Path ?? e.Name) { Report = report, Status = ScanStatus.Completed, Md5 = e.Md5, Sha256 = e.Sha256 };
@@ -251,7 +251,7 @@ internal sealed class ScanHistoryControl : UserControl
     static bool EnsureFile(HistoryEntry? h)
     {
         if (h?.Path != null && File.Exists(h.Path)) return true;
-        NativeMessageBox.Info(h?.Path != null ? "Dosya artık şurada değil:\n" + h.Path : "Bu kaydın dosya yolu yok.");
+        NativeMessageBox.Info(h?.Path != null ? Strings.HistoryFileGoneFormat + h.Path : Strings.HistoryNoPathInfo);
         return false;
     }
 

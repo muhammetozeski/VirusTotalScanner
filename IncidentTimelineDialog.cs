@@ -17,19 +17,19 @@ internal sealed class IncidentTimelineDialog : Form
 
     public IncidentTimelineDialog()
     {
-        Text = "🕓 Olay Zaman Çizelgesi";
+        Text = Strings.DlgIncidentTimelineTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(920, 560);
         MinimumSize = new Size(680, 400);
 
-        foreach (var d in WindowDays) _window.Items.Add($"Son {d} gün");
+        foreach (var d in WindowDays) _window.Items.Add(string.Format(Strings.IncidentWindowItemFormat, d));
         _window.SelectedIndex = 1; // 60 days
 
-        _scan = ThemeManager.MakeButton("🔍  Tara", (_, _) => _ = RunAsync(), accent: true);
-        var close = new Button { Text = "Kapat", DialogResult = DialogResult.Cancel, Width = 90 };
+        _scan = ThemeManager.MakeButton(Strings.BtnIncidentScan, (_, _) => _ = RunAsync(), accent: true);
+        var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 8, 8, 4) };
-        top.Controls.Add(new Label { Text = "Pencere:", AutoSize = true, Margin = new Padding(0, 8, 6, 0) });
+        top.Controls.Add(new Label { Text = Strings.IncidentWindowLabel, AutoSize = true, Margin = new Padding(0, 8, 6, 0) });
         top.Controls.Add(_window);
         top.Controls.Add(_scan);
         top.Controls.Add(_status);
@@ -69,10 +69,10 @@ internal sealed class IncidentTimelineDialog : Form
         _days.RowHeadersVisible = false;
         _days.MultiSelect = false;
         _days.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _days.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Gün", DataPropertyName = nameof(TimelineDay.DayText), Width = 160 });
-        AddNum(_days, "Dosya", nameof(TimelineDay.Count));
-        AddNum(_days, "Tehdit", nameof(TimelineDay.Threats));
-        AddNum(_days, "İnternetten", nameof(TimelineDay.FromNet), 90);
+        _days.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDay, DataPropertyName = nameof(TimelineDay.DayText), Width = 160 });
+        AddNum(_days, Strings.ColFile, nameof(TimelineDay.Count));
+        AddNum(_days, Strings.ColThreat, nameof(TimelineDay.Threats));
+        AddNum(_days, Strings.ColFromInternet, nameof(TimelineDay.FromNet), 90);
         _days.SelectionChanged += (_, _) => ShowSelectedDay();
         _days.CellFormatting += (_, e) =>
         {
@@ -89,12 +89,12 @@ internal sealed class IncidentTimelineDialog : Form
         _files.ReadOnly = true;
         _files.RowHeadersVisible = false;
         _files.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Saat", DataPropertyName = nameof(TimelineFile.ArrivalLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "HH:mm:ss" } });
-        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Dosya", DataPropertyName = nameof(TimelineFile.Name), Width = 200 });
-        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Verdikt", DataPropertyName = nameof(TimelineFile.Verdict), Width = 90 });
-        AddNum(_files, "Tespit", nameof(TimelineFile.Detections), 60);
-        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Kaynak (indirme)", DataPropertyName = nameof(TimelineFile.Host), Width = 180 });
-        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Yol", DataPropertyName = nameof(TimelineFile.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColTime, DataPropertyName = nameof(TimelineFile.ArrivalLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "HH:mm:ss" } });
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(TimelineFile.Name), Width = 200 });
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVerdict, DataPropertyName = nameof(TimelineFile.Verdict), Width = 90 });
+        AddNum(_files, Strings.ColDetections, nameof(TimelineFile.Detections), 60);
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColDownloadSource, DataPropertyName = nameof(TimelineFile.Host), Width = 180 });
+        _files.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColPath, DataPropertyName = nameof(TimelineFile.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _files.CellFormatting += (_, e) =>
         {
             if (_files.Rows[e.RowIndex].DataBoundItem is not TimelineFile f) return;
@@ -128,26 +128,26 @@ internal sealed class IncidentTimelineDialog : Form
         _window.Enabled = false;
         _days.DataSource = null;
         _files.DataSource = null;
-        _status.Text = "Taranıyor…";
+        _status.Text = Strings.IncidentScanning;
 
         try
         {
             var result = await IncidentTimelineService.BuildAsync(
                 AppServices.Cache, days,
-                (d, t) => { try { BeginInvoke(() => _status.Text = $"Taranıyor… {d}/{t}"); } catch { } },
+                (d, t) => { try { BeginInvoke(() => _status.Text = string.Format(Strings.IncidentScanningProgressFormat, d, t)); } catch { } },
                 ct);
             if (ct.IsCancellationRequested) return;
 
             _days.DataSource = result;
             int totalFiles = result.Sum(d => d.Count);
             int totalThreats = result.Sum(d => d.Threats);
-            _status.Text = $"{result.Count} gün • {totalFiles} çalıştırılabilir • {totalThreats} tehdit (önbellekten)";
+            _status.Text = string.Format(Strings.IncidentSummaryFormat, result.Count, totalFiles, totalThreats);
             if (result.Count > 0) { _days.ClearSelection(); _days.Rows[0].Selected = true; ShowSelectedDay(); }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _status.Text = "Hata: " + ex.Message;
+            _status.Text = Strings.ApiKeyErrorPrefix + ex.Message;
             Log("Incident timeline failed: " + ex, LogLevel.Warning);
         }
         finally { _scan.Enabled = true; _window.Enabled = true; }

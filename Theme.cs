@@ -95,7 +95,7 @@ internal static class Theme
 
     public static Color VerdictColor(string verdict)
     {
-        if (verdict == "İMZALI") return Current.Accent; // trusted-skip: neutral, NOT the green "clean"
+        if (verdict == Strings.VerdictSigned) return Current.Accent; // trusted-skip: neutral, NOT the green "clean"
         var cat = VerdictCategories.ByName(verdict);
         return cat?.Color ?? Current.SubtleText;
     }

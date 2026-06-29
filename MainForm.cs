@@ -71,8 +71,8 @@ internal sealed partial class MainForm : Form
             _tabs.SelectedIndex = 1; // Tarama
             _scan.StartScan([drive], recurse: true, background: true);
             _toastAction = ToastAction.None;
-            _tray.BalloonTipTitle = "USB sürücü taranıyor";
-            _tray.BalloonTipText = $"{letter}: takıldı, otomatik taranıyor…";
+            _tray.BalloonTipTitle = Strings.ToastUsbScanningTitle;
+            _tray.BalloonTipText = string.Format(Strings.ToastUsbScanningTextFormat, letter);
             _tray.BalloonTipIcon = ToolTipIcon.Info;
             if (!Gated()) _tray.ShowBalloonTip(4000);
             return;
@@ -80,8 +80,8 @@ internal sealed partial class MainForm : Form
 
         _pendingUsbDrive = drive;
         _toastAction = ToastAction.ScanUsb;
-        _tray.BalloonTipTitle = "USB sürücü takıldı";
-        _tray.BalloonTipText = $"{letter}: sürücüsünü taramak için bu bildirime tıkla.";
+        _tray.BalloonTipTitle = Strings.ToastUsbInsertedTitle;
+        _tray.BalloonTipText = string.Format(Strings.ToastUsbInsertedTextFormat, letter);
         _tray.BalloonTipIcon = ToolTipIcon.Info;
         if (!Gated()) _tray.ShowBalloonTip(6000);
     }
@@ -210,11 +210,11 @@ internal sealed partial class MainForm : Form
     void BuildTabs()
     {
         _tabs.Appearance = TabAppearance.Normal;
-        AddTab("🏠  Genel Bakış", _overview);
+        AddTab(Strings.TabOverview, _overview);
         AddTab(Strings.TabScan, _scan);
         AddTab(Strings.TabQuota, _quota);
         AddTab(Strings.TabLogs, _logs);
-        AddTab("🕘  Geçmiş", _history);
+        AddTab(Strings.TabHistory, _history);
         AddTab(Strings.TabSettings, _settings);
     }
 
@@ -241,7 +241,7 @@ internal sealed partial class MainForm : Form
         _tray.Visible = true;
         var menu = new ContextMenuStrip();
         menu.Items.Add(Strings.TrayShow, null, (_, _) => RestoreFromTray());
-        menu.Items.Add("📋 Panodaki yolu tara", null, (_, _) => { RestoreFromTray(); _scan.ScanClipboard(); });
+        menu.Items.Add(Strings.TrayScanClipboard, null, (_, _) => { RestoreFromTray(); _scan.ScanClipboard(); });
         menu.Items.Add(Strings.TrayExit, null, (_, _) => { _reallyExit = true; Close(); });
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => RestoreFromTray();
@@ -262,8 +262,8 @@ internal sealed partial class MainForm : Form
                 // Several threats: one summary toast that still jumps to the most recent on click.
                 _lastThreat = threats[^1].Threat;
                 _toastAction = ToastAction.ShowThreat;
-                _tray.BalloonTipTitle = "Sessiz modda tehdit bulundu";
-                _tray.BalloonTipText = $"{threats.Count} tehdit bulundu — incelemek için tıkla.";
+                _tray.BalloonTipTitle = Strings.ToastQuietThreatsTitle;
+                _tray.BalloonTipText = string.Format(Strings.ToastQuietThreatsTextFormat, threats.Count);
                 _tray.BalloonTipIcon = ToolTipIcon.Warning;
                 _tray.ShowBalloonTip(7000);
                 return;
@@ -298,7 +298,7 @@ internal sealed partial class MainForm : Form
                 _scan.FocusItem(threat);
                 break;
             case ToastAction.UndoQuarantine when _lastQuarantine is { } qe:
-                if (QuarantineVault.Restore(qe, out _)) NativeMessageBox.Info("Dosya geri yüklendi.");
+                if (QuarantineVault.Restore(qe, out _)) NativeMessageBox.Info(Strings.FileRestoredInfo);
                 _lastQuarantine = null;
                 break;
             case ToastAction.LoadSweepThreats when _sweepThreatPaths.Length > 0:
@@ -372,8 +372,8 @@ internal sealed partial class MainForm : Form
     {
         int mal = items.Count(i => i.Report?.IsMalicious == true);
         _toastAction = ToastAction.None;
-        _tray.BalloonTipTitle = mal > 0 ? "Tarama bitti — tehdit bulundu" : "Tarama bitti — temiz";
-        _tray.BalloonTipText = $"{items.Count} dosya tarandı, {mal} tehdit.";
+        _tray.BalloonTipTitle = mal > 0 ? Strings.ToastScanDoneThreatTitle : Strings.ToastScanDoneCleanTitle;
+        _tray.BalloonTipText = string.Format(Strings.ToastScanDoneTextFormat, items.Count, mal);
         _tray.BalloonTipIcon = mal > 0 ? ToolTipIcon.Warning : ToolTipIcon.Info;
         if (!Gated()) _tray.ShowBalloonTip(5000);
     }
@@ -409,7 +409,7 @@ internal sealed partial class MainForm : Form
         {
             _toastAction = ToastAction.ShowThreat;
             _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
-            _tray.BalloonTipText = $"{item.FileName}{OriginSuffix(item)}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
+            _tray.BalloonTipText = string.Format(Strings.ToastThreatTextFormat, item.FileName, OriginSuffix(item), item.Report?.Verdict, item.Report?.DetectionCount, item.Report?.TotalEngines);
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             if (!Gated()) _tray.ShowBalloonTip(5000); // deferred during quiet hours → replayed with its action intact
         });
@@ -424,7 +424,7 @@ internal sealed partial class MainForm : Form
         switch (rule.Action)
         {
             case AutoActionKind.MarkClean:
-                AllowlistStore.Add(item, "oto-eylem kuralı");
+                AllowlistStore.Add(item, Strings.AllowlistReasonAutoActionRule);
                 Log($"Auto-action: allowlisted {item.FileName} by rule.", LogLevel.Info);
                 return true;
             case AutoActionKind.SuppressFolder:
@@ -446,8 +446,8 @@ internal sealed partial class MainForm : Form
         {
             _lastQuarantine = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, item.FilePath, StringComparison.OrdinalIgnoreCase));
             _toastAction = ToastAction.UndoQuarantine;
-            _tray.BalloonTipTitle = "Tehdit otomatik karantinaya alındı";
-            _tray.BalloonTipText = $"{item.FileName}{OriginSuffix(item)} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines}) — geri almak için tıkla.";
+            _tray.BalloonTipTitle = Strings.ToastAutoQuarantineTitle;
+            _tray.BalloonTipText = string.Format(Strings.ToastAutoQuarantineTextFormat, item.FileName, OriginSuffix(item), item.Report?.DetectionCount, item.Report?.TotalEngines);
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             _tray.ShowBalloonTip(8000);
         }
@@ -456,7 +456,7 @@ internal sealed partial class MainForm : Form
             // Couldn't move it (locked/permission) — fall back to the normal alert so the user can act.
             _toastAction = ToastAction.ShowThreat;
             _tray.BalloonTipTitle = Strings.ThreatBalloonTitle;
-            _tray.BalloonTipText = $"{item.FileName}: {item.Report?.Verdict} ({item.Report?.DetectionCount}/{item.Report?.TotalEngines})";
+            _tray.BalloonTipText = string.Format(Strings.ToastQuarantineFallbackTextFormat, item.FileName, item.Report?.Verdict, item.Report?.DetectionCount, item.Report?.TotalEngines);
             _tray.BalloonTipIcon = ToolTipIcon.Warning;
             _tray.ShowBalloonTip(5000);
         }
@@ -549,8 +549,8 @@ internal sealed partial class MainForm : Form
     void ShowDriftAlarm(System.Collections.Generic.List<DriftResult> alarms)
     {
         _toastAction = ToastAction.None;
-        _tray.BalloonTipTitle = "Bütünlük uyarısı!";
-        _tray.BalloonTipText = $"{alarms.Count} izlenen dosya değişti ve güvenini kaybetti: {Path.GetFileName(alarms[0].Path)}";
+        _tray.BalloonTipTitle = Strings.ToastDriftAlarmTitle;
+        _tray.BalloonTipText = string.Format(Strings.ToastDriftAlarmTextFormat, alarms.Count, Path.GetFileName(alarms[0].Path));
         _tray.BalloonTipIcon = ToolTipIcon.Warning;
         if (!Gated()) _tray.ShowBalloonTip(8000);
     }
@@ -570,12 +570,12 @@ internal sealed partial class MainForm : Form
             SettingsManager.SaveSettings();
 
             _sweepThreatPaths = r.ThreatPaths.Where(File.Exists).ToArray();
-            _overview.SetSweepNotice($"🌙 Zamanlı tarama {r.Threats} tehdit buldu — kuyruğa yüklemek için bildirime tıkla.");
+            _overview.SetSweepNotice(string.Format(Strings.OverviewSweepNoticeFormat, r.Threats));
             if (_sweepThreatPaths.Length > 0)
             {
                 _toastAction = ToastAction.LoadSweepThreats;
-                _tray.BalloonTipTitle = "Zamanlı tarama tehdit buldu";
-                _tray.BalloonTipText = $"{r.Threats} tehdit bulundu. Kuyruğa yüklemek için tıkla.";
+                _tray.BalloonTipTitle = Strings.ToastSweepThreatsTitle;
+                _tray.BalloonTipText = string.Format(Strings.ToastSweepThreatsTextFormat, r.Threats);
                 _tray.BalloonTipIcon = ToolTipIcon.Warning;
                 if (!Gated()) _tray.ShowBalloonTip(8000);
             }
@@ -620,10 +620,10 @@ internal sealed partial class MainForm : Form
         if (!Settings.NotifyOnThreat || esc.Count == 0) return;
         var first = esc[0];
         _toastAction = ToastAction.None;
-        _tray.BalloonTipTitle = "İzlenen dosya artık daha tehlikeli!";
+        _tray.BalloonTipTitle = Strings.ToastWatchEscalationTitle;
         _tray.BalloonTipText = esc.Count == 1
-            ? $"{first.Entry.Name}: {first.Old} → {first.New} motor tespit ediyor."
-            : $"{esc.Count} izlenen dosyanın tespiti arttı (ör. {first.Entry.Name}).";
+            ? string.Format(Strings.ToastWatchEscalationOneFormat, first.Entry.Name, first.Old, first.New)
+            : string.Format(Strings.ToastWatchEscalationManyFormat, esc.Count, first.Entry.Name);
         _tray.BalloonTipIcon = ToolTipIcon.Warning;
         if (!Gated()) _tray.ShowBalloonTip(7000);
     }

@@ -13,12 +13,12 @@ internal sealed class ZoneInfo
 
     public string ZoneName => ZoneId switch
     {
-        0 => "Yerel makine",
-        1 => "Yerel ağ (intranet)",
-        2 => "Güvenilen site",
-        3 => "İnternet",
-        4 => "Kısıtlı site",
-        _ => "bilinmiyor",
+        0 => Strings.ZoneLocalMachine,
+        1 => Strings.ZoneLocalNetwork,
+        2 => Strings.ZoneTrustedSite,
+        3 => Strings.ZoneInternet,
+        4 => Strings.ZoneRestrictedSite,
+        _ => Strings.StatusUnknown,
     };
 
     /// <summary>Provenance summary for the detail pane, or null if there is no zone mark. When the download
@@ -28,15 +28,15 @@ internal sealed class ZoneInfo
     {
         get
         {
-            string warn = FromInternet ? "  ⚠ internetten indirildi" : "";
+            string warn = FromInternet ? Strings.ZoneDownloadedWarn : "";
             bool bothDiffer = !string.IsNullOrEmpty(HostUrl) && !string.IsNullOrEmpty(ReferrerUrl)
                 && !string.Equals(HostUrl, ReferrerUrl, StringComparison.OrdinalIgnoreCase);
             if (bothDiffer)
-                return $"📥 Kaynak bölgesi: {ZoneName}{warn}\n   Kaynak (CDN/host): {HostUrl}\n   Yönlendiren sayfa: {ReferrerUrl}";
+                return string.Format(Strings.ZoneSummaryBothFormat, ZoneName, warn, HostUrl, ReferrerUrl);
 
             string src = HostUrl ?? ReferrerUrl ?? "";
-            string where = src.Length > 0 ? $" — {src}" : "";
-            return $"📥 Kaynak bölgesi: {ZoneName}{where}{warn}";
+            string where = src.Length > 0 ? string.Format(Strings.ZoneSourceSuffixFormat, src) : "";
+            return string.Format(Strings.ZoneSummaryFormat, ZoneName, where, warn);
         }
     }
 }

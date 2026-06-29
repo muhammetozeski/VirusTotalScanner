@@ -35,11 +35,11 @@ internal static class ReportWriter
     static string BuildCsv(IReadOnlyList<ScanItem> items)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("File,Verdict,Malicious,Suspicious,Total,Family,MD5,SHA256,ReportUrl");
+        sb.AppendLine(Strings.ReportCsvHeader);
         foreach (var i in items)
         {
             var r = i.Report;
-            string verdict = i.Status == ScanStatus.TrustedSkipped ? "SIGNED" : r?.Verdict ?? i.Status.ToString();
+            string verdict = i.Status == ScanStatus.TrustedSkipped ? Strings.VerdictSigned : r?.Verdict ?? i.Status.ToString();
             sb.Append(Csv(i.FilePath)).Append(',')
               .Append(Csv(verdict)).Append(',')
               .Append(r?.Malicious ?? 0).Append(',')
@@ -61,17 +61,17 @@ internal static class ReportWriter
     {
         var (total, threats, trusted, failed) = Tally(items);
         var sb = new StringBuilder();
-        sb.AppendLine($"{AppConstants.AppTitle} v{AppConstants.Version} — scan report");
-        sb.AppendLine($"Files: {total}   Threats: {threats}   Trusted-skipped: {trusted}   Failed: {failed}");
+        sb.AppendLine(string.Format(Strings.ReportTextTitleFormat, AppConstants.AppTitle, AppConstants.Version));
+        sb.AppendLine(string.Format(Strings.ReportTextSummaryFormat, total, threats, trusted, failed));
         sb.AppendLine(new string('-', 60));
         foreach (var i in items)
         {
             var r = i.Report;
-            string verdict = i.Status == ScanStatus.TrustedSkipped ? "SIGNED" : r?.Verdict ?? i.Status.ToString();
+            string verdict = i.Status == ScanStatus.TrustedSkipped ? Strings.VerdictSigned : r?.Verdict ?? i.Status.ToString();
             string ratio = r != null ? $" ({r.DetectionCount}/{r.TotalEngines})" : "";
             sb.AppendLine($"[{verdict}]{ratio}  {i.FilePath}");
             if (r?.ConsensusText != null) sb.AppendLine("    " + r.ConsensusText);
-            if (i.Error != null) sb.AppendLine("    error: " + i.Error);
+            if (i.Error != null) sb.AppendLine(Strings.ReportTextErrorPrefix + i.Error);
         }
         return sb.ToString();
     }
@@ -108,7 +108,7 @@ internal static class ReportWriter
         var (total, threats, trusted, failed) = Tally(items);
         var sb = new StringBuilder();
         sb.AppendLine("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
-        sb.AppendLine($"<title>{H(AppConstants.AppTitle)} report</title>");
+        sb.AppendLine($"<title>{string.Format(Strings.ReportHtmlDocTitleFormat, H(AppConstants.AppTitle))}</title>");
         sb.AppendLine("""
         <style>
           body{font-family:Segoe UI,Arial,sans-serif;background:#1e1e1e;color:#e0e0e0;margin:24px}
@@ -131,22 +131,22 @@ internal static class ReportWriter
           }
         </style></head><body>
         """);
-        sb.AppendLine("<div class=\"noprint\" style=\"margin-bottom:10px\"><a href=\"#\" onclick=\"window.print();return false\">🖨 Yazdır / PDF</a></div>");
-        sb.AppendLine($"<h1>{H(AppConstants.AppTitle)} — scan report</h1>");
-        sb.AppendLine($"<div class=\"sum\">Files: {total} &nbsp; Threats: <b class=\"threat\">{threats}</b> &nbsp; Trusted-skipped: {trusted} &nbsp; Failed: {failed}</div>");
-        sb.AppendLine("<table><thead><tr><th>Verdict</th><th>Detections</th><th>File</th><th>Consensus / detail</th></tr></thead><tbody>");
+        sb.AppendLine("<div class=\"noprint\" style=\"margin-bottom:10px\"><a href=\"#\" onclick=\"window.print();return false\">" + Strings.ReportHtmlPrintLink + "</a></div>");
+        sb.AppendLine($"<h1>{string.Format(Strings.ReportHtmlHeadingFormat, H(AppConstants.AppTitle))}</h1>");
+        sb.AppendLine($"<div class=\"sum\">{string.Format(Strings.ReportHtmlSummaryFormat, total, threats, trusted, failed)}</div>");
+        sb.AppendLine(Strings.ReportHtmlTableHead);
         foreach (var i in items)
         {
             var r = i.Report;
             bool signed = i.Status == ScanStatus.TrustedSkipped;
-            string verdict = signed ? "SIGNED" : r?.Verdict ?? i.Status.ToString();
+            string verdict = signed ? Strings.VerdictSigned : r?.Verdict ?? i.Status.ToString();
             string cls = signed ? "signed"
                 : r == null ? "other"
                 : r.IsMalicious ? "threat"
                 : r.DetectionCount > 0 ? "susp"
                 : "clean";
             string ratio = r != null ? $"{r.DetectionCount}/{r.TotalEngines}" : "";
-            string detail = signed ? H(i.SkipReason ?? "trusted signature")
+            string detail = signed ? H(i.SkipReason ?? Strings.ReportHtmlTrustedSignature)
                 : i.Error != null ? H(i.Error)
                 : H(r?.ConsensusText ?? "");
             string fileCell = r != null
@@ -182,7 +182,7 @@ internal static class ReportWriter
     static string BuildHistoryCsv(List<HistoryEntry> list)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("When,File,Verdict,Detections,Total,Source,MD5,SHA256,ReportUrl");
+        sb.AppendLine(Strings.ReportHistoryCsvHeader);
         foreach (var e in list)
             sb.Append(Csv(e.WhenLocal.ToString("yyyy-MM-dd HH:mm"))).Append(',')
               .Append(Csv(e.Name)).Append(',').Append(Csv(e.Verdict)).Append(',')
@@ -212,7 +212,7 @@ internal static class ReportWriter
         int clean = list.Count(e => e.Detections == 0);
         var sb = new StringBuilder();
         sb.AppendLine("<!doctype html><html lang=\"tr\"><head><meta charset=\"utf-8\">");
-        sb.AppendLine($"<title>{H(AppConstants.AppTitle)} — güvenlik raporu</title>");
+        sb.AppendLine($"<title>{string.Format(Strings.ReportHistoryTitleFormat, H(AppConstants.AppTitle))}</title>");
         sb.AppendLine("""
         <style>
           body{font-family:Segoe UI,Arial,sans-serif;background:#1e1e1e;color:#e0e0e0;margin:24px}
@@ -234,18 +234,18 @@ internal static class ReportWriter
           }
         </style></head><body>
         """);
-        sb.AppendLine("<div class=\"noprint\" style=\"margin-bottom:10px\"><a href=\"#\" onclick=\"window.print();return false\">🖨 Yazdır / PDF</a></div>");
-        sb.AppendLine($"<h1>{H(AppConstants.AppTitle)} — güvenlik raporu</h1>");
-        sb.AppendLine($"<div class=\"sum\">Aralık: <b>{H(rangeLabel)}</b> &nbsp;•&nbsp; Tarandı: {list.Count} &nbsp;•&nbsp; Tehdit: <b class=\"threat\">{threats}</b> &nbsp;•&nbsp; Temiz: <b class=\"clean\">{clean}</b></div>");
+        sb.AppendLine("<div class=\"noprint\" style=\"margin-bottom:10px\"><a href=\"#\" onclick=\"window.print();return false\">" + Strings.ReportHtmlPrintLink + "</a></div>");
+        sb.AppendLine($"<h1>{string.Format(Strings.ReportHistoryTitleFormat, H(AppConstants.AppTitle))}</h1>");
+        sb.AppendLine($"<div class=\"sum\">{string.Format(Strings.ReportHistorySummaryFormat, H(rangeLabel), list.Count, threats, clean)}</div>");
 
         // Source breakdown
-        sb.AppendLine("<h2>Kaynak kırılımı</h2><div class=\"sum\">");
+        sb.AppendLine(Strings.ReportHistorySourceBreakdownHeading);
         foreach (var g in list.GroupBy(e => string.IsNullOrEmpty(e.Source) ? "—" : e.Source).OrderByDescending(g => g.Count()))
             sb.Append($"{H(g.Key)}: {g.Count()} &nbsp; ");
         sb.AppendLine("</div>");
 
         // Weekly trend (scanned + threats per ISO week)
-        sb.AppendLine("<h2>Haftalık eğilim</h2><table><thead><tr><th>Hafta başı</th><th>Tarandı</th><th>Tehdit</th></tr></thead><tbody>");
+        sb.AppendLine(Strings.ReportHistoryWeeklyTrendHead);
         foreach (var g in list.GroupBy(e => e.WhenLocal.Date.AddDays(-((int)e.WhenLocal.DayOfWeek + 6) % 7)).OrderByDescending(g => g.Key))
         {
             int t = g.Count(e => VerdictCategories.IsThreat(e.Detections));
@@ -255,8 +255,8 @@ internal static class ReportWriter
 
         // Threat rows
         var threatRows = list.Where(e => VerdictCategories.IsThreat(e.Detections)).ToList();
-        sb.AppendLine($"<h2>Tehditler ({threatRows.Count})</h2>");
-        sb.AppendLine("<table><thead><tr><th>Tarih</th><th>Dosya</th><th>Tespit</th><th>Kaynak</th><th>SHA-256</th></tr></thead><tbody>");
+        sb.AppendLine($"<h2>{string.Format(Strings.ReportHistoryThreatsHeadingFormat, threatRows.Count)}</h2>");
+        sb.AppendLine(Strings.ReportHistoryThreatsTableHead);
         foreach (var e in threatRows)
         {
             string fileCell = VtUrl(e) is { Length: > 0 } u ? $"<a href=\"{H(u)}\">{H(e.Name)}</a>" : H(e.Name);
