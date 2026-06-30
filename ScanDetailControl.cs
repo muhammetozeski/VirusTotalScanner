@@ -24,7 +24,7 @@ internal sealed class ScanDetailControl : UserControl
     readonly LinkLabel _link = new();
     readonly CheckBox _showAll = new();
     readonly CheckBox _majorOnly = new() { Text = Strings.DetailMajorOnlyCheck, AutoSize = true, Margin = new Padding(10, 4, 0, 0) };
-    readonly DataGridView _engines = new();
+    readonly DataGridView _engines = new EntityGridView();
     readonly Label _empty = new();
 
     ScanItem? _item;
@@ -34,7 +34,9 @@ internal sealed class ScanDetailControl : UserControl
         Dock = DockStyle.Fill;
         Padding = new Padding(12);
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 9, BackColor = Color.Transparent };
+        // Dock.Top + AutoSize so the whole pane is ONE scrollable column inside _scroll below — the engine
+        // table no longer gets squeezed to nothing at the bottom; you scroll the whole detail instead.
+        var root = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 9, BackColor = Color.Transparent };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104)); // verdict hero card
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // guided action strip
@@ -44,7 +46,7 @@ internal sealed class ScanDetailControl : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // ratio
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // toggle + link
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // behaviour digest (collapsible)
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // grid
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // engine grid (sized to fit all its rows; the whole pane scrolls)
 
         _meta.AutoSize = true; _meta.MaximumSize = new Size(2000, 0);
         _stats.AutoSize = true; _stats.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
@@ -154,7 +156,19 @@ internal sealed class ScanDetailControl : UserControl
         root.Controls.Add(_behaviourPanel, 0, 7);
         root.Controls.Add(_engines, 0, 8);
 
-        Controls.Add(root);
+        // One scroll container for the entire detail: when the content is taller than the pane, the user
+        // scrolls down to the engine table instead of it being crushed to a sliver at the bottom.
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        scroll.Controls.Add(root);
+        scroll.Resize += (_, _) =>
+        {
+            int w = scroll.ClientSize.Width;
+            if (w <= 0) return;
+            // Keep the wrapping meta label inside the pane width so no horizontal scrollbar appears.
+            _meta.MaximumSize = new Size(Math.Max(120, w - 6), 0);
+        };
+
+        Controls.Add(scroll);
         Controls.Add(_empty);
         _empty.BringToFront();
         Show(null); // start in the empty state
@@ -196,25 +210,30 @@ internal sealed class ScanDetailControl : UserControl
             else if (prop == nameof(VtEngineResult.Result)) e.ToolTipText = JargonGlossary.Result(val);
         };
 
-        // Right-click an engine row: copy the engine name, its result, or search the result online.
-        var menu = new ContextMenuStrip();
-        menu.Items.Add(Strings.MenuCopyEngineName, null, (_, _) => CopyEngine(r => r.EngineName));
-        menu.Items.Add(Strings.MenuCopyEngineResult, null, (_, _) => CopyEngine(r => r.Result));
-        menu.Items.Add(Strings.MenuSearchEngineResult, null, (_, _) => SearchEngineResult());
-        _engines.ContextMenuStrip = menu;
-
         ThemeManager.StyleGrid(_engines);
+        _engines.ScrollBars = ScrollBars.None; // the whole detail pane scrolls; the table shows every row
+        // Same central list behaviour as everywhere else: mark column, right-click-selects, shared copy menu.
+        EntityGrid.Standardize<VtEngineResult>(_engines,
+        [
+            new(Strings.MenuCopyEngineName, r => r.EngineName),
+            new(Strings.MenuCopyEngineResult, r => r.Result),
+            new(Strings.ColCategory, r => r.Category),
+        ],
+        [
+            new(Strings.MenuSearchEngineResult, _ => SearchEngineResult()),
+        ]);
+        // Grow the grid to fit all its rows so the outer scroll (not an inner one) carries the engine list.
+        _engines.DataBindingComplete += (_, _) => AdjustEnginesHeight();
+    }
+
+    void AdjustEnginesHeight()
+    {
+        int h = _engines.ColumnHeadersHeight + 2;
+        foreach (DataGridViewRow r in _engines.Rows) h += r.Height;
+        _engines.Height = Math.Max(0, h);
     }
 
     VtEngineResult? SelectedEngine() => _engines.CurrentRow?.DataBoundItem as VtEngineResult;
-
-    void CopyEngine(Func<VtEngineResult, string?> pick)
-    {
-        var v = SelectedEngine();
-        if (v == null) return;
-        string? s = pick(v);
-        if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } }
-    }
 
     void SearchEngineResult()
     {
@@ -252,7 +271,8 @@ internal sealed class ScanDetailControl : UserControl
             e.CellStyle.Font = new Font(_engines.Font, FontStyle.Bold);
         }
         // Engine-name column: ★ + bold for the engines that matter, 🕒 for stale-signature detections.
-        if (e.ColumnIndex == 0 && e.Value is string name)
+        // Match by DataPropertyName, not index — the leading mark column shifts indices by one.
+        if (e.ColumnIndex >= 0 && _engines.Columns[e.ColumnIndex].DataPropertyName == nameof(VtEngineResult.EngineName) && e.Value is string name)
         {
             if (stale) e.Value = "🕒 " + name;
             else if (major) e.Value = "★ " + name;
