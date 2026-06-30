@@ -224,7 +224,10 @@
   <s name="MenuCopyFilePath">File path</s>
   <s name="MenuCopyFileName">File name</s>
   <s name="MenuCopyVerdictLine">Verdict line</s>
+  <s name="MenuCopyVtUrl">VirusTotal link</s>
   <s name="MenuRevealFile">📁  Open file location</s>
+  <s name="MenuMarkSelected">☑  Mark selected</s>
+  <s name="MenuUnmarkSelected">☐  Unmark selected</s>
   <s name="MenuNeighbors">📂  Folder neighbors</s>
   <s name="MenuFindCopies">🔁  Find other copies (disk)</s>
   <s name="MenuPinBaseline">📌  Add to integrity watch</s>
