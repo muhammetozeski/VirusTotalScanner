@@ -1,68 +1,126 @@
 # VirusTotal Scanner
 
-Windows (WinForms, .NET 10) uygulaması: dosya, çoklu seçim veya klasör (alt klasörler dahil)
-sağ tıklayıp VirusTotal'de tarar. Tek exe + tek ayar dosyası.
+A single‑exe Windows app (WinForms, **.NET 10**) that scans files, folders, or running processes against
+**VirusTotal**. Right‑click a file in Explorer, drag‑and‑drop onto the window, paste a hash, or drive it
+from the terminal. No installer — one self‑contained `.exe`, with all of its state in one folder beside it.
 
-## Çalışma modları (tek exe)
-- **Çift tık / argümansız** → tam grafik arayüz.
-- **Dosya/klasör argümanı (sağ tuş veya exe'ye sürükle-bırak)** → arayüzde tarama; çalışan
-  bir örnek varsa yollar ona iletilir (tek kuyruk).
-- **Terminalden** → komut satırı modu (arayüz açılmaz, çıktı konsola, exit code döner).
+![Overview tab](docs/img/overview.png)
 
-## Kurulum / kullanım
-1. `publish\small\VirusTotalScanner.exe` (küçük, .NET 10 Desktop Runtime gerekir) **veya**
-   `publish\portable\VirusTotalScanner.exe` (büyük, hiçbir şey gerekmez) çalıştırın.
-2. İlk açılışta sihirbaz: bir VirusTotal API anahtarı ekleyin, isterseniz sağ tuş menüsüne ekleyin.
-3. Ayarlar → "Sağ tuşa ekle" ile dosya/klasör sağ tuş menüsüne yerleşir (yönetici gerekmez).
+![Scan tab — queue, verdict filters, and the detail pane](docs/img/scan.png)
 
-## Komut satırı
+## Why
+
+VirusTotal's website is great for one file at a time. This app is for the rest: checking a whole Downloads
+folder, every running process, or a freshly built binary before you trust it — fast, in bulk, and without
+leaving your desktop. It caches results to save quota, skips files that are already trusted, and keeps a
+searchable history so you can answer "did this turn malicious since I last checked?".
+
+## Run modes (one exe)
+
+- **Double‑click / no args** → full GUI.
+- **File/folder argument** (right‑click menu, or drag‑drop onto the exe) → scans in the GUI; if an instance
+  is already running, the paths are handed to it (one shared queue).
+- **From a terminal** → command‑line mode (no GUI; output goes to the console and an exit code is returned).
+
+## Getting started
+
+1. Download `VirusTotalScanner.exe` from the [latest release](https://github.com/muhammetozeski/VirusTotalScanner/releases/latest)
+   and run it. It is self‑contained — nothing else to install (WebView2 Runtime, bundled with Windows 11, is
+   only needed for the optional keyless mode).
+2. On first run a short wizard lets you add a VirusTotal API key and, optionally, the right‑click menu.
+3. **Settings → "Add to right‑click menu"** registers a *Scan with VirusTotal* entry for files and folders.
+
+## Features
+
+**Scanning & queue**
+- Existence check by hash first; if VirusTotal has never seen the file, it uploads with a live progress bar
+  and waits for analysis.
+- Verdict‑aware queue with live search and filter chips (Clean / Suspicious / Malicious / Skipped / Error),
+  a segmented overall‑progress bar, pause/resume/cancel, and keyboard jumps between threats.
+- Scan running processes ("am I infected right now?"), expand archives and scan their members, or look up a
+  bare MD5/SHA‑1/SHA‑256.
+
+**Every list is the same** — the queue, the quarantine vault, scan history, downloads triage, the per‑engine
+detail table, and every dialog share one central list component: real multi‑select with a leading checkbox
+column, right‑click that selects the row first, "mark/unmark selected", and a copy menu for each row's file
+path, name, SHA‑256, MD5, and VirusTotal link.
+
+**Detail pane** — per‑engine results table (major engines starred, stale signatures flagged), detection‑ratio
+bar, a plain‑language recommendation, hashes with one‑click copy, an optional behaviour digest (network /
+files / registry / MITRE), and community comments — the whole pane scrolls as one.
+
+**After the verdict**
+- **Quarantine vault** — reversible; restoring re‑checks the current verdict so clearing a false positive is
+  safe, not blind. Handles files locked by a running process and can neutralize at reboot.
+- **Scan history** — searchable, star/notes, "did this later turn malicious?" re‑verdict, recurring‑threat and
+  threat‑hotspot views, HTML report export.
+- **Downloads triage** — recent downloads with origin host, signature, cached verdict, and same‑source
+  clustering.
+- **Incident timeline** — which executables landed on disk, grouped by day.
+- **Integrity baseline** — pin files and detect drift later.
+- Family clusters, per‑folder rollup, folder neighbors, persistence‑hook hunting, copy finder.
+
+**Keys & quota**
+- Multiple API keys with rotation (switches when one is exhausted; counts down and auto‑resumes when all are);
+  per‑key minute (4) / daily (500) / monthly (15.5K) quota tracking on a live dashboard.
+- Keys are encrypted with DPAPI and stored in the settings file.
+- Resilient HTTP (Polly retry/backoff; key rotation on HTTP 429).
+
+Dark/light theme, system tray with threat notifications, CSV/HTML export, live log viewer.
+
+## Keyless / quota‑free checking
+
+VirusTotal's API charges every hash lookup against your quota. Two genuinely keyless paths exist:
+
+1. **Local signature pre‑filter.** Validly signed files (embedded *or* catalog‑signed — e.g. all Windows
+   files) are verified with `WinVerifyTrust` and **never sent to VirusTotal** — no key, no quota. They are
+   marked *Signed (not scanned)*; a signature means the publisher is verified, **not** that the file is clean.
+   By default only Microsoft‑signed files are skipped; add publishers, "all valid signatures", or a
+   known‑good hash list under **Settings → Trust sources**. Force a scan with right‑click → *Ignore trust,
+   scan with VT*.
+2. **Keyless GUI lookup (WebView2).** **Settings → Trust sources → "Keyless lookup"** (or CLI `--keyless`).
+   A hidden browser opens VirusTotal's public page and captures the page's own data response — no key, no
+   quota, but **slow**, and lookup‑only (it cannot upload an unknown file).
+
+## Command line
+
 ```
-VirusTotalScanner.exe <dosya|klasör> [...]   # tara
-  -r, --recurse        klasörleri alt klasörlerle tara
-      --no-trust       imza güvenini yok say (imzalıları da VT'ye gönder)
-  -j, --json           JSON çıktı (stdout)
-  -q, --quiet          yalın çıktı
-      --install/--uninstall/--repair   sağ tuş menüsü (HKLM, yönetici/UAC)
+VirusTotalScanner.exe [options] <file|folder> [<file|folder> ...]
+  -n, --cli, --nogui     run in the terminal without a GUI
+  -r, --recurse          scan folders recursively
+      --no-trust         ignore signature trust (send signed files to VT too)
+  -k, --keyless          keyless lookup via the WebView2 GUI (no quota, slow)
+      --expand-archives  expand archives (zip/jar/nupkg…) and scan their members
+      --running          scan the on‑disk image of every running process
+  -j, --json             machine‑readable JSON to stdout
+  -q, --quiet            terse output (verdict lines only)
+      --report <path>    write a report (.html/.csv/.json/.txt — format from the extension)
+      --fail-on <N>      exit 1 if any file has N+ detections (CI gate)
+      --diff <json>      compare against a prior --report json (by sha256); print the delta
+      --fail-on-new / --fail-on-regression   exit 1 on new / worsened verdicts
+      --lookup <hash>    look up an MD5/SHA‑1/SHA‑256 hash
+      --expect <hash>    verify a file against an expected hash (exit 4 on mismatch)
+      --install / --uninstall / --repair     right‑click menu (HKLM, needs admin/UAC)
       --addkey <KEY> / --listkeys / --removekey <id|all>
-      --lookup <hash>  MD5/SHA-1/SHA-256 sorgula
-  -h, --help / -v, --version
+  -g, --gui              force the GUI even from a terminal
+  -h, --help   -v, --version
 ```
-Çıkış kodları: `0` temiz, `1` tehdit, `2` kullanım/IO, `3` anahtar yok.
-Betikte beklemek için: `Start-Process -Wait VirusTotalScanner.exe ...`
 
-## Anahtarsız / kotasız kontrol
-VirusTotal API'si her hash sorgusu için anahtar ister (kotaya sayılır); eski anahtarsız
-Cymru MHR servisi kapanmış, `vt` CLI de aynı anahtarı/kotayı kullanır. İki gerçek anahtarsız yol var:
+**Exit codes:** `0` clean · `1` threat found · `2` usage/IO error · `3` no API key · `4` hash mismatch.
 
-**1) Yerel imza ön-filtresi.** Geçerli imzalı (gömülü VEYA katalog imzalı — örn. tüm Windows
-dosyaları) dosyalar `WinVerifyTrust` ile doğrulanıp **VT'ye hiç gönderilmez** — anahtar yok, kota
-yok, pratikte sınırsız. "İmzalı (taranmadı)" diye işaretlenir; imza = yayıncı doğrulandı demektir,
-"temiz" garantisi DEĞİLDİR (yeşil rozet verilmez). Varsayılan: yalnızca Microsoft imzalılar atlanır;
-Ayarlar → Güven Kaynakları'ndan ek yayıncı, "tüm geçerli imzalar" veya bilinen-temiz hash listesi
-eklenebilir. Sağ tık → "Güveni yok say, VT ile tara" ile zorla.
+Because this is a GUI app, wait for it in a script with `Start-Process -Wait VirusTotalScanner.exe ...`.
 
-**2) Anahtarsız GUI sorgusu (WebView2).** Ayarlar → Güven Kaynakları → "Anahtarsız sorgu" (veya CLI
-`--keyless`). Gizli bir tarayıcı (WebView2) VirusTotal'in herkese açık sayfasını açar ve sayfanın
-kendi veri çağrısının yanıtını yakalar — anahtar yok, kota yok, ama **yavaştır** ve yalnızca sorgu
-yapar (bilinmeyen dosyayı yükleyemez). Çalışması için Windows'ta WebView2 Runtime gerekir (Win11'de
-hazır gelir).
+## Building & releasing
 
-## Özellikler
-- MD5 ile var-mı kontrolü; yoksa ayrıntılı yükleme çubuğuyla yükleyip analiz bekler.
-- Çok anahtar + dönüşümlü kullanım; biri dolunca diğerine geçer; hepsi dolunca geri sayımla
-  bekler (kapanmaz), reset olunca otomatik devam eder.
-- Anahtar başına dakika (4) / günlük (500) / aylık (15.5K) kota takibi, canlı pano.
-- Anahtarlar DPAPI ile şifrelenip ayar dosyasında saklanır (ayrı dosya yok).
-- Polly ile dayanıklı HTTP (yeniden deneme/backoff; 429'da anahtar değiştirme).
-- Hangi antivirüsün pozitif verdiğini tablo + tespit oranı çubuğu + verdict rozeti.
-- Yerel hash önbelleği (kota tasarrufu), sürükle-bırak, sistem tepsisi + tehdit bildirimi,
-  karantina, CSV dışa aktarma, koyu/açık tema, canlı log görüntüleyici, sağ tuş onar/kaldır.
-
-## Geliştirme
+```powershell
+dotnet build      # build
+dotnet run        # launch the GUI
 ```
-dotnet build                 # derle
-dotnet run                   # arayüzü çalıştır
-.\publish.ps1                # iki tek-exe profili (publish\small, publish\portable)
-```
-Loglar/önbellek `%AppData%\VirusTotalScanner\` altında; ayar dosyası exe'nin yanında
-(yazılamıyorsa %AppData%'da).
+
+Releases are a single‑file, self‑contained, ReadyToRun exe (trimming stays **off** — the reflection‑based
+localization breaks under trimming). The exact publish/deploy steps are in
+[`docs/guncelleme.md`](docs/guncelleme.md).
+
+Runtime data (logs, cache, history, quarantine) lives next to the exe (or under
+`%AppData%\VirusTotalScanner\` when that folder isn't writable). The version is set by `<Version>` in the
+`.csproj`.
