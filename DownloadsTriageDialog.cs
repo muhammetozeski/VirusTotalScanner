@@ -9,7 +9,7 @@ internal sealed class DownloadsTriageDialog : Form
     readonly ComboBox _window = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     readonly Button _scanUnscanned;
     readonly Label _status = new() { AutoSize = true, Margin = new Padding(8, 8, 0, 0) };
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     CancellationTokenSource? _cts;
     List<DownloadItem> _items = [];
     Dictionary<string, (int Count, bool Suspect)> _sourceClusters = new(StringComparer.OrdinalIgnoreCase);
@@ -71,6 +71,20 @@ internal sealed class DownloadsTriageDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.Standardize<DownloadItem>(_grid,
+        [
+            new(Strings.MenuCopyFilePath, d => d.Path),
+            new(Strings.ColFile, d => d.Name),
+            new(Strings.ColDownloadSource, d => d.Host),
+        ],
+        [
+            new(Strings.BtnRescanSelected, rows =>
+            {
+                var paths = rows.Where(d => File.Exists(d.Path)).Select(d => d.Path).Distinct().ToArray();
+                if (paths.Length > 0) { ScanRequested?.Invoke(paths); Close(); }
+            }, enabled: rows => rows.Any(d => File.Exists(d.Path))),
+            new(Strings.MenuRevealFile, rows => { if (rows.FirstOrDefault() is { } d && File.Exists(d.Path)) RevealInExplorer(d.Path); }),
+        ]);
         ThemeManager.StyleButton(refreshBtn);
         ThemeManager.StyleButton(_scanUnscanned);
         ThemeManager.StyleButton(close);
@@ -97,13 +111,14 @@ internal sealed class DownloadsTriageDialog : Form
         _grid.CellFormatting += (_, e) =>
         {
             if (_grid.Rows[e.RowIndex].DataBoundItem is not DownloadItem d) return;
+            string prop = e.ColumnIndex >= 0 ? _grid.Columns[e.ColumnIndex].DataPropertyName : "";
             if (d.Detections > 0) e.CellStyle!.ForeColor = Theme.Current.Danger;
-            else if (e.ColumnIndex == 3 && d.Signature == Strings.TrustUnsigned) e.CellStyle!.ForeColor = Theme.Current.Warning;
+            else if (prop == nameof(DownloadItem.Signature) && d.Signature == Strings.TrustUnsigned) e.CellStyle!.ForeColor = Theme.Current.Warning;
 
             // Same-source cluster: 2+ downloads from one registrable domain (classic bad-distribution
             // pattern). Badge + color the source cell; if any sibling is flagged, the whole group goes red
             // so an as-yet-unscanned neighbor is pulled up by its suspect shared origin.
-            if (e.ColumnIndex == 2 && SourceDomain(d.Host) is { } dom && _sourceClusters.TryGetValue(dom, out var cl))
+            if (prop == nameof(DownloadItem.Host) && SourceDomain(d.Host) is { } dom && _sourceClusters.TryGetValue(dom, out var cl))
             {
                 if (e.Value is string hv && !hv.Contains('⚑')) e.Value = string.Format(Strings.DownloadsSameSourceBadgeFormat, hv, cl.Count);
                 e.CellStyle!.ForeColor = cl.Suspect ? Theme.Current.Danger : Theme.Current.Accent;

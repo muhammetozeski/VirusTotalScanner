@@ -6,7 +6,7 @@ namespace VirusTotalScanner;
 /// the current verdict (keyless) so reversing a false positive is safe, not blind.</summary>
 internal sealed class QuarantineVaultDialog : Form
 {
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     readonly Label _sizeLabel = new() { AutoSize = true, Margin = new Padding(14, 9, 0, 0), Tag = "subtle" };
 
     public QuarantineVaultDialog()
@@ -50,6 +50,19 @@ internal sealed class QuarantineVaultDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.Standardize<QuarantineEntry>(_grid,
+        [
+            new(Strings.MenuCopyFilePath, e => e.OriginalPath),
+            new(Strings.MenuCopyFileName, e => e.FileName),
+            new(Strings.MenuCopySha256, e => e.Sha256),
+            new(Strings.MenuCopyMd5, e => e.Md5),
+            new(Strings.MenuCopyVtUrl, e => VtUrl(e.Sha256)),
+        ],
+        [
+            new(Strings.BtnRestore, _ => RestoreSelectedAsync()),
+            new(Strings.MenuOpenVt, _ => OpenVtForSelected(), enabled: t => t.Any(e => !string.IsNullOrEmpty(e.Sha256))),
+            new(Strings.BtnVaultPurge, _ => PurgeSelected(), separatorBefore: true),
+        ]);
         ThemeManager.StyleButton(restore);
         ThemeManager.StyleButton(purge);
         ThemeManager.StyleButton(purgeAll);
@@ -69,8 +82,15 @@ internal sealed class QuarantineVaultDialog : Form
         _sizeLabel.Text = string.Format(Strings.VaultSizeLabelFormat, list.Count, FormatBytes(QuarantineVault.ReclaimableBytes()), recovered);
     }
 
-    List<QuarantineEntry> SelectedEntries() =>
-        _grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem).OfType<QuarantineEntry>().ToList();
+    // Marked (checkbox) rows if any, else the highlighted rows — so the buttons and the right-click
+    // menu act on exactly the same set.
+    List<QuarantineEntry> SelectedEntries() => EntityGrid.Targets<QuarantineEntry>(_grid);
+
+    void OpenVtForSelected()
+    {
+        var e = SelectedEntries().FirstOrDefault(x => !string.IsNullOrEmpty(x.Sha256));
+        if (e != null && VtUrl(e.Sha256) is { } url) OpenUrlInBrowser(url);
+    }
 
     void PurgeSelected()
     {

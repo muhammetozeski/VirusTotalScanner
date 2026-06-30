@@ -7,7 +7,7 @@ namespace VirusTotalScanner;
 /// offers rescan / open-location / copy-hash / open-VT.</summary>
 internal sealed class ScanHistoryControl : UserControl
 {
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     readonly TextBox _search = new() { Width = 220 };
     string _categoryFilter = ""; // "", "threat", "suspicious", "clean" — set by an overview tile drill-down
     readonly Panel _escBanner = new() { Dock = DockStyle.Fill, Visible = false, Cursor = Cursors.Hand, Padding = new Padding(12, 6, 12, 6) };
@@ -149,7 +149,7 @@ internal sealed class ScanHistoryControl : UserControl
         _grid.ReadOnly = true;
         _grid.RowHeadersVisible = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColHistoryStar, DataPropertyName = nameof(HistoryEntry.Star), Width = 30, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter } });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "star", HeaderText = Strings.ColHistoryStar, DataPropertyName = nameof(HistoryEntry.Star), Width = 30, DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter } });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColHistoryDate, DataPropertyName = nameof(HistoryEntry.WhenLocal), Width = 130, DefaultCellStyle = new DataGridViewCellStyle { Format = "yyyy-MM-dd HH:mm" } });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(HistoryEntry.Name), Width = 190 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColVerdict, DataPropertyName = nameof(HistoryEntry.Verdict), Width = 90 });
@@ -159,10 +159,11 @@ internal sealed class ScanHistoryControl : UserControl
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColPath, DataPropertyName = nameof(HistoryEntry.Path), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         ThemeManager.StyleGrid(_grid);
 
-        // Click the ★ cell to toggle the star.
+        // Click the ★ cell to toggle the star (matched by column name so the leading mark column is safe).
         _grid.CellClick += (_, e) =>
         {
-            if (e.RowIndex >= 0 && e.ColumnIndex == 0 && _grid.Rows[e.RowIndex].DataBoundItem is HistoryEntry h)
+            if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && _grid.Columns[e.ColumnIndex].Name == "star"
+                && _grid.Rows[e.RowIndex].DataBoundItem is HistoryEntry h)
             {
                 h.Starred = !h.Starred;
                 ScanHistoryStore.Persist();
@@ -178,22 +179,38 @@ internal sealed class ScanHistoryControl : UserControl
         };
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) Reopen(Selected()); };
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add(Strings.MenuHistoryRescan, null, (_, _) => { var h = Selected(); if (EnsureFile(h)) RescanRequested?.Invoke([h!.Path!]); });
-        menu.Items.Add(Strings.MenuHistoryOpenDetails, null, (_, _) => Reopen(Selected()));
-        menu.Items.Add(Strings.MenuRevealFile, null, (_, _) => { var h = Selected(); if (EnsureFile(h)) try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + h!.Path + "\""); } catch { } });
-        menu.Items.Add(Strings.BtnEscalationCopySha, null, (_, _) => { var h = Selected(); if (!string.IsNullOrEmpty(h?.Sha256)) try { Clipboard.SetText(h.Sha256); } catch { } });
-        menu.Items.Add(Strings.MenuHistoryToggleStar, null, (_, _) => { if (Selected() is { } h) { h.Starred = !h.Starred; ScanHistoryStore.Persist(); } });
-        menu.Items.Add(Strings.MenuHistoryEditNote, null, (_, _) =>
-        {
-            if (Selected() is not { } h) return;
-            string? note = Dialogs.InputBox(Strings.HistoryNotePrompt, Strings.ColHistoryNote, h.Note ?? "");
-            if (note != null) { h.Note = note; ScanHistoryStore.Persist(); }
-        });
-        _grid.ContextMenuStrip = menu;
+        EntityGrid.Standardize<HistoryEntry>(_grid,
+        [
+            new(Strings.MenuCopyFilePath, h => h.Path),
+            new(Strings.ColFile, h => h.Name),
+            new(Strings.MenuCopySha256, h => h.Sha256),
+            new(Strings.MenuCopyMd5, h => h.Md5),
+            new(Strings.MenuCopyVtUrl, h => VtUrl(h.Sha256)),
+        ],
+        [
+            new(Strings.MenuHistoryRescan, RescanRows, enabled: rows => rows.Any(h => h.Path != null && File.Exists(h.Path))),
+            new(Strings.MenuHistoryOpenDetails, rows => Reopen(rows.FirstOrDefault())),
+            new(Strings.MenuRevealFile, rows => { var h = rows.FirstOrDefault(); if (EnsureFile(h)) RevealInExplorer(h!.Path!); }),
+            new(Strings.MenuHistoryToggleStar, rows => { foreach (var h in rows) h.Starred = !h.Starred; ScanHistoryStore.Persist(); }, separatorBefore: true),
+            new(Strings.MenuHistoryEditNote, rows => EditNote(rows.FirstOrDefault())),
+        ]);
     }
 
     HistoryEntry? Selected() => _grid.CurrentRow?.DataBoundItem as HistoryEntry;
+
+    void RescanRows(IReadOnlyList<HistoryEntry> rows)
+    {
+        var paths = rows.Where(h => h.Path != null && File.Exists(h.Path)).Select(h => h.Path!).Distinct().ToArray();
+        if (paths.Length > 0) RescanRequested?.Invoke(paths);
+        else NativeMessageBox.Info(Strings.HistoryNoPathInfo);
+    }
+
+    void EditNote(HistoryEntry? h)
+    {
+        if (h == null) return;
+        string? note = Dialogs.InputBox(Strings.HistoryNotePrompt, Strings.ColHistoryNote, h.Note ?? "");
+        if (note != null) { h.Note = note; ScanHistoryStore.Persist(); }
+    }
 
     /// <summary>Apply a category drill-down from an overview count tile (threat / suspicious / clean),
     /// clearing the other filters first so the click lands exactly on those files.</summary>

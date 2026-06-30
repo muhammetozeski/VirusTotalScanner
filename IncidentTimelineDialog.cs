@@ -9,8 +9,8 @@ internal sealed class IncidentTimelineDialog : Form
     readonly ComboBox _window = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
     readonly Button _scan;
     readonly Label _status = new() { AutoSize = true, Margin = new Padding(8, 8, 0, 0) };
-    readonly DataGridView _days = new();
-    readonly DataGridView _files = new();
+    readonly DataGridView _days = new EntityGridView();
+    readonly DataGridView _files = new EntityGridView();
     CancellationTokenSource? _cts;
 
     static readonly int[] WindowDays = [30, 60, 90, 180];
@@ -53,6 +53,15 @@ internal sealed class IncidentTimelineDialog : Form
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_days);
         ThemeManager.StyleGrid(_files);
+        EntityGrid.Standardize<TimelineFile>(_files,
+        [
+            new(Strings.MenuCopyFilePath, f => f.Path),
+            new(Strings.MenuCopyFileName, f => f.Name),
+        ],
+        [
+            new(Strings.MenuRevealFile, files => RevealFiles(files),
+                enabled: t => t.Any(f => File.Exists(f.Path))),
+        ]);
         ThemeManager.StyleButton(_scan);
         ThemeManager.StyleButton(close);
 
@@ -98,8 +107,9 @@ internal sealed class IncidentTimelineDialog : Form
         _files.CellFormatting += (_, e) =>
         {
             if (_files.Rows[e.RowIndex].DataBoundItem is not TimelineFile f) return;
+            string prop = e.ColumnIndex >= 0 ? _files.Columns[e.ColumnIndex].DataPropertyName : "";
             if (f.Detections > 0) e.CellStyle!.ForeColor = Theme.Current.Danger;
-            else if (e.ColumnIndex == 3 && !f.Known) e.Value = "—";
+            else if (prop == nameof(TimelineFile.Detections) && !f.Known) e.Value = "—";
         };
         _files.CellDoubleClick += (_, e) =>
         {
@@ -156,5 +166,11 @@ internal sealed class IncidentTimelineDialog : Form
     void ShowSelectedDay()
     {
         _files.DataSource = (_days.CurrentRow?.DataBoundItem as TimelineDay)?.Files;
+    }
+
+    static void RevealFiles(IReadOnlyList<TimelineFile> files)
+    {
+        foreach (var f in files)
+            if (File.Exists(f.Path)) RevealInExplorer(f.Path);
     }
 }

@@ -8,7 +8,7 @@ internal sealed class HistoryReverdictDialog : Form
 {
     readonly Button _rescan;
     readonly Label _status = new() { AutoSize = true, Margin = new Padding(8, 8, 0, 0) };
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     CancellationTokenSource? _cts;
     List<ReverdictEscalation> _items = [];
 
@@ -55,6 +55,25 @@ internal sealed class HistoryReverdictDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.Standardize<ReverdictEscalation>(_grid,
+        [
+            new(Strings.MenuCopyFilePath, e => e.Path),
+            new(Strings.MenuCopyFileName, e => e.Name),
+        ],
+        [
+            new(Strings.BtnRescanSelected, _ =>
+            {
+                var paths = SelectedPaths();
+                if (paths.Length == 0) { _status.Text = Strings.ReverdictSelectRowOnDisk; return; }
+                ScanRequested?.Invoke(paths);
+                Close();
+            }, enabled: t => t.Any(e => !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path!))),
+            new(Strings.BtnEscalationReveal, t =>
+            {
+                var e = t.FirstOrDefault(x => !string.IsNullOrEmpty(x.Path) && File.Exists(x.Path!));
+                if (e != null) RevealInExplorer(e.Path!);
+            }, enabled: t => t.Any(e => !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path!))),
+        ]);
         ThemeManager.StyleButton(refreshBtn);
         ThemeManager.StyleButton(_rescan);
         ThemeManager.StyleButton(reveal);
@@ -86,7 +105,8 @@ internal sealed class HistoryReverdictDialog : Form
 
         _grid.CellFormatting += (_, e) =>
         {
-            if (e.ColumnIndex == 3) e.CellStyle!.ForeColor = Theme.Current.Danger; // "Şimdi" ratio in red
+            string prop = e.ColumnIndex >= 0 ? _grid.Columns[e.ColumnIndex].DataPropertyName : "";
+            if (prop == nameof(ReverdictEscalation.NewRatio)) e.CellStyle!.ForeColor = Theme.Current.Danger; // "Şimdi" ratio in red
         };
         _grid.CellDoubleClick += (_, e) =>
         {

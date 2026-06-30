@@ -41,7 +41,7 @@ internal sealed class FolderRollupDialog : Form
                 total.Suspicious, total.Clean, total.Signed, total.Unknown),
         };
 
-        var grid = new DataGridView
+        var grid = new EntityGridView
         {
             Dock = DockStyle.Fill,
             AutoGenerateColumns = false,
@@ -79,6 +79,10 @@ internal sealed class FolderRollupDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(grid);
+        EntityGrid.Standardize<Row>(grid,
+        [
+            new(Strings.ColFolder, r => r.Folder),
+        ]);
         ThemeManager.StyleButton(close);
     }
 

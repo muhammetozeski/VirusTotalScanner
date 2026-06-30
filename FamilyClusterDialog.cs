@@ -41,7 +41,7 @@ internal sealed class FamilyClusterDialog : Form
             Text = rows.Count == 0 ? Strings.FamilyClustersNone : string.Format(Strings.FamilyClustersHeaderFormat, rows.Count),
         };
 
-        var grid = new DataGridView
+        var grid = new EntityGridView
         {
             Dock = DockStyle.Fill,
             AutoGenerateColumns = false,
@@ -70,6 +70,11 @@ internal sealed class FamilyClusterDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(grid);
+        EntityGrid.Standardize<Row>(grid,
+        [
+            new(Strings.ColFamily, r => r.Family),
+            new(Strings.ColPaths, r => r.Paths),
+        ]);
         ThemeManager.StyleButton(close);
     }
 }

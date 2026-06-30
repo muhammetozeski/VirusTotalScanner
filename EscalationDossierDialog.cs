@@ -8,7 +8,7 @@ namespace VirusTotalScanner;
 /// A live re-check (which does spend quota) is one explicit button away.</summary>
 internal sealed class EscalationDossierDialog : Form
 {
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     readonly Label _status = new() { AutoSize = true, Margin = new Padding(8, 8, 0, 0) };
     List<DossierRow> _rows = [];
 
@@ -70,6 +70,18 @@ internal sealed class EscalationDossierDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.Standardize<DossierRow>(_grid,
+        [
+            new(Strings.MenuCopySha256, e => e.Sha),
+            new(Strings.MenuCopyFileName, e => e.Name),
+            new(Strings.MenuCopyFilePath, e => e.FilePath),
+            new(Strings.MenuCopyVtUrl, e => VtUrl(e.Sha)),
+        ],
+        [
+            new(Strings.DetailActionQuarantine, _ => QuarantineSelected()),
+            new(Strings.BtnEscalationReveal, _ => RevealSelected()),
+            new(Strings.BtnEscalationOpenVt, _ => OpenVtSelected()),
+        ]);
         foreach (var b in new[] { live, quarantine, reveal, copySha, openVt }) ThemeManager.StyleButton(b);
         ThemeManager.StyleButton(close);
 
@@ -95,8 +107,9 @@ internal sealed class EscalationDossierDialog : Form
         _grid.CellFormatting += (_, e) =>
         {
             if (_grid.Rows[e.RowIndex].DataBoundItem is not DossierRow r) return;
-            if (e.ColumnIndex == 3) e.CellStyle!.ForeColor = Theme.Current.Danger;          // "Şimdi" ratio in red
-            if (e.ColumnIndex == 5 && r.OnDisk) e.CellStyle!.ForeColor = Theme.Current.Warning; // still on disk = actionable
+            string prop = e.ColumnIndex >= 0 ? _grid.Columns[e.ColumnIndex].DataPropertyName : "";
+            if (prop == nameof(DossierRow.NewRatio)) e.CellStyle!.ForeColor = Theme.Current.Danger;          // "Şimdi" ratio in red
+            if (prop == nameof(DossierRow.Presence) && r.OnDisk) e.CellStyle!.ForeColor = Theme.Current.Warning; // still on disk = actionable
         };
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) RevealSelected(); };
     }
