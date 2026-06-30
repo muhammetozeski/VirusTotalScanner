@@ -21,7 +21,7 @@ internal sealed class NeighborsDialog : Form
             Text = string.Format(Strings.NeighborsHeaderFormat, data.Folder, data.Cached.Count, data.NeverScanned.Count),
         };
 
-        var grid = new DataGridView
+        var grid = new EntityGridView
         {
             Dock = DockStyle.Fill,
             AutoGenerateColumns = false,
@@ -60,6 +60,15 @@ internal sealed class NeighborsDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(grid);
+        EntityGrid.Standardize<NeighborsService.Neighbor>(grid,
+        [
+            new(Strings.MenuCopyFilePath, n => n.Path),
+            new(Strings.ColVerdict, n => n.Verdict),
+        ],
+        [
+            new(Strings.MenuRevealFile, t => { foreach (var n in t) if (File.Exists(n.Path)) RevealInExplorer(n.Path); },
+                enabled: t => t.Any(n => File.Exists(n.Path))),
+        ]);
         ThemeManager.StyleButton(scanBtn);
         ThemeManager.StyleButton(close);
     }

@@ -11,7 +11,7 @@ namespace VirusTotalScanner;
 internal sealed class ScanQueueControl : UserControl
 {
     readonly ScanScheduler _scheduler = AppServices.Scheduler;
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     readonly Panel _emptyCard = new() { Dock = DockStyle.Fill, Visible = false };
     readonly ScanDetailControl _detail = new();
     readonly Panel _overall = new();
@@ -150,7 +150,11 @@ internal sealed class ScanQueueControl : UserControl
         AppServices.Rotator.OnAllExhausted += t => SafeUi(() => OnAllKeysExhausted(t));
         AppServices.Rotator.OnResumed += () => SafeUi(() => _exhaustPromptShown = false);
 
-        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { if (_sortCol >= 0) ApplySort(); _grid.Invalidate(); UpdateChipCounts(); } };
+        // Repaint live progress, but do NOT re-sort here. Re-sorting the whole view 4×/sec while verdicts
+        // streamed in was what made a sorted list "go crazy" during a scan (rows jumping, selection/scroll
+        // thrash). New finished rows are appended in place by OnFilterItemFinished; a full re-sort happens
+        // only on a header click and once when the scan finishes (Finished → ApplyFilter → ApplySort).
+        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { _grid.Invalidate(); UpdateChipCounts(); } };
 
         UpdateRunningState(false);
     }
@@ -243,6 +247,8 @@ internal sealed class ScanQueueControl : UserControl
     void OnHeaderClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (e.ColumnIndex < 0) return;
+        string name = _grid.Columns[e.ColumnIndex].Name;
+        if (name is EntityGrid.MarkColumn or "col_progress") return; // not sortable
         if (e.ColumnIndex == _sortCol) _sortAsc = !_sortAsc;
         else { _sortCol = e.ColumnIndex; _sortAsc = true; }
         ApplySort();
@@ -254,11 +260,12 @@ internal sealed class ScanQueueControl : UserControl
         _view ??= [];
         var keep = SelectedItem();
         var src = _scheduler.Items.Where(Passes); // respect the active filter chips/search
-        List<ScanItem> list = _sortCol switch
+        string sortName = _sortCol >= 0 && _sortCol < _grid.Columns.Count ? _grid.Columns[_sortCol].Name : "";
+        List<ScanItem> list = sortName switch
         {
-            0 => src.OrderBy(i => i.FileName, StringComparer.OrdinalIgnoreCase).ToList(),
-            1 => src.OrderBy(i => i.SizeBytes).ToList(),
-            2 => src.OrderBy(SeverityKey).ToList(),
+            "col_file" => src.OrderBy(i => i.FileName, StringComparer.OrdinalIgnoreCase).ToList(),
+            "col_size" => src.OrderBy(i => i.SizeBytes).ToList(),
+            "col_status" => src.OrderBy(SeverityKey).ToList(),
             _ => src.OrderBy(i => (int)i.Status).ToList(),
         };
         if (!_sortAsc) list.Reverse();
@@ -360,7 +367,9 @@ internal sealed class ScanQueueControl : UserControl
         // No UpdateChipCounts() here — the 250ms repaint tick refreshes the chips; calling it per finished
         // item was an O(n)-per-completion → O(n^2)-across-a-scan rescan on the UI thread. Membership is
         // O(1) via _viewSet instead of a linear _view.Contains.
-        if (FilterActive && _view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item) && _viewSet.Add(item))
+        // Append (don't re-sort) so a newly-finished row shows up live whether a filter OR a sort owns the
+        // view — the stable, no-thrash behaviour; the final ordered sort lands when the scan finishes.
+        if (_view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item) && _viewSet.Add(item))
             _view.Add(item);
     }
 
@@ -519,14 +528,16 @@ internal sealed class ScanQueueControl : UserControl
     {
         _grid.Dock = DockStyle.Fill;
         _grid.AutoGenerateColumns = false;
-        _grid.MultiSelect = true;
-        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.FileName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColSize, DataPropertyName = nameof(ScanItem.SizeText), Width = 80 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(ScanItem.StatusText), Width = 220 });
-        var prog = new DataGridViewTextBoxColumn { HeaderText = Strings.ColProgress, Width = 110 };
+        EntityGrid.AddMarkColumn(_grid); // leading "mark" checkbox at column 0 (before the data columns
+                                         // so _progressCol below stays a valid index)
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_file", HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.FileName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_size", HeaderText = Strings.ColSize, DataPropertyName = nameof(ScanItem.SizeText), Width = 80 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_status", HeaderText = Strings.ColStatus, DataPropertyName = nameof(ScanItem.StatusText), Width = 220 });
+        var prog = new DataGridViewTextBoxColumn { Name = "col_progress", HeaderText = Strings.ColProgress, Width = 110, SortMode = DataGridViewColumnSortMode.NotSortable };
         _progressCol = _grid.Columns.Add(prog);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.EnableMultiSelect(_grid);      // StyleGrid forces MultiSelect off — turn it back on
+        EntityGrid.EnableRightClickSelect(_grid); // right-click first selects the row, then the menu opens on it
         _grid.DataSource = _scheduler.Items;
         _grid.CellPainting += Grid_CellPainting;
         _grid.CellFormatting += Grid_CellFormatting;
@@ -577,6 +588,10 @@ internal sealed class ScanQueueControl : UserControl
         var miQuarantine = (ToolStripMenuItem)menu.Items.Add(Strings.MenuQuarantine, null, (_, _) => QuarantineSelected());
         var miMarkClean = (ToolStripMenuItem)menu.Items.Add(Strings.MenuMarkClean, null, (_, _) => MarkCleanSelected());
         var miSuppressFolder = (ToolStripMenuItem)menu.Items.Add(Strings.MenuSuppressFolder, null, (_, _) => SuppressFolder());
+
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(Strings.MenuMarkSelected, null, (_, _) => EntityGrid.MarkSelected(_grid, true));
+        menu.Items.Add(Strings.MenuUnmarkSelected, null, (_, _) => EntityGrid.MarkSelected(_grid, false));
 
         // Context-aware: disable actions that don't apply to the selected row's current state.
         menu.Opening += (_, e) =>
@@ -1359,13 +1374,9 @@ internal sealed class ScanQueueControl : UserControl
         UpdateEmptyState(); // re-assert once the control tree is realized (z-order is reliable here)
     }
 
-    /// <summary>All currently-selected items (multi-select), for batch actions.</summary>
-    List<ScanItem> SelectedItems()
-    {
-        var list = _grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem).OfType<ScanItem>().ToList();
-        if (list.Count == 0 && SelectedItem() is { } one) list.Add(one);
-        return list;
-    }
+    /// <summary>The items batch actions apply to: the checkbox-marked rows if any, otherwise the
+    /// highlighted rows, otherwise the single current row.</summary>
+    List<ScanItem> SelectedItems() => EntityGrid.Targets<ScanItem>(_grid);
     static void CopySafe(string? s) { if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } } }
 
     void SaveShareCard()

@@ -6,7 +6,7 @@ namespace VirusTotalScanner;
 /// cut each one — closing the gap between "flagged" and "actually removed" without hand-editing regedit.</summary>
 internal sealed class PersistenceHooksDialog : Form
 {
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     readonly List<PersistenceHunter.Hook> _hooks;
 
     public PersistenceHooksDialog(string fileName, List<PersistenceHunter.Hook> hooks)
@@ -47,6 +47,15 @@ internal sealed class PersistenceHooksDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.Standardize<PersistenceHunter.Hook>(_grid,
+        [
+            new(Strings.PersistHooksColCommand, h => h.Command),
+            new(Strings.ColName, h => h.Name),
+            new(Strings.ColLocations, h => h.Location),
+        ],
+        [
+            new(Strings.BtnPersistRemoveHook, _ => RemoveSelected()),
+        ]);
         ThemeManager.StyleButton(remove);
         ThemeManager.StyleButton(close);
     }

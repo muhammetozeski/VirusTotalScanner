@@ -7,7 +7,7 @@ namespace VirusTotalScanner;
 /// reveal button opens the folder; rescan re-checks the whole directory. Local-only.</summary>
 internal sealed class ThreatHotspotDialog : Form
 {
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
 
     public event Action<string[]>? ScanRequested;
 
@@ -64,6 +64,14 @@ internal sealed class ThreatHotspotDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.Standardize<ThreatHotspotService.Hotspot>(_grid,
+        [
+            new(Strings.ColFolder, h => h.Directory),
+        ],
+        [
+            new(Strings.BtnRescanFolder, ts => { foreach (var h in ts) if (h.Directory is { Length: > 0 } d && Directory.Exists(d)) { ScanRequested?.Invoke([d]); Close(); break; } }),
+            new(Strings.BtnOpenFolder, ts => { foreach (var h in ts) RevealDir(h.Directory); }),
+        ]);
         ThemeManager.StyleButton(rescan);
         ThemeManager.StyleButton(reveal);
         ThemeManager.StyleButton(close);
@@ -71,9 +79,11 @@ internal sealed class ThreatHotspotDialog : Form
 
     ThreatHotspotService.Hotspot? Selected() => _grid.CurrentRow?.DataBoundItem as ThreatHotspotService.Hotspot;
 
-    void Reveal()
+    void Reveal() => RevealDir(Selected()?.Directory);
+
+    static void RevealDir(string? dir)
     {
-        if (Selected()?.Directory is { Length: > 0 } d && Directory.Exists(d))
+        if (dir is { Length: > 0 } d && Directory.Exists(d))
             try { System.Diagnostics.Process.Start("explorer.exe", "\"" + d + "\""); } catch { }
     }
 }

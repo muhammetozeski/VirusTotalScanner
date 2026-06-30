@@ -24,6 +24,10 @@ internal static class HelperFunctions
 
     public static long CalculateDownloadSpeed(long bytes, long ms) => ms == 0 ? 0 : (bytes * 1000) / ms;
 
+    /// <summary>The VirusTotal GUI report page for a SHA-256 (null/empty hash → null).</summary>
+    public static string? VtUrl(string? sha256) =>
+        string.IsNullOrEmpty(sha256) ? null : "https://www.virustotal.com/gui/file/" + sha256;
+
     /// <summary>Opens a URL in the default browser.</summary>
     public static void OpenUrlInBrowser(string url)
     {

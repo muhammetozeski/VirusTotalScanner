@@ -346,7 +346,11 @@ internal static class Strings
     public static string MenuCopyFilePath = "Dosya yolu";
     public static string MenuCopyFileName = "Dosya adı";
     public static string MenuCopyVerdictLine = "Verdikt satırı";
+    public static string MenuCopyVtUrl = "VirusTotal bağlantısı";
     public static string MenuRevealFile = "📁  Dosya konumunu aç";
+    // ---- shared list (EntityGrid) ----
+    public static string MenuMarkSelected = "☑  Seçilenleri işaretle";
+    public static string MenuUnmarkSelected = "☐  Seçilenlerden işareti kaldır";
     public static string MenuNeighbors = "📂  Klasör komşuları";
     public static string MenuFindCopies = "🔁  Diğer kopyaları bul (disk)";
     public static string MenuPinBaseline = "📌  Bütünlük izlemesine al";

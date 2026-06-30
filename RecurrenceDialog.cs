@@ -7,7 +7,7 @@ namespace VirusTotalScanner;
 /// the rescan button re-checks it (its source may still be live). Local-only.</summary>
 internal sealed class RecurrenceDialog : Form
 {
-    readonly DataGridView _grid = new();
+    readonly DataGridView _grid = new EntityGridView();
     readonly List<RecurrenceService.Recurrence> _items;
 
     public event Action<string[]>? ScanRequested;
@@ -44,10 +44,7 @@ internal sealed class RecurrenceDialog : Form
         _grid.DataSource = items;
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) RevealSelected(); };
 
-        var rescan = ThemeManager.MakeButton(Strings.BtnRescanSelected, (_, _) =>
-        {
-            if (Selected()?.LastPath is { Length: > 0 } p && File.Exists(p)) { ScanRequested?.Invoke([p]); Close(); }
-        });
+        var rescan = ThemeManager.MakeButton(Strings.BtnRescanSelected, (_, _) => RescanSelected());
         var reveal = ThemeManager.MakeButton(Strings.BtnOpenLastLocation, (_, _) => RevealSelected());
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 100 };
 
@@ -67,12 +64,27 @@ internal sealed class RecurrenceDialog : Form
 
         ThemeManager.Apply(this);
         ThemeManager.StyleGrid(_grid);
+        EntityGrid.Standardize<RecurrenceService.Recurrence>(_grid,
+        [
+            new(Strings.ColFile, e => e.Name),
+            new(Strings.ColPaths, e => e.PathsText),
+            new(Strings.BtnOpenLastLocation, e => e.LastPath),
+        ],
+        [
+            new(Strings.BtnRescanSelected, _ => RescanSelected()),
+            new(Strings.BtnOpenLastLocation, _ => RevealSelected()),
+        ]);
         ThemeManager.StyleButton(rescan);
         ThemeManager.StyleButton(reveal);
         ThemeManager.StyleButton(close);
     }
 
     RecurrenceService.Recurrence? Selected() => _grid.CurrentRow?.DataBoundItem as RecurrenceService.Recurrence;
+
+    void RescanSelected()
+    {
+        if (Selected()?.LastPath is { Length: > 0 } p && File.Exists(p)) { ScanRequested?.Invoke([p]); Close(); }
+    }
 
     void RevealSelected()
     {
