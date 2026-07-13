@@ -22,6 +22,13 @@ internal sealed class EntityGridView : DataGridView
         try { base.SetSelectedRowCore(rowIndex, selected); }
         catch (IndexOutOfRangeException) { /* same empty/transient currency-manager race */ }
     }
+
+    protected override void OnDataError(bool displayErrorDialogIfNoHandler, DataGridViewDataErrorEventArgs e)
+    {
+        e.ThrowException = false;
+        if (e.Exception != null)
+            Log($"DataGridView DataError (Satır: {e.RowIndex}, Kolon: {e.ColumnIndex}): {e.Exception.Message}", LogLevel.Warning);
+    }
 }
 
 /// <summary>One labelled, copyable property of a row entity (file path, SHA-256, VT page, …).
