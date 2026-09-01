@@ -190,7 +190,7 @@ internal sealed class ScanQueueControl : UserControl
         AddChip(strip, Bucket.All, Strings.ChipAll, null);
         AddChip(strip, Bucket.Clean, Strings.ColClean, Theme.Current.Success);
         AddChip(strip, Bucket.Suspicious, Strings.ColSuspicious, Theme.Current.Warning);
-        AddChip(strip, Bucket.Malicious, Strings.RecoMalwareWord, Theme.Current.Danger);
+        AddChip(strip, Bucket.Malicious, Strings.ChipMalicious, Theme.Current.Danger);
         AddChip(strip, Bucket.Skipped, Strings.ChipSkipped, null);
         AddChip(strip, Bucket.Error, Strings.ChipError, null);
 
@@ -367,7 +367,7 @@ internal sealed class ScanQueueControl : UserControl
         SetChip(Bucket.All, Strings.ChipAll, all);
         SetChip(Bucket.Clean, Strings.ColClean, clean);
         SetChip(Bucket.Suspicious, Strings.ColSuspicious, susp);
-        SetChip(Bucket.Malicious, Strings.RecoMalwareWord, mal);
+        SetChip(Bucket.Malicious, Strings.ChipMalicious, mal);
         SetChip(Bucket.Skipped, Strings.ChipSkipped, skip);
         SetChip(Bucket.Error, Strings.ChipError, err);
         _filterCount.Text = FilterActive ? string.Format(Strings.FilterCountFormat, _grid.Rows.Count, all) : "";

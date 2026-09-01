@@ -692,6 +692,7 @@ internal static class Strings
     public static string BarGroupTools = "Araçlar:";
     public static string SearchPlaceholder = "🔎  Ara (ad/yol)…";
     public static string ChipAll = "Tümü";
+    public static string ChipMalicious = "Zararlı";
     public static string ChipSkipped = "Atlandı";
     public static string ChipError = "Hata";
     public static string FilterCountFormat = "gösterilen {0} / toplam {1}";

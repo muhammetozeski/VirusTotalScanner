@@ -551,6 +551,7 @@
   <s name="BarGroupTools">Tools:</s>
   <s name="SearchPlaceholder">🔎  Search (name/path)…</s>
   <s name="ChipAll">All</s>
+  <s name="ChipMalicious">Malicious</s>
   <s name="ChipSkipped">Skipped</s>
   <s name="ChipError">Error</s>
   <s name="FilterCountFormat">showing {0} / total {1}</s>
