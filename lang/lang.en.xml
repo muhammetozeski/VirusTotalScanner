@@ -379,6 +379,9 @@
   <s name="StatusScanFinishedFormat">finished - {0} file(s), {1} threat(s)</s>
   <s name="CoverageProcGuard">Process-start guard</s>
   <s name="CoverageProcGuardNeedsAdmin">Process guard (needs admin)</s>
+  <s name="CoverageWatchDownloadsCountFormat">Downloads watched ({0} folder(s))</s>
+  <s name="CardWatchFolders">Watched folders</s>
+  <s name="WatchFoldersHint">Newly-landed executable-class files in these folders are checked immediately. When the list is empty, Downloads + Desktop are watched. The "Watch downloads" toggle on the General card must be on.</s>
   <s name="TrustUnsigned">unsigned</s>
   <s name="TrustCertExpired">certificate expired</s>
   <s name="TrustCertRevoked">certificate revoked</s>

@@ -47,6 +47,7 @@ internal sealed class SettingsControl : UserControl
         _flow.Controls.Add(BuildTrustCard());
         _flow.Controls.Add(BuildAllowlistCard());
         _flow.Controls.Add(BuildFolderSuppressionCard());
+        _flow.Controls.Add(BuildWatchFoldersCard());
         _flow.Controls.Add(BuildVerdictCard());
         _flow.Controls.Add(BuildAutoActionCard());
         _flow.Controls.Add(BuildScanCard());
@@ -214,6 +215,64 @@ internal sealed class SettingsControl : UserControl
     }
 
     void RefreshFolders() => _folderGrid.DataSource = FolderSuppressionStore.All().ToList();
+
+    /// <summary>Raised after the watch-folder list is edited, so the host restarts the watcher on it.</summary>
+    public event Action? WatchFoldersChanged;
+
+    sealed class WatchFolderRow { public string Folder { get; set; } = ""; } // grid binding needs a property
+
+    readonly DataGridView _watchGrid = new EntityGridView();
+
+    Panel BuildWatchFoldersCard()
+    {
+        var card = Card(Strings.CardWatchFolders, 230, out var body);
+
+        _watchGrid.Dock = DockStyle.Top;
+        _watchGrid.Height = 110;
+        _watchGrid.AutoGenerateColumns = false;
+        _watchGrid.AllowUserToAddRows = false;
+        _watchGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFolder, DataPropertyName = nameof(WatchFolderRow.Folder), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        ThemeManager.StyleGrid(_watchGrid);
+        EntityGrid.Standardize<WatchFolderRow>(_watchGrid, [new(Strings.ColFolder, r => r.Folder)], checkboxes: false);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAddFolder, (_, _) =>
+        {
+            using var dlg = new FolderBrowserDialog();
+            if (dlg.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dlg.SelectedPath)) return;
+            var folders = WatchFolderList();
+            folders.Add(dlg.SelectedPath.TrimEnd('\\'));
+            SaveWatchFolders(folders);
+        }, accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRemoveFromList, (_, _) =>
+        {
+            if (EntityGrid.CurrentItem<WatchFolderRow>(_watchGrid) is not { } row) return;
+            var folders = WatchFolderList();
+            folders.RemoveAll(f => string.Equals(f, row.Folder, StringComparison.OrdinalIgnoreCase));
+            SaveWatchFolders(folders);
+        }));
+        var hint = ThemeManager.MakeLabel(Strings.WatchFoldersHint, subtle: true);
+
+        body.Controls.Add(hint);
+        body.Controls.Add(buttons);
+        body.Controls.Add(_watchGrid);
+        RefreshWatchFolders();
+        return card;
+    }
+
+    static List<string> WatchFolderList() =>
+        Settings.WatchFolders.Value.Split([';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    void SaveWatchFolders(List<string> folders)
+    {
+        Settings.WatchFolders.Value = string.Join(";", folders.Distinct(StringComparer.OrdinalIgnoreCase));
+        SettingsManager.SaveSettings();
+        RefreshWatchFolders();
+        WatchFoldersChanged?.Invoke();
+    }
+
+    void RefreshWatchFolders() =>
+        _watchGrid.DataSource = WatchFolderList().Select(f => new WatchFolderRow { Folder = f }).ToList();
 
     Panel BuildTrustCard()
     {

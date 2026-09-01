@@ -169,6 +169,7 @@ internal sealed partial class MainForm : Form
         _overview.GoToTab += i => { if (i >= 0 && i < _tabs.TabCount) _tabs.SelectedIndex = i; };
         _overview.GoToHistoryFiltered += cat => { _tabs.SelectedIndex = 4; _history.ApplyExternalFilter(cat); }; // Geçmiş
         _overview.WatchDownloadsToggled += () => SafeUi(StartDownloadsWatchIfEnabled);
+        _settings.WatchFoldersChanged += () => SafeUi(StartDownloadsWatchIfEnabled);
         _downloadsWatcher.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
         _processGuard.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
         if (Settings.WatchProcessLaunches) _processGuard.Start();

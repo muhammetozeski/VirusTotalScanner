@@ -187,7 +187,10 @@ internal sealed class ScanOverviewControl : UserControl
     void RefreshCoverage()
     {
         _coverageRows.Controls.Clear();
-        _coverageRows.Controls.Add(CoverageRow(Strings.CoverageWatchDownloads, Settings.WatchDownloads,
+        string watchLabel = Settings.WatchDownloads
+            ? string.Format(Strings.CoverageWatchDownloadsCountFormat, DownloadsTriageService.Folders().Count)
+            : Strings.CoverageWatchDownloads;
+        _coverageRows.Controls.Add(CoverageRow(watchLabel, Settings.WatchDownloads,
             enable: () => { Settings.WatchDownloads.Value = true; SettingsManager.SaveSettings(); WatchDownloadsToggled?.Invoke(); Refresh2(); }, settings: null));
         _coverageRows.Controls.Add(CoverageRow(Strings.CoverageUsbAutoScan, Settings.WatchUsb,
             enable: () => { Settings.WatchUsb.Value = true; SettingsManager.SaveSettings(); Refresh2(); }, settings: null));

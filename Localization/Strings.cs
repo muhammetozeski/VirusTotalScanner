@@ -496,6 +496,9 @@ internal static class Strings
     public static string StatusScanRunning = "çalışıyor…";
     public static string StatusScanFinishedFormat = "bitti — {0} dosya, {1} tehdit";
     public static string CoverageProcGuard = "Süreç başlatma koruması";
+    public static string CoverageWatchDownloadsCountFormat = "İndirilenler izleniyor ({0} klasör)";
+    public static string CardWatchFolders = "İzlenen klasörler";
+    public static string WatchFoldersHint = "Yeni inen çalıştırılabilir dosyalar bu klasörlerde anında denetlenir. Liste boşken İndirilenler + Masaüstü izlenir. Çalışması için Genel karttaki \"İndirilenleri izle\" ayarı açık olmalıdır.";
     public static string CoverageProcGuardNeedsAdmin = "Süreç koruması (yönetici gerekli)";
 
     // ---- trust evaluation reasons (shown as the skip reason) ----

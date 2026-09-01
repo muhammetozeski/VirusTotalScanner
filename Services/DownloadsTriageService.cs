@@ -31,11 +31,14 @@ internal static class DownloadsTriageService
         ".com", ".dll", ".cpl", ".zip", ".7z", ".rar", ".iso", ".apk", ".lnk", ".nupkg",
     };
 
-    public static IReadOnlyList<string> Folders() =>
-    [
-        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
-        Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-    ];
+    /// <summary>The user's watch-folder list, falling back to Downloads + Desktop when empty — the
+    /// same folders the live watcher covers, so the triage view and the watcher never disagree.</summary>
+    public static IReadOnlyList<string> Folders()
+    {
+        var custom = Settings.WatchFolders.Value
+            .Split([';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return custom.Length > 0 ? custom : DownloadsWatcher.DefaultFolders();
+    }
 
     public static async Task<List<DownloadItem>> BuildAsync(HashCache cache, int daysBack, Action<int, int>? progress, CancellationToken ct)
     {
