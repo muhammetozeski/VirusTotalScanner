@@ -51,6 +51,8 @@ internal sealed class DownloadsWatcher : IDisposable
             catch (Exception ex) { Log($"Downloads watch start failed for {f}: {ex.Message}", LogLevel.Warning); }
         }
         Log($"Downloads watch active on {_watchers.Count} folder(s).", LogLevel.Info);
+        UiStatusHub.Report(Strings.StatusSourceWatcher, string.Format(Strings.StatusWatcherActiveFormat, _watchers.Count),
+            _watchers.Count > 0 ? StatusSeverity.Info : StatusSeverity.Warning);
     }
 
     public void Stop()
@@ -64,6 +66,7 @@ internal sealed class DownloadsWatcher : IDisposable
     /// name="sinceUtc"/> so it's cheap, reusing the full per-file pipeline (HandleAsync).</summary>
     public async Task CatchUpAsync(IEnumerable<string> folders, DateTime sinceUtc)
     {
+        int handled = 0;
         foreach (var folder in folders.Where(f => !string.IsNullOrWhiteSpace(f) && Directory.Exists(f)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             string[] files;
@@ -74,8 +77,11 @@ internal sealed class DownloadsWatcher : IDisposable
                 if (!ExecExts.Contains(Path.GetExtension(f))) continue;
                 try { if (File.GetLastWriteTimeUtc(f) <= sinceUtc) continue; } catch { continue; }
                 await HandleAsync(f);
+                handled++;
             }
         }
+        if (handled > 0)
+            UiStatusHub.Report(Strings.StatusSourceWatcher, string.Format(Strings.StatusCatchUpFormat, handled));
     }
 
     async Task HandleAsync(string path)
@@ -142,9 +148,16 @@ internal sealed class DownloadsWatcher : IDisposable
         {
             Interlocked.Increment(ref Flagged);
             string? note = lure ? Strings.WatcherLureLabel + (originNote != null ? " " + originNote : "") : originNote;
+            UiStatusHub.Report(Strings.StatusSourceWatcher,
+                string.Format(Strings.StatusWatcherFileFlaggedFormat, Path.GetFileName(containerPath), report != null ? $"{report.DetectionCount}/{report.TotalEngines}" : Strings.WatcherLureLabel),
+                StatusSeverity.Danger);
             ThreatFound?.Invoke(new ScanItem(containerPath) { Report = report, Md5 = md5, Sha256 = sha, OriginNote = note });
         }
-        else Interlocked.Increment(ref Cleared);
+        else
+        {
+            Interlocked.Increment(ref Cleared);
+            UiStatusHub.Report(Strings.StatusSourceWatcher, string.Format(Strings.StatusWatcherFileCleanFormat, Path.GetFileName(path)));
+        }
     }
 
     /// <summary>Waits until the file stops growing and is readable (a download has finished), or gives up.</summary>

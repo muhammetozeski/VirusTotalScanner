@@ -23,7 +23,7 @@ internal static class Strings
     public static string TrayRunningText = "Arka planda çalışıyor. Açmak için simgeye çift tıklayın.";
 
     // ---- status bar / notifications ----
-    public static string StatusBarFormat = "  Anahtar: {0}/{1} kullanılabilir   •   Ayar: {2}";
+    public static string StatusBarKeysFormat = "Anahtar: {0}/{1} kullanılabilir";
     public static string ThreatBalloonTitle = "Tehdit bulundu!";
 
     // ---- first-run wizard ----
@@ -472,6 +472,31 @@ internal static class Strings
     public static string ColStatus = "Durum";
     public static string ColProgress = "İlerleme";
     public static string StatusReady = "Hazır.";
+
+    // ---- status-bar activity line (UiStatusHub) ----
+    public static string StatusBarActivityFormat = "[{0:HH:mm}] {1}: {2}";
+    public static string StatusNoActivity = "Henüz arka plan etkinliği yok.";
+    public static string StatusSourceWatcher = "İndirilenler";
+    public static string StatusSourceProcGuard = "Süreç koruması";
+    public static string StatusSourcePeriodic = "Periyodik denetim";
+    public static string StatusSourceOutbox = "Çevrimdışı kuyruk";
+    public static string StatusSourceSweep = "Zamanlanmış tarama";
+    public static string StatusSourceScan = "Tarama";
+    public static string StatusWatcherActiveFormat = "{0} klasör izleniyor";
+    public static string StatusWatcherOff = "izleme kapalı";
+    public static string StatusWatcherFileCleanFormat = "{0} temiz";
+    public static string StatusWatcherFileFlaggedFormat = "{0} TEHDİT ({1})";
+    public static string StatusCatchUpFormat = "kapalıyken inen {0} dosya denetlendi";
+    public static string StatusProcGuardOn = "süreç başlatma koruması etkin";
+    public static string StatusProcGuardNeedsAdmin = "süreç başlatma koruması KAPALI — yönetici olarak çalıştırılması gerekiyor";
+    public static string StatusPeriodicRunning = "yeniden denetim çalışıyor";
+    public static string StatusPeriodicDoneFormat = "bitti — {0} yükselme, {1} bütünlük alarmı";
+    public static string StatusOutboxRetryFormat = "{0} dosya yeniden taranıyor";
+    public static string StatusSweepThreatsFormat = "{0} tehdit buldu";
+    public static string StatusScanRunning = "çalışıyor…";
+    public static string StatusScanFinishedFormat = "bitti — {0} dosya, {1} tehdit";
+    public static string CoverageProcGuard = "Süreç başlatma koruması";
+    public static string CoverageProcGuardNeedsAdmin = "Süreç koruması (yönetici gerekli)";
 
     // ---- trust evaluation reasons (shown as the skip reason) ----
     public static string TrustUnsigned = "imzasız";

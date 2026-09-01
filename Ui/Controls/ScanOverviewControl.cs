@@ -192,6 +192,11 @@ internal sealed class ScanOverviewControl : UserControl
         _coverageRows.Controls.Add(CoverageRow(Strings.CoverageUsbAutoScan, Settings.WatchUsb,
             enable: () => { Settings.WatchUsb.Value = true; SettingsManager.SaveSettings(); Refresh2(); }, settings: null));
         _coverageRows.Controls.Add(CoverageRow(Strings.CoverageScheduledScan, SweepScheduler.IsInstalled(), enable: null, settings: () => GoToTab?.Invoke(5)));
+        // The process-start guard needs admin for its WMI trace: the setting being ON is not the same
+        // as the guard RUNNING, and that gap used to be invisible (guard silently off, user "protected").
+        _coverageRows.Controls.Add(Settings.WatchProcessLaunches && !ProcessStartGuard.Active
+            ? CoverageRow(Strings.CoverageProcGuardNeedsAdmin, false, enable: null, settings: null)
+            : CoverageRow(Strings.CoverageProcGuard, Settings.WatchProcessLaunches && ProcessStartGuard.Active, enable: null, settings: () => GoToTab?.Invoke(5)));
         var menuState = ContextMenuInstaller.Verify();
         _coverageRows.Controls.Add(menuState == MenuState.Stale
             // The verbs exist but point at another exe (the app was moved): offer the one-click,

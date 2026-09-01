@@ -107,6 +107,7 @@ internal sealed partial class MainForm : Form
     readonly DownloadsWatcher _downloadsWatcher = new(AppServices.Cache);
     readonly ProcessStartGuard _processGuard = new(AppServices.Cache);
     readonly StatusStrip _status = new();
+    readonly ToolStripStatusLabel _statusActivity = new(); // latest UiStatusHub line; click = recent history
     readonly ToolStripStatusLabel _statusKeys = new();
     bool _reallyExit;
     readonly bool _startHidden;
@@ -173,16 +174,24 @@ internal sealed partial class MainForm : Form
         if (Settings.WatchProcessLaunches) _processGuard.Start();
         StartDownloadsWatchIfEnabled();
 
-        AppServices.Scheduler.Started += () => SafeUi(TaskbarProgress.Indeterminate);
+        AppServices.Scheduler.Started += () => SafeUi(() =>
+        {
+            TaskbarProgress.Indeterminate();
+            UiStatusHub.Report(Strings.StatusSourceScan, Strings.StatusScanRunning);
+        });
         AppServices.Scheduler.ProgressChanged += p => SafeUi(() => TaskbarProgress.Set(p.Done, p.Total));
         AppServices.Scheduler.Finished += () => SafeUi(() =>
         {
             ScanHistoryStore.Flush(); // commit the sweep's throttled history rows now that it's done
             var items = AppServices.Scheduler.Items;
-            bool threats = items.Any(i => i.Report?.IsMalicious == true);
-            if (threats) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
+            int threatCount = items.Count(i => i.Report?.IsMalicious == true);
+            if (threatCount > 0) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
+            UiStatusHub.Report(Strings.StatusSourceScan, string.Format(Strings.StatusScanFinishedFormat, items.Count, threatCount),
+                threatCount > 0 ? StatusSeverity.Danger : StatusSeverity.Info);
             if (Settings.NotifyScanSummary && items.Count > 0) ShowScanSummaryToast(items);
         });
+        UiStatusHub.Changed += e => SafeUi(() => ShowStatusEvent(e));
+        if (UiStatusHub.Latest is { } lastEvent) ShowStatusEvent(lastEvent);
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += (_, ev) => { if (ev.IsAvailable) SafeUi(RetryPendingOutbox); };
         AppServices.Vault.Changed += () => SafeUi(UpdateStatusBar);
         AppServices.Vault.CountersUpdated += () => SafeUi(UpdateStatusBar);
@@ -229,9 +238,35 @@ internal sealed partial class MainForm : Form
     void BuildStatusBar()
     {
         _status.SizingGrip = false;
-        _statusKeys.Spring = true;
-        _statusKeys.TextAlign = ContentAlignment.MiddleLeft;
+        _statusActivity.Spring = true;
+        _statusActivity.TextAlign = ContentAlignment.MiddleLeft;
+        _statusActivity.Click += (_, _) => ShowRecentActivity();
+        _status.Items.Add(_statusActivity);
+        _statusKeys.TextAlign = ContentAlignment.MiddleRight;
         _status.Items.Add(_statusKeys);
+    }
+
+    void ShowStatusEvent(StatusEvent e)
+    {
+        _statusActivity.Text = string.Format(Strings.StatusBarActivityFormat, e.WhenLocal, e.Source, e.Message);
+        _statusActivity.ForeColor = e.Severity switch
+        {
+            StatusSeverity.Danger => Theme.Current.Danger,
+            StatusSeverity.Warning => Theme.Current.Warning,
+            _ => Theme.Current.Text,
+        };
+    }
+
+    /// <summary>Click on the activity line: the last background events, newest first.</summary>
+    void ShowRecentActivity()
+    {
+        var menu = new ContextMenuStrip();
+        var recent = UiStatusHub.Recent();
+        if (recent.Count == 0) menu.Items.Add(Strings.StatusNoActivity).Enabled = false;
+        else
+            foreach (var e in recent.TakeLast(15).Reverse())
+                menu.Items.Add(string.Format(Strings.StatusBarActivityFormat, e.WhenLocal, e.Source, e.Message)).Enabled = false;
+        menu.Show(_status, new Point(0, -menu.PreferredSize.Height));
     }
 
     void BuildTray()
@@ -348,7 +383,12 @@ internal sealed partial class MainForm : Form
     {
         try
         {
-            if (!Settings.WatchDownloads) { _downloadsWatcher.Stop(); return; }
+            if (!Settings.WatchDownloads)
+            {
+                _downloadsWatcher.Stop();
+                UiStatusHub.Report(Strings.StatusSourceWatcher, Strings.StatusWatcherOff, StatusSeverity.Warning);
+                return;
+            }
             var folders = Settings.WatchFolders.Value
                 .Split([';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             if (folders.Count == 0) folders = DownloadsWatcher.DefaultFolders();
@@ -531,6 +571,7 @@ internal sealed partial class MainForm : Form
         if (AppServices.Scheduler.IsRunning) return;
         try
         {
+            UiStatusHub.Report(Strings.StatusSourcePeriodic, Strings.StatusPeriodicRunning);
             var esc = await WatchService.CheckAllAsync();
             if (esc.Count > 0) SafeUi(() => ShowWatchEscalations(esc));
 
@@ -539,6 +580,8 @@ internal sealed partial class MainForm : Form
 
             var alarms = (await BaselineStore.VerifyAsync(null, default)).Where(d => d.IsAlarm).ToList();
             if (alarms.Count > 0) SafeUi(() => ShowDriftAlarm(alarms));
+            UiStatusHub.Report(Strings.StatusSourcePeriodic, string.Format(Strings.StatusPeriodicDoneFormat, esc.Count, alarms.Count),
+                esc.Count > 0 || alarms.Count > 0 ? StatusSeverity.Danger : StatusSeverity.Info);
         }
         catch (Exception ex) { Log("Periodic re-verdict failed: " + ex.Message, LogLevel.Warning); }
     }
@@ -567,6 +610,7 @@ internal sealed partial class MainForm : Form
             SettingsManager.SaveSettings();
 
             _sweepThreatPaths = r.ThreatPaths.Where(File.Exists).ToArray();
+            UiStatusHub.Report(Strings.StatusSourceSweep, string.Format(Strings.StatusSweepThreatsFormat, r.Threats), StatusSeverity.Danger);
             _overview.SetSweepNotice(string.Format(Strings.OverviewSweepNoticeFormat, r.Threats));
             if (_sweepThreatPaths.Length > 0)
             {
@@ -589,6 +633,7 @@ internal sealed partial class MainForm : Form
             if (!PendingOutbox.ShouldRetry() || AppServices.Scheduler.IsRunning) return;
             var paths = PendingOutbox.Paths().Where(File.Exists).ToArray();
             if (paths.Length == 0) return;
+            UiStatusHub.Report(Strings.StatusSourceOutbox, string.Format(Strings.StatusOutboxRetryFormat, paths.Length));
             _tabs.SelectedIndex = 1; // Tarama
             _scan.StartScan(paths, recurse: false);
         }
@@ -676,6 +721,7 @@ internal sealed partial class MainForm : Form
         _settings.ApplyTheme();
         _history.ApplyTheme();
         _logs.RefreshState();
+        if (UiStatusHub.Latest is { } last) ShowStatusEvent(last); // re-tint for the new palette
         if (IsHandleCreated) ApplyDarkTitleBar();
     }
 
@@ -683,7 +729,10 @@ internal sealed partial class MainForm : Form
     {
         int total = AppServices.Vault.Keys.Count;
         int usable = AppServices.Vault.UsableKeyCount;
-        _statusKeys.Text = string.Format(Strings.StatusBarFormat, usable, total, ConfigPathResolver.ConfigPath);
+        // The config path moved to the tooltip: inline it ate the whole bar and squeezed the live
+        // activity line (the bar's main job) down to a few letters.
+        _statusKeys.Text = string.Format(Strings.StatusBarKeysFormat, usable, total);
+        _statusKeys.ToolTipText = Strings.AboutConfigFilePrefix + ConfigPathResolver.ConfigPath;
     }
 
     void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }

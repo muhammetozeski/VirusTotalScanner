@@ -19,15 +19,20 @@ internal sealed class ProcessStartGuard : IDisposable
     public event Action<ScanItem>? ThreatFound;
     public bool IsRunning => _watcher != null;
 
+    /// <summary>True while the single app-wide guard instance actually holds a WMI trace — the
+    /// coverage card reads this, because the SETTING being on says nothing when admin was denied.</summary>
+    public static bool Active { get; private set; }
+
     public ProcessStartGuard(HashCache cache) => _cache = cache;
 
-    /// <summary>Start watching. Returns false (and logs) if not elevated or WMI is unavailable.</summary>
+    /// <summary>Start watching. Returns false (and logs + reports) if not elevated or WMI is unavailable.</summary>
     public bool Start()
     {
         Stop();
         if (!AdminHelper.IsRunningAsAdmin())
         {
             Log("Process-start guard needs admin rights for the WMI trace; not started.", LogLevel.Warning);
+            UiStatusHub.Report(Strings.StatusSourceProcGuard, Strings.StatusProcGuardNeedsAdmin, StatusSeverity.Warning);
             return false;
         }
         try
@@ -35,12 +40,15 @@ internal sealed class ProcessStartGuard : IDisposable
             _watcher = new ManagementEventWatcher(new WqlEventQuery("SELECT * FROM Win32_ProcessStartTrace"));
             _watcher.EventArrived += OnProcessStarted;
             _watcher.Start();
+            Active = true;
             Log("Process-start guard active.", LogLevel.Info);
+            UiStatusHub.Report(Strings.StatusSourceProcGuard, Strings.StatusProcGuardOn);
             return true;
         }
         catch (Exception ex)
         {
             Log("Process-start guard failed to start: " + ex.Message, LogLevel.Warning);
+            UiStatusHub.Report(Strings.StatusSourceProcGuard, ex.Message, StatusSeverity.Warning);
             _watcher = null;
             return false;
         }
@@ -50,6 +58,7 @@ internal sealed class ProcessStartGuard : IDisposable
     {
         try { _watcher?.Stop(); _watcher?.Dispose(); } catch { }
         _watcher = null;
+        Active = false;
     }
 
     void OnProcessStarted(object sender, EventArrivedEventArgs e)
