@@ -52,7 +52,7 @@ internal sealed class DownloadsTriageDialog : Form
         });
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
-        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 8, 8, 4) };
+        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(8, 8, 8, 4) };
         top.Controls.Add(new Label { Text = Strings.IncidentWindowLabel, AutoSize = true, Margin = new Padding(0, 8, 6, 0) });
         top.Controls.Add(_window);
         top.Controls.Add(refreshBtn);

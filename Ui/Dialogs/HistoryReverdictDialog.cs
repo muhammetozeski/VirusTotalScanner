@@ -37,7 +37,7 @@ internal sealed class HistoryReverdictDialog : Form
         });
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
-        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(8, 8, 8, 4) };
+        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(8, 8, 8, 4) };
         top.Controls.Add(refreshBtn);
         top.Controls.Add(_rescan);
         top.Controls.Add(reveal);
