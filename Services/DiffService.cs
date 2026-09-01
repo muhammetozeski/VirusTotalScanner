@@ -26,7 +26,7 @@ internal static class DiffService
             if (i.Report == null || string.IsNullOrEmpty(i.Sha256)) continue;
             int cur = i.Report.DetectionCount;
             if (!baseline.TryGetValue(i.Sha256!, out int prev)) { @new++; newFiles.Add($"{i.FilePath} ({cur} tespit)"); }
-            else if (cur > prev || (prev == 0 && cur > 0)) { regressed++; regFiles.Add($"{i.FilePath} ({prev} → {cur})"); }
+            else if (cur > prev) { regressed++; regFiles.Add($"{i.FilePath} ({prev} → {cur})"); }
             else unchanged++;
         }
         return new Delta(@new, regressed, unchanged, newFiles, regFiles);
