@@ -66,6 +66,7 @@ internal sealed class EscalationDossierDialog : Form
         Controls.Add(_grid);
         Controls.Add(top);
         Controls.Add(bottom);
+        Controls.Add(ThemeManager.MakeDialogBlurb(Strings.DlgEscalationBlurb));
         CancelButton = close;
 
         ThemeManager.Apply(this);

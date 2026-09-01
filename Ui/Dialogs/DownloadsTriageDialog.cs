@@ -67,6 +67,7 @@ internal sealed class DownloadsTriageDialog : Form
         Controls.Add(_grid);
         Controls.Add(top);
         Controls.Add(bottom);
+        Controls.Add(ThemeManager.MakeDialogBlurb(Strings.DlgDownloadsTriageBlurb));
         CancelButton = close;
 
         ThemeManager.Apply(this);

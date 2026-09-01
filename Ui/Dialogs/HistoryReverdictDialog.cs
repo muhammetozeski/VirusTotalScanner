@@ -51,6 +51,7 @@ internal sealed class HistoryReverdictDialog : Form
         Controls.Add(_grid);
         Controls.Add(top);
         Controls.Add(bottom);
+        Controls.Add(ThemeManager.MakeDialogBlurb(Strings.DlgReverdictBlurb));
         CancelButton = close;
 
         ThemeManager.Apply(this);

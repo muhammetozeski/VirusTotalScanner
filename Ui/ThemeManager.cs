@@ -194,4 +194,14 @@ internal static class ThemeManager
         Padding = new Padding(12),
         Margin = new Padding(6),
     };
+
+    /// <summary>One-line "what is this window for" strip shown right under a dialog's title bar. Add it
+    /// to the form LAST: Dock lays children out last-index-first, so the last-added Top strip lands
+    /// above the toolbar. Overlong text is ellipsized rather than wrapped so the strip never grows.</summary>
+    public static Label MakeDialogBlurb(string text)
+    {
+        var l = new Label { Text = text, Dock = DockStyle.Top, AutoEllipsis = true, Tag = "subtle", Padding = new Padding(10, 7, 10, 0) };
+        l.Height = l.Font.Height + l.Padding.Vertical + 6;
+        return l;
+    }
 }

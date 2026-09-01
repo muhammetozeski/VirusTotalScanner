@@ -48,6 +48,7 @@ internal sealed class IncidentTimelineDialog : Form
         Controls.Add(split);
         Controls.Add(top);
         Controls.Add(bottom);
+        Controls.Add(ThemeManager.MakeDialogBlurb(Strings.DlgIncidentTimelineBlurb));
         CancelButton = close;
 
         ThemeManager.Apply(this);

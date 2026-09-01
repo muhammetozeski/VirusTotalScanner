@@ -434,6 +434,7 @@ internal static class Strings
 
     // ---- quarantine vault dialog ----
     public static string DlgVaultTitle = "🗄 Karantina kasası";
+    public static string DlgVaultBlurb = "Karantinadaki dosyalar .VIRUS uzantısıyla kasada tutulur; yanlış alarmı geri yükle, gerçek tehdidi kalıcı sil.";
     public static string ColDate = "Tarih (UTC)";
     public static string ColOriginalPath = "Orijinal konum";
     public static string BtnRestore = "↩  Geri yükle";
@@ -1025,6 +1026,7 @@ internal static class Strings
 
     // ---- EscalationDossierDialog ----
     public static string DlgEscalationTitle = "🔴 Sonradan tehdit oldu — dosya geçmişi";
+    public static string DlgEscalationBlurb = "Önce temiz çıkıp sonradan zararlı sayılan dosyaların kalıcı defteri: ne zaman döndü, eski→yeni oran, hâlâ diskte mi. Kotasız.";
     public static string BtnEscalationLiveReverdict = "🔄  Canlı yeniden denetle (kota)";
     public static string BtnEscalationReveal = "📁  Konumu aç";
     public static string BtnEscalationOpenVt = "🌐  VT'de aç";
@@ -1074,6 +1076,7 @@ internal static class Strings
 
     // ---- DownloadsTriageDialog ----
     public static string DlgDownloadsTriageTitle = "📥 İndirilenler triyajı";
+    public static string DlgDownloadsTriageBlurb = "İzlenen klasörlere son günlerde gelen dosyalar: kaynak site, imza ve önbellek kararı; hiç taranmamışları tek tıkla tarat.";
     public static string IncidentWindowItemFormat = "Son {0} gün";
     public static string BtnDownloadsRefresh = "🔄  Yenile";
     public static string BtnScanUnscanned = "🔎  Taranmamışları tara";
@@ -1089,6 +1092,7 @@ internal static class Strings
 
     // ---- HistoryReverdictDialog ----
     public static string DlgReverdictTitle = "⚠ Sonradan tehdit oldu mu?";
+    public static string DlgReverdictBlurb = "Geçmişte temiz çıkan, hâlâ diskteki dosyaları VirusTotal'a anahtarsız yeniden sorar; artık işaretlenenleri listeler. Kotasız.";
     public static string BtnReverdictRecheck = "🔄  Yeniden denetle";
     public static string BtnRescanSelected = "🔁  Seçileni yeniden tara";
     public static string ReverdictSelectRowOnDisk = "Diskte bulunan bir satır seç.";
@@ -1111,6 +1115,7 @@ internal static class Strings
 
     // ---- IncidentTimelineDialog ----
     public static string DlgIncidentTimelineTitle = "🕓 Olay Zaman Çizelgesi";
+    public static string DlgIncidentTimelineBlurb = "Diske gün gün hangi çalıştırılabilir dosyaların indiğini gösterir; zararlılar aynı gün gelenlerle yan yana vurgulanır. Kotasız.";
     public static string BtnIncidentScan = "🔍  Tara";
     public static string ColDay = "Gün";
     public static string ColTime = "Saat";

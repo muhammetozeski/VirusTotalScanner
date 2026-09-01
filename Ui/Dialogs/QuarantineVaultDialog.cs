@@ -46,6 +46,7 @@ internal sealed class QuarantineVaultDialog : Form
 
         Controls.Add(_grid);
         Controls.Add(bottom);
+        Controls.Add(ThemeManager.MakeDialogBlurb(Strings.DlgVaultBlurb));
         CancelButton = close;
 
         ThemeManager.Apply(this);

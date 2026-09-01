@@ -96,7 +96,7 @@
   <s name="Sweep12h">Every 12 hours</s>
   <s name="SweepWeekly">Weekly (Sun 03:00)</s>
   <s name="BtnInstallUpdate">Install / Update</s>
-  <s name="SweepInstalledFormat">Scheduled scan installed.\nReport: {0}</s>
+  <s name="SweepInstalledFormat">Scheduled scan installed.\nReport: {0}</s>
   <s name="SweepPickValidFolder">Pick a valid folder.</s>
   <s name="SweepSchtasksExitFormat">schtasks exit code {0}</s>
   <s name="SweepInstallFailedPrefix">Install failed: </s>
@@ -144,7 +144,7 @@
   <s name="CliLedgerImportedFormat">{0} new entries added, {1} conflicts. Integrity: {2}</s>
   <s name="CliLedgerOk">OK</s>
   <s name="CliLedgerBad">MISMATCH</s>
-  <s name="CliLedgerDiffFormat">{0} not in yours, {1} conflicts:</s>
+  <s name="CliLedgerDiffFormat">{0} not in yours, {1} conflicts:</s>
   <s name="LedgerDiffConflictFormat">{0}: local {1} vs theirs {2}</s>
   <s name="CliTagNew">[NEW]</s>
   <s name="CliTagConflict">[CONFLICT]</s>
@@ -301,6 +301,7 @@
   <s name="CopiesQuarantinedFormat">{0}/{1} copies quarantined.</s>
   <s name="ErrorsHeader">\n\nErrors:\n</s>
   <s name="DlgVaultTitle">🗄 Quarantine vault</s>
+  <s name="DlgVaultBlurb">Quarantined files sit in the vault under a .VIRUS extension; restore a false positive, purge a real threat for good.</s>
   <s name="ColDate">Date (UTC)</s>
   <s name="ColOriginalPath">Original location</s>
   <s name="BtnRestore">↩  Restore</s>
@@ -355,7 +356,7 @@
   <s name="ColSize">Size</s>
   <s name="ColStatus">Status</s>
   <s name="ColProgress">Progress</s>
-  <s name="StatusReady">Ready.</s>
+  <s name="StatusReady">Ready.</s>
   <s name="StatusBarActivityFormat">[{0:HH:mm}] {1}: {2}</s>
   <s name="StatusNoActivity">No background activity yet.</s>
   <s name="StatusSourceWatcher">Downloads</s>
@@ -543,7 +544,7 @@
   <s name="TipIncidentTimeline">Group executables arriving on disk by arrival day.</s>
   <s name="TipAllCommands">Reach every feature from one place (find copies, autostart hooks, family clusters…).</s>
   <s name="TipPause">Pause / resume the running scan.</s>
-  <s name="TipCancel">Cancel the running scan.</s>
+  <s name="TipCancel">Cancel the running scan.</s>
   <s name="TipDownloadsTriage">List recent arrivals in the watched folders with origin/signature/verdict.</s>
   <s name="TipHelp">Glossary of the terms and signals used across the app.</s>
   <s name="BarGroupScan">Scan:</s>
@@ -713,7 +714,7 @@
   <s name="SettingsImportFailedPrefix">Could not import: </s>
   <!-- ScanDetailControl -->
   <s name="DetailMajorOnlyCheck">Major engines only</s>
-  <s name="DetailSharedIocCampaignFormat">shares a network indicator with {0} scanned files (may be the same campaign)</s>
+  <s name="DetailSharedIocCampaignFormat">shares a network indicator with {0} scanned files (may be the same campaign)</s>
   <s name="DetailIocSearchLink">search ↗</s>
   <s name="DetailSignalsHelpLink">❓ What do the signals mean?</s>
   <s name="RecencyToday">today</s>
@@ -875,6 +876,7 @@
   <s name="VaultRestoreManyResultFormat">{0}/{1} restored.</s>
   <!-- EscalationDossierDialog -->
   <s name="DlgEscalationTitle">🔴 Later turned malicious — file history</s>
+  <s name="DlgEscalationBlurb">Durable ledger of files that scanned clean and later turned malicious: when they flipped, old→new ratio, still on disk or not. No quota.</s>
   <s name="BtnEscalationLiveReverdict">🔄  Live re-check (quota)</s>
   <s name="BtnEscalationReveal">📁  Open location</s>
   <s name="BtnEscalationOpenVt">🌐  Open in VT</s>
@@ -922,6 +924,7 @@
   <s name="HelpMeaningKeyless">Uses VT's web interface via a hidden browser instead of an API key: keyless but slower.</s>
   <!-- DownloadsTriageDialog -->
   <s name="DlgDownloadsTriageTitle">📥 Downloads triage</s>
+  <s name="DlgDownloadsTriageBlurb">Files that recently arrived in the watched folders: origin site, signature and cached verdict; scan the never-checked ones in one click.</s>
   <s name="IncidentWindowItemFormat">Last {0} days</s>
   <s name="BtnDownloadsRefresh">🔄  Refresh</s>
   <s name="BtnScanUnscanned">🔎  Scan unscanned</s>
@@ -936,6 +939,7 @@
   <s name="DownloadsErrorFormat">Error: {0}</s>
   <!-- HistoryReverdictDialog -->
   <s name="DlgReverdictTitle">⚠ Did it become a threat later?</s>
+  <s name="DlgReverdictBlurb">Re-asks VirusTotal keylessly about once-cleared files still on disk and lists the ones now flagged. No quota spent.</s>
   <s name="BtnReverdictRecheck">🔄  Re-check</s>
   <s name="BtnRescanSelected">🔁  Rescan selected</s>
   <s name="ReverdictSelectRowOnDisk">Select a row that exists on disk.</s>
@@ -956,6 +960,7 @@
   <s name="BtnOpenFolder">📁  Open folder</s>
   <!-- IncidentTimelineDialog -->
   <s name="DlgIncidentTimelineTitle">🕓 Incident Timeline</s>
+  <s name="DlgIncidentTimelineBlurb">Shows day by day which executables landed on disk; known-bad ones are highlighted next to same-day arrivals. No quota spent.</s>
   <s name="BtnIncidentScan">🔍  Scan</s>
   <s name="ColDay">Day</s>
   <s name="ColTime">Time</s>
@@ -1135,7 +1140,7 @@
   <s name="PeImpersonationFormat">⚠ Claims to be '{0}' but the signature is {1} — could be IMPERSONATION</s>
   <s name="PeSigDifferentPrefix">different: </s>
   <s name="PeSigMissingInvalid">missing/invalid</s>
-  <s name="PeNameMismatchFormat">📛 embedded name '{0}' ≠ on-disk name '{1}'</s>
+  <s name="PeNameMismatchFormat">📛 embedded name '{0}' ≠ on-disk name '{1}'</s>
   <s name="PeIdentityLabelFormat">🪪 Identity: {0}</s>
   <s name="SignerContinuityFormat">⚠ '{0}' is normally signed by '{1}'; this file is {2} — possibly a fake/trojanized build</s>
   <s name="SignerDifferentPublisherPrefix">different publisher: </s>
