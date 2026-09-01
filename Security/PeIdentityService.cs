@@ -63,7 +63,7 @@ internal static class PeIdentityService
             string? id = !string.IsNullOrEmpty(company) ? company
                 : !string.IsNullOrEmpty(fvi.ProductName) ? fvi.ProductName!.Trim()
                 : null;
-            return string.IsNullOrEmpty(id) ? null : $"🪪 Kimlik: {id}";
+            return string.IsNullOrEmpty(id) ? null : string.Format(Strings.PeIdentityLabelFormat, id);
         }
         catch (Exception ex) { Log("PE identity read failed: " + ex.Message, LogLevel.Warning); return null; }
     }

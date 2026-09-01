@@ -95,7 +95,7 @@ internal static class LedgerService
             if (string.IsNullOrEmpty(e.Md5)) continue;
             var existing = cache.TryGet(e.Md5, int.MaxValue);
             if (existing == null) newToMe.Add($"{e.Sha256} {e.Verdict} ({e.Detections}/{e.Total})");
-            else if (existing.DetectionCount != e.Detections) conflicts.Add($"{e.Sha256}: yerel {existing.DetectionCount} vs onlar {e.Detections}");
+            else if (existing.DetectionCount != e.Detections) conflicts.Add(string.Format(Strings.LedgerDiffConflictFormat, e.Sha256, existing.DetectionCount, e.Detections));
         }
         return (newToMe, conflicts);
     }

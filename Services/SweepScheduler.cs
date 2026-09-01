@@ -24,7 +24,7 @@ internal static class SweepScheduler
     public static bool Install(string folder, string[] schedule, out string? error)
     {
         error = null;
-        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) { error = "Geçerli bir klasör seçin."; return false; }
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) { error = Strings.SweepPickValidFolder; return false; }
         try
         {
             // The whole run command is one argument; ArgumentList escapes the embedded quotes for us.
@@ -34,7 +34,7 @@ internal static class SweepScheduler
             args.AddRange(["/TR", tr, "/F", "/RL", "LIMITED"]);
 
             int code = Run([.. args], out string output);
-            if (code != 0) { error = string.IsNullOrWhiteSpace(output) ? $"schtasks çıkış kodu {code}" : output.Trim(); return false; }
+            if (code != 0) { error = string.IsNullOrWhiteSpace(output) ? string.Format(Strings.SweepSchtasksExitFormat, code) : output.Trim(); return false; }
 
             Settings.SweepFolder.Value = folder;
             SettingsManager.SaveSettings();

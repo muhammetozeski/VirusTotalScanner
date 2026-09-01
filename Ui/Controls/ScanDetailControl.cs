@@ -413,7 +413,7 @@ internal sealed class ScanDetailControl : UserControl
             string host = (sp >= 0 ? item[(sp + 1)..] : item).Trim();
             if (host.Length > 0)
             {
-                var search = new LinkLabel { Text = "ara ↗", AutoSize = true, Margin = new Padding(8, 4, 0, 0) };
+                var search = new LinkLabel { Text = Strings.DetailIocSearchLink, AutoSize = true, Margin = new Padding(8, 4, 0, 0) };
                 search.LinkClicked += (_, _) => OpenUrlInBrowser("https://www.virustotal.com/gui/search/" + Uri.EscapeDataString(host));
                 row.Controls.Add(search);
             }

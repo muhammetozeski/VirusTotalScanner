@@ -136,6 +136,8 @@ internal static class Strings
     public static string SweepWeekly = "Haftalık (Pazar 03:00)";
     public static string BtnInstallUpdate = "Kur / Güncelle";
     public static string SweepInstalledFormat = "Zamanlanmış tarama kuruldu.\nRapor: {0}";
+    public static string SweepPickValidFolder = "Geçerli bir klasör seçin.";
+    public static string SweepSchtasksExitFormat = "schtasks çıkış kodu {0}";
     public static string SweepInstallFailedPrefix = "Kurulamadı: ";
     public static string BtnRunNow = "Şimdi çalıştır";
     public static string SweepStartedInfo = "Tarama görevi başlatıldı (arka planda).";
@@ -221,6 +223,7 @@ internal static class Strings
     public static string CliLedgerOk = "OK";
     public static string CliLedgerBad = "UYUŞMUYOR";
     public static string CliLedgerDiffFormat = "Sende olmayan {0}, çakışma {1}:";
+    public static string LedgerDiffConflictFormat = "{0}: yerel {1} vs onlar {2}";
     public static string CliTagNew = "[YENİ]";
     public static string CliTagConflict = "[ÇAKIŞMA]";
     public static string CliTagRegressed = "[KÖTÜLEŞTİ]";
@@ -822,6 +825,7 @@ internal static class Strings
     // ---- ScanDetailControl ----
     public static string DetailMajorOnlyCheck = "Yalnızca büyük motorlar";
     public static string DetailSharedIocCampaignFormat = "{0} taranmış dosyayla ortak ağ göstergesi paylaşıyor (aynı kampanya olabilir)";
+    public static string DetailIocSearchLink = "ara ↗";
     public static string DetailSignalsHelpLink = "❓ Sinyaller ne demek?";
     public static string RecencyToday = "bugün";
     public static string DetailLocalFirstSeenFormat = "💻 Bu makinede ilk görülme: {0:yyyy-MM-dd} ({1})";
@@ -1275,6 +1279,7 @@ internal static class Strings
     public static string PeSigDifferentPrefix = "farklı: ";
     public static string PeSigMissingInvalid = "yok/geçersiz";
     public static string PeNameMismatchFormat = "📛 gömülü ad '{0}' ≠ disk adı '{1}'";
+    public static string PeIdentityLabelFormat = "🪪 Kimlik: {0}";
     public static string SignerContinuityFormat = "⚠ '{0}' normalde '{1}' tarafından imzalı; bu dosya {2} — olası sahte/trojanlı sürüm";
     public static string SignerDifferentPublisherPrefix = "farklı yayıncı: ";
     public static string OriginNoteCaughtAtLaunch = "çalıştırılırken yakalandı";

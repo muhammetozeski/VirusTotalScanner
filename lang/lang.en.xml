@@ -96,7 +96,9 @@
   <s name="Sweep12h">Every 12 hours</s>
   <s name="SweepWeekly">Weekly (Sun 03:00)</s>
   <s name="BtnInstallUpdate">Install / Update</s>
-  <s name="SweepInstalledFormat">Scheduled scan installed.\nReport: {0}</s>
+  <s name="SweepInstalledFormat">Scheduled scan installed.\nReport: {0}</s>
+  <s name="SweepPickValidFolder">Pick a valid folder.</s>
+  <s name="SweepSchtasksExitFormat">schtasks exit code {0}</s>
   <s name="SweepInstallFailedPrefix">Install failed: </s>
   <s name="BtnRunNow">Run now</s>
   <s name="SweepStartedInfo">Scan task started (in the background).</s>
@@ -142,7 +144,8 @@
   <s name="CliLedgerImportedFormat">{0} new entries added, {1} conflicts. Integrity: {2}</s>
   <s name="CliLedgerOk">OK</s>
   <s name="CliLedgerBad">MISMATCH</s>
-  <s name="CliLedgerDiffFormat">{0} not in yours, {1} conflicts:</s>
+  <s name="CliLedgerDiffFormat">{0} not in yours, {1} conflicts:</s>
+  <s name="LedgerDiffConflictFormat">{0}: local {1} vs theirs {2}</s>
   <s name="CliTagNew">[NEW]</s>
   <s name="CliTagConflict">[CONFLICT]</s>
   <s name="CliTagRegressed">[REGRESSED]</s>
@@ -680,7 +683,8 @@
   <s name="SettingsImportFailedPrefix">Could not import: </s>
   <!-- ScanDetailControl -->
   <s name="DetailMajorOnlyCheck">Major engines only</s>
-  <s name="DetailSharedIocCampaignFormat">shares a network indicator with {0} scanned files (may be the same campaign)</s>
+  <s name="DetailSharedIocCampaignFormat">shares a network indicator with {0} scanned files (may be the same campaign)</s>
+  <s name="DetailIocSearchLink">search ↗</s>
   <s name="DetailSignalsHelpLink">❓ What do the signals mean?</s>
   <s name="RecencyToday">today</s>
   <s name="DetailLocalFirstSeenFormat">💻 First seen on this machine: {0:yyyy-MM-dd} ({1})</s>
@@ -1101,7 +1105,8 @@
   <s name="PeImpersonationFormat">⚠ Claims to be '{0}' but the signature is {1} — could be IMPERSONATION</s>
   <s name="PeSigDifferentPrefix">different: </s>
   <s name="PeSigMissingInvalid">missing/invalid</s>
-  <s name="PeNameMismatchFormat">📛 embedded name '{0}' ≠ on-disk name '{1}'</s>
+  <s name="PeNameMismatchFormat">📛 embedded name '{0}' ≠ on-disk name '{1}'</s>
+  <s name="PeIdentityLabelFormat">🪪 Identity: {0}</s>
   <s name="SignerContinuityFormat">⚠ '{0}' is normally signed by '{1}'; this file is {2} — possibly a fake/trojanized build</s>
   <s name="SignerDifferentPublisherPrefix">different publisher: </s>
   <s name="OriginNoteCaughtAtLaunch">caught while launching</s>
