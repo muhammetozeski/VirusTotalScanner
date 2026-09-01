@@ -59,7 +59,7 @@ internal sealed class QuarantineVaultDialog : Form
             new(Strings.MenuCopyVtUrl, e => VtUrl(e.Sha256)),
         ],
         [
-            new(Strings.BtnRestore, _ => RestoreSelectedAsync()),
+            new(Strings.BtnRestore, _ => _ = RestoreSelectedAsync()),
             new(Strings.MenuOpenVt, _ => OpenVtForSelected(), enabled: t => t.Any(e => !string.IsNullOrEmpty(e.Sha256))),
             new(Strings.BtnVaultPurge, _ => PurgeSelected(), separatorBefore: true),
         ]);
@@ -122,14 +122,6 @@ internal sealed class QuarantineVaultDialog : Form
         int n = QuarantineVault.PurgeOlderThan(days);
         NativeMessageBox.Info(string.Format(Strings.VaultCleanupResultFormat, n));
         Refresh2();
-    }
-
-    static string FormatBytes(long b)
-    {
-        string[] u = ["B", "KB", "MB", "GB", "TB"];
-        double v = b; int i = 0;
-        while (v >= 1024 && i < u.Length - 1) { v /= 1024; i++; }
-        return $"{v:0.#} {u[i]}";
     }
 
     async Task RestoreSelectedAsync()
