@@ -7,7 +7,7 @@ namespace VirusTotalScanner;
 internal sealed class QuarantineVaultDialog : Form
 {
     readonly DataGridView _grid = new EntityGridView();
-    readonly Label _sizeLabel = new() { AutoSize = true, Margin = new Padding(14, 9, 0, 0), Tag = "subtle" };
+    readonly Label _sizeLabel = new() { AutoSize = true, Margin = new Padding(8, 8, 0, 0), Tag = "subtle" };
 
     public QuarantineVaultDialog()
     {
@@ -34,17 +34,19 @@ internal sealed class QuarantineVaultDialog : Form
         var purgeAll = ThemeManager.MakeButton(Strings.BtnVaultPurgeAll, (_, _) => PurgeAll());
         var cleanup = ThemeManager.MakeButton(Strings.BtnVaultCleanupOld, (_, _) => CleanupOld());
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Dock = DockStyle.Right, Width = 100 };
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
-        actions.Controls.Add(restore);
-        actions.Controls.Add(purge);
-        actions.Controls.Add(purgeAll);
-        actions.Controls.Add(cleanup);
-        actions.Controls.Add(_sizeLabel);
-        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 46, Padding = new Padding(10, 7, 10, 7) };
-        bottom.Controls.Add(actions);
+        // Wrapping top toolbar, like the other tool dialogs: four actions plus the size label do not fit
+        // beside the Close button at the default width, and a non-wrapping bottom row ran under it.
+        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(8, 8, 8, 4) };
+        top.Controls.Add(restore);
+        top.Controls.Add(purge);
+        top.Controls.Add(purgeAll);
+        top.Controls.Add(cleanup);
+        top.Controls.Add(_sizeLabel);
+        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(10, 6, 10, 6) };
         bottom.Controls.Add(close);
 
         Controls.Add(_grid);
+        Controls.Add(top);
         Controls.Add(bottom);
         Controls.Add(ThemeManager.MakeDialogBlurb(Strings.DlgVaultBlurb));
         CancelButton = close;
