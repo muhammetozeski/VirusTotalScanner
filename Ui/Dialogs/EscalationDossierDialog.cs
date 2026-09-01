@@ -101,7 +101,7 @@ internal sealed class EscalationDossierDialog : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFile, DataPropertyName = nameof(DossierRow.Name), Width = 180 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColReverdictOldRatio, DataPropertyName = nameof(DossierRow.OldRatio), Width = 75 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColReverdictNewRatio, DataPropertyName = nameof(DossierRow.NewRatio), Width = 75 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColEscalationDaysClean, DataPropertyName = nameof(DossierRow.DaysClean), Width = 115 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColEscalationDaysClean, DataPropertyName = nameof(DossierRow.DaysClean), Width = 140 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(DossierRow.Presence), Width = 90 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.MenuCopySha256, DataPropertyName = nameof(DossierRow.Sha), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
 
