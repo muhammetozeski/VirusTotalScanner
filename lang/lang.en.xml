@@ -877,7 +877,7 @@
   <!-- EscalationDossierDialog -->
   <s name="DlgEscalationTitle">🔴 Later turned malicious — file history</s>
   <s name="DlgEscalationBlurb">Durable ledger of files that scanned clean and later turned malicious: when they flipped, old→new ratio, still on disk or not. No quota.</s>
-  <s name="BtnEscalationLiveReverdict">🔄  Live re-check (quota)</s>
+  <s name="BtnEscalationLiveReverdict">🔄  Live re-check (no quota)</s>
   <s name="BtnEscalationReveal">📁  Open location</s>
   <s name="BtnEscalationOpenVt">🌐  Open in VT</s>
   <s name="EscalationPresenceOnDisk">✓ on disk</s>

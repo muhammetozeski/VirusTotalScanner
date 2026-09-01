@@ -1027,7 +1027,7 @@ internal static class Strings
     // ---- EscalationDossierDialog ----
     public static string DlgEscalationTitle = "🔴 Sonradan tehdit oldu — dosya geçmişi";
     public static string DlgEscalationBlurb = "Önce temiz çıkıp sonradan zararlı sayılan dosyaların kalıcı defteri: ne zaman döndü, eski→yeni oran, hâlâ diskte mi. Kotasız.";
-    public static string BtnEscalationLiveReverdict = "🔄  Canlı yeniden denetle (kota)";
+    public static string BtnEscalationLiveReverdict = "🔄  Canlı yeniden denetle (kotasız)";
     public static string BtnEscalationReveal = "📁  Konumu aç";
     public static string BtnEscalationOpenVt = "🌐  VT'de aç";
     public static string EscalationPresenceOnDisk = "✓ diskte";
