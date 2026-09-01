@@ -550,6 +550,13 @@
   <s name="BarGroupScan">Scan:</s>
   <s name="BarGroupTools">Tools:</s>
   <s name="SearchPlaceholder">🔎  Search (name/path)…</s>
+  <s name="BannerMuteTip">Mute this warning for this file (it stays in the history)</s>
+  <s name="BannerMuteConfirmFormat">Stop showing this warning for "{0}"?\n\nThe file keeps its verdict and stays in the history; only this top banner goes quiet. Undo with Ctrl+K → "Unmute hidden warnings".</s>
+  <s name="BannerMuteNoHash">This entry has no hash, so it cannot be muted.</s>
+  <s name="CmdUnmuteBannersName">Unmute hidden warnings</s>
+  <s name="CmdUnmuteBannersDesc">Show every threat banner you muted from the top strip again.</s>
+  <s name="UnmutedCountFormat">{0} muted warning(s) restored.</s>
+  <s name="NoMutedBanners">No muted warnings.</s>
   <s name="DrawerMoreScans">Other ways to scan</s>
   <s name="DrawerReports">Reports and export</s>
   <s name="DrawerTools">Tools</s>

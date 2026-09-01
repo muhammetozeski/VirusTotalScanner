@@ -697,6 +697,13 @@ internal static class Strings
     public static string TipHelp = "Uygulamadaki terimlerin ve sinyallerin sözlüğü.";
     public static string BarGroupScan = "Tara:";
     public static string BarGroupTools = "Araçlar:";
+    public static string BannerMuteTip = "Bu dosya için uyarıyı sustur (geçmişte kalmaya devam eder)";
+    public static string BannerMuteConfirmFormat = "'{0}' için bu uyarı bir daha gösterilmesin mi?\n\nDosya karara ve geçmişe dokunulmadan listede kalır; sadece bu üst şerit susar. Ctrl+K → 'Susturulmuş uyarıları geri aç' ile geri alabilirsin.";
+    public static string BannerMuteNoHash = "Bu kaydın hash'i yok, susturulamıyor.";
+    public static string CmdUnmuteBannersName = "Susturulmuş uyarıları geri aç";
+    public static string CmdUnmuteBannersDesc = "Üst şeritte susturduğun tehdit uyarılarının hepsini yeniden göster.";
+    public static string UnmutedCountFormat = "{0} susturulmuş uyarı geri açıldı.";
+    public static string NoMutedBanners = "Susturulmuş uyarı yok.";
     public static string DrawerMoreScans = "Diğer tarama yolları";
     public static string DrawerReports = "Raporlar ve dışa aktarma";
     public static string DrawerTools = "Araçlar";

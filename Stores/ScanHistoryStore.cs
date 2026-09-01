@@ -60,7 +60,8 @@ internal static class ScanHistoryStore
 
     /// <summary>The overview banner's question: for each on-disk path, take its most recent scan row
     /// (an older "threat" row never outvotes a newer clean rescan of the same path), keep the ones
-    /// still flagged, still present, and not excused by the user (allowlist / folder suppression).
+    /// still flagged, still present, and not excused by the user (allowlist / folder suppression /
+    /// banner mute).
     /// Returns the first such live threat, or null when the disk is clean by latest knowledge.</summary>
     public static HistoryEntry? FirstLiveThreat()
     {
@@ -77,6 +78,7 @@ internal static class ScanHistoryStore
                 if (!File.Exists(e.Path!)) continue;
                 if (AllowlistStore.Contains(e.Md5, e.Sha256)) continue;
                 if (FolderSuppressionStore.Contains(e.Path)) continue;
+                if (BannerMuteStore.Contains(e.Md5, e.Sha256)) continue;
                 return e;
             }
             catch (Exception ex) { Log($"Live-threat check failed for {e.Name}: {ex.Message}", LogLevel.Warning); }

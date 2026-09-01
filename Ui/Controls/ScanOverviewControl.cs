@@ -13,7 +13,9 @@ internal sealed class ScanOverviewControl : UserControl
     readonly Panel _statusBanner = new() { Dock = DockStyle.Top, Height = 56, Margin = new Padding(8, 8, 8, 2) };
     readonly Label _statusLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Padding = new Padding(14, 0, 0, 0), Font = new Font("Segoe UI", 11f, FontStyle.Bold) };
     readonly Button _statusBtn = new() { Dock = DockStyle.Right, Width = 160, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Visible = false };
+    readonly Button _statusMute = new() { Dock = DockStyle.Right, Width = 44, Text = "✕", FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Visible = false };
     Action? _statusAction;
+    Action? _statusMuteAction;
     readonly Panel _attention = new() { Dock = DockStyle.Top, Height = 40, Visible = false, Padding = new Padding(12, 0, 8, 0) };
     readonly Label _attentionLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
     readonly Panel _drop = new() { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(0, 4, 0, 10), Margin = new Padding(8) };
@@ -74,6 +76,7 @@ internal sealed class ScanOverviewControl : UserControl
         // the user marks a file clean or mutes a folder — not only when history rows change.
         AllowlistStore.Changed += OnStoreChanged;
         FolderSuppressionStore.Changed += OnStoreChanged;
+        BannerMuteStore.Changed += OnStoreChanged;
         VisibleChanged += (_, _) => { if (Visible) Refresh2(); };
         Refresh2();
     }
@@ -87,6 +90,7 @@ internal sealed class ScanOverviewControl : UserControl
             ScanHistoryStore.Changed -= OnStoreChanged;
             AllowlistStore.Changed -= OnStoreChanged;
             FolderSuppressionStore.Changed -= OnStoreChanged;
+            BannerMuteStore.Changed -= OnStoreChanged;
         }
         base.Dispose(disposing);
     }
@@ -360,9 +364,16 @@ internal sealed class ScanOverviewControl : UserControl
         // "Geçmişi aç →" button was invisible.
         _statusBanner.Controls.Add(_statusLabel);
         _statusBanner.Controls.Add(_statusBtn);
+        _statusMute.FlatAppearance.BorderSize = 0;
+        _statusMute.Click += (_, _) => _statusMuteAction?.Invoke();
+        _statusMute.AccessibleName = Strings.BannerMuteTip;
+        new ToolTip().SetToolTip(_statusMute, Strings.BannerMuteTip);
+        _statusBanner.Controls.Add(_statusMute); // added last so it docks furthest right
     }
 
-    void SetBanner(string title, string rationale, Color accent, string btnText, Action? action)
+    /// <summary>Paints the banner. <paramref name="mute"/>, when given, shows the ✕ that stops this one
+    /// finding from re-raising the banner on every launch.</summary>
+    void SetBanner(string title, string rationale, Color accent, string btnText, Action? action, Action? mute = null)
     {
         _statusBanner.BackColor = ThemeManager.Blend(accent, Theme.Current.Panel, 0.22f);
         _statusLabel.ForeColor = Theme.Current.Text;
@@ -376,6 +387,11 @@ internal sealed class ScanOverviewControl : UserControl
             _statusBtn.Visible = true;
         }
         else _statusBtn.Visible = false;
+
+        _statusMuteAction = mute;
+        _statusMute.BackColor = ThemeManager.Blend(accent, Theme.Current.Panel, 0.45f);
+        _statusMute.ForeColor = Color.White;
+        _statusMute.Visible = mute != null;
     }
 
     /// <summary>The one live security answer the lifetime tiles can't give: is a known-malicious file
@@ -388,7 +404,14 @@ internal sealed class ScanOverviewControl : UserControl
 
         if (liveThreat != null)
         {
-            SetBanner(Strings.BannerTitleAttention, string.Format(Strings.BannerLiveThreatFormat, liveThreat.Name), Theme.Current.Danger, Strings.BtnOpenHistory, () => GoToTab?.Invoke(4));
+            var muted = liveThreat;
+            SetBanner(Strings.BannerTitleAttention, string.Format(Strings.BannerLiveThreatFormat, liveThreat.Name), Theme.Current.Danger, Strings.BtnOpenHistory,
+                () => GoToTab?.Invoke(4),
+                mute: () =>
+                {
+                    if (!NativeMessageBox.Confirm(string.Format(Strings.BannerMuteConfirmFormat, muted.Name))) return;
+                    if (!BannerMuteStore.Add(muted.Md5, muted.Sha256, muted.Name)) UiFeedback.Refused(Strings.BannerMuteNoHash);
+                });
             return;
         }
         if (AppServices.Vault.UsableKeyCount == 0 && !Settings.KeylessGuiLookup)

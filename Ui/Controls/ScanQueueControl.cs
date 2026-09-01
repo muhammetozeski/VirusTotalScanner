@@ -1487,6 +1487,7 @@ internal sealed class ScanQueueControl : UserControl
         new() { Name = Strings.CmdFindCopiesName, Desc = Strings.CmdFindCopiesDesc, Run = () => _ = FindCopiesAsync() },
         new() { Name = Strings.CmdHuntPersistenceName, Desc = Strings.CmdHuntPersistenceDesc, Run = HuntPersistence },
         new() { Name = Strings.CmdNeighborsName, Desc = Strings.CmdNeighborsDesc, Run = ShowNeighbors },
+        new() { Name = Strings.CmdUnmuteBannersName, Desc = Strings.CmdUnmuteBannersDesc, Run = UnmuteBanners },
         ];
 
         // Named scan profiles: save the current scan settings, or switch to a saved profile in one keystroke.
@@ -1498,6 +1499,12 @@ internal sealed class ScanQueueControl : UserControl
             list.Add(new() { Name = string.Format(Strings.CmdDeleteProfileNameFormat, name), Desc = Strings.CmdDeleteProfileDesc, Run = () => { ScanProfileStore.Delete(name); _summary.Text = string.Format(Strings.ProfileDeletedFormat, name); } });
         }
         return list;
+    }
+
+    static void UnmuteBanners()
+    {
+        int n = BannerMuteStore.ClearAll();
+        NativeMessageBox.Info(n > 0 ? string.Format(Strings.UnmutedCountFormat, n) : Strings.NoMutedBanners);
     }
 
     void SaveScanProfile()
