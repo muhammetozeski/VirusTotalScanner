@@ -19,11 +19,13 @@ internal sealed class IocRecord
 internal static class IocStore
 {
     static readonly Dictionary<string, IocRecord> _byHash = new(StringComparer.OrdinalIgnoreCase);
+    // Behaviour fetches (background) and detail-pane reads can overlap — guard the map like the other stores.
+    static readonly object Lock = new();
     static bool _loaded;
 
     static string FilePath => Path.Combine(ConfigPathResolver.ConfigFolder, "ioc-index.json");
 
-    static void Load()
+    static void Load() // caller holds Lock
     {
         if (_loaded) return;
         _loaded = true;
@@ -36,7 +38,7 @@ internal static class IocStore
         catch (Exception ex) { Log("IOC index load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
     }
 
-    static void Save()
+    static void Save() // caller holds Lock
     {
         try
         {
@@ -48,24 +50,28 @@ internal static class IocStore
 
     public static void Record(string? sha256, string? path, bool malicious, IEnumerable<string> iocs)
     {
-        Load();
         if (string.IsNullOrWhiteSpace(sha256)) return;
         var clean = iocs.Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (clean.Count == 0) return;
-        _byHash[sha256] = new IocRecord { Sha256 = sha256, Path = path, Malicious = malicious, Iocs = clean };
-        Save();
+        lock (Lock)
+        {
+            Load();
+            _byHash[sha256] = new IocRecord { Sha256 = sha256, Path = path, Malicious = malicious, Iocs = clean };
+            Save();
+        }
     }
 
     public sealed record Connection(string Sha256, string? Path, bool Malicious, List<string> Shared);
 
     public static List<Connection> Connections(string? sha256, IEnumerable<string> iocs)
     {
-        Load();
         var mine = new HashSet<string>(iocs.Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i.Trim()), StringComparer.OrdinalIgnoreCase);
         var result = new List<Connection>();
         if (mine.Count == 0) return result;
-        foreach (var r in _byHash.Values)
+        List<IocRecord> snapshot;
+        lock (Lock) { Load(); snapshot = _byHash.Values.ToList(); }
+        foreach (var r in snapshot)
         {
             if (string.Equals(r.Sha256, sha256, StringComparison.OrdinalIgnoreCase)) continue;
             var shared = r.Iocs.Where(mine.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();

@@ -30,6 +30,9 @@ internal sealed class QuarantineEntry
 internal static class QuarantineVault
 {
     static readonly List<QuarantineEntry> _entries = [];
+    // Background auto-quarantine (watchers) and the vault dialog can act at the same time; every
+    // _entries access holds this so the manifest list never tears (its loss orphans .VIRUS files).
+    static readonly object Lock = new();
     static bool _loaded;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
 
@@ -49,7 +52,7 @@ internal static class QuarantineVault
         catch { return null; }
     }
 
-    static void Load()
+    static void Load() // caller holds Lock
     {
         if (_loaded) return;
         _loaded = true;
@@ -62,7 +65,7 @@ internal static class QuarantineVault
         catch (Exception ex) { Log("Quarantine manifest load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(ManifestPath); }
     }
 
-    static void Save()
+    static void Save() // caller holds Lock
     {
         try
         {
@@ -75,7 +78,6 @@ internal static class QuarantineVault
     /// <summary>Moves a file into the vault and records a restorable manifest entry.</summary>
     public static bool Quarantine(string path, VtFileReport? report, string? sha256, string? md5, out string? error)
     {
-        Load();
         error = null;
         try
         {
@@ -110,7 +112,7 @@ internal static class QuarantineVault
                 File.Move(path, dest, overwrite: true); // same volume → atomic rename
             }
 
-            _entries.Add(new QuarantineEntry
+            var entry = new QuarantineEntry
             {
                 Id = id,
                 OriginalPath = path,
@@ -122,8 +124,8 @@ internal static class QuarantineVault
                 QuarantinedUtc = DateTime.UtcNow,
                 Origin = origin,
                 VaultSha = HashFile(dest), // integrity baseline for the restore tamper-check
-            });
-            Save();
+            };
+            lock (Lock) { Load(); _entries.Add(entry); Save(); }
             Log($"Quarantined to vault: {path} -> {id}.VIRUS", LogLevel.Warning);
             return true;
         }
@@ -132,8 +134,7 @@ internal static class QuarantineVault
 
     public static IReadOnlyList<QuarantineEntry> List()
     {
-        Load();
-        return _entries.OrderByDescending(e => e.QuarantinedUtc).ToList();
+        lock (Lock) { Load(); return _entries.OrderByDescending(e => e.QuarantinedUtc).ToList(); }
     }
 
     static bool _reconciled;
@@ -144,33 +145,36 @@ internal static class QuarantineVault
     /// they can be Purged) and drop dead records. Returns the number of orphans recovered.</summary>
     public static int Reconcile()
     {
-        Load();
-        if (_reconciled) return 0;
-        _reconciled = true;
         int recovered = 0;
-        try
+        lock (Lock)
         {
-            int dropped = _entries.RemoveAll(e => !File.Exists(VaultFile(e.Id))); // record but no bytes → dead
-            if (Directory.Exists(Folder))
+            Load();
+            if (_reconciled) return 0;
+            _reconciled = true;
+            try
             {
-                var known = _entries.Select(e => e.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                foreach (var f in Directory.EnumerateFiles(Folder, "*.VIRUS"))
+                int dropped = _entries.RemoveAll(e => !File.Exists(VaultFile(e.Id))); // record but no bytes → dead
+                if (Directory.Exists(Folder))
                 {
-                    string id = Path.GetFileNameWithoutExtension(f);
-                    if (!known.Add(id)) continue; // already in manifest
-                    _entries.Add(new QuarantineEntry
+                    var known = _entries.Select(e => e.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    foreach (var f in Directory.EnumerateFiles(Folder, "*.VIRUS"))
                     {
-                        Id = id,
-                        OriginalPath = f, // the held file itself: Restore is a natural no-op, Purge works
-                        Verdict = Strings.VaultVerdictRecovered,
-                        QuarantinedUtc = SafeWriteTime(f),
-                    });
-                    recovered++;
+                        string id = Path.GetFileNameWithoutExtension(f);
+                        if (!known.Add(id)) continue; // already in manifest
+                        _entries.Add(new QuarantineEntry
+                        {
+                            Id = id,
+                            OriginalPath = f, // the held file itself: Restore is a natural no-op, Purge works
+                            Verdict = Strings.VaultVerdictRecovered,
+                            QuarantinedUtc = SafeWriteTime(f),
+                        });
+                        recovered++;
+                    }
                 }
+                if (dropped > 0 || recovered > 0) { Save(); Log($"Vault reconcile: {recovered} orphan(s) recovered, {dropped} dead record(s) dropped.", LogLevel.Info); }
             }
-            if (dropped > 0 || recovered > 0) { Save(); Log($"Vault reconcile: {recovered} orphan(s) recovered, {dropped} dead record(s) dropped.", LogLevel.Info); }
+            catch (Exception ex) { Log("Vault reconcile failed: " + ex.Message, LogLevel.Warning); }
         }
-        catch (Exception ex) { Log("Vault reconcile failed: " + ex.Message, LogLevel.Warning); }
         return recovered;
     }
 
@@ -179,7 +183,6 @@ internal static class QuarantineVault
     /// <summary>Moves a held file back to its exact original path and drops the manifest entry.</summary>
     public static bool Restore(QuarantineEntry e, out string? error)
     {
-        Load();
         error = null;
         try
         {
@@ -204,8 +207,7 @@ internal static class QuarantineVault
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             File.Move(src, e.OriginalPath, overwrite: false);
 
-            _entries.RemoveAll(x => x.Id == e.Id);
-            Save();
+            lock (Lock) { Load(); _entries.RemoveAll(x => x.Id == e.Id); Save(); }
             Log($"Restored from vault: {e.Id} -> {e.OriginalPath}", LogLevel.Info);
             return true;
         }
@@ -216,14 +218,12 @@ internal static class QuarantineVault
     /// step of remediation (the caller must confirm; this is irreversible).</summary>
     public static bool Purge(QuarantineEntry e, out string? error)
     {
-        Load();
         error = null;
         try
         {
             string src = VaultFile(e.Id);
             if (File.Exists(src)) File.Delete(src);
-            _entries.RemoveAll(x => x.Id == e.Id);
-            Save();
+            lock (Lock) { Load(); _entries.RemoveAll(x => x.Id == e.Id); Save(); }
             Log($"Purged from vault: {e.Id} ({e.FileName})", LogLevel.Info);
             return true;
         }
@@ -233,25 +233,29 @@ internal static class QuarantineVault
     /// <summary>Permanently delete every entry older than <paramref name="days"/>. Returns the count purged.</summary>
     public static int PurgeOlderThan(int days)
     {
-        Load();
         if (days <= 0) return 0;
         var cutoff = DateTime.UtcNow.AddDays(-days);
         int n = 0;
-        foreach (var e in _entries.Where(x => x.QuarantinedUtc < cutoff).ToList())
+        lock (Lock)
         {
-            try { var src = VaultFile(e.Id); if (File.Exists(src)) File.Delete(src); _entries.Remove(e); n++; }
-            catch (Exception ex) { Log($"Purge failed for {e.Id}: {ex.Message}", LogLevel.Warning); }
+            Load();
+            foreach (var e in _entries.Where(x => x.QuarantinedUtc < cutoff).ToList())
+            {
+                try { var src = VaultFile(e.Id); if (File.Exists(src)) File.Delete(src); _entries.Remove(e); n++; }
+                catch (Exception ex) { Log($"Purge failed for {e.Id}: {ex.Message}", LogLevel.Warning); }
+            }
+            if (n > 0) { Save(); Log($"Retention purge removed {n} vault entr(ies) older than {days}d.", LogLevel.Info); }
         }
-        if (n > 0) { Save(); Log($"Retention purge removed {n} vault entr(ies) older than {days}d.", LogLevel.Info); }
         return n;
     }
 
     /// <summary>Total on-disk size of the held .VIRUS files — the space a full purge would reclaim.</summary>
     public static long ReclaimableBytes()
     {
-        Load();
+        List<QuarantineEntry> snapshot;
+        lock (Lock) { Load(); snapshot = [.. _entries]; }
         long total = 0;
-        foreach (var e in _entries)
+        foreach (var e in snapshot)
             try { var f = VaultFile(e.Id); if (File.Exists(f)) total += new FileInfo(f).Length; } catch { }
         return total;
     }

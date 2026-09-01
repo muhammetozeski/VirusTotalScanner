@@ -13,24 +13,30 @@ namespace VirusTotalScanner;
 internal static class ProductSignerRegistry
 {
     static readonly Dictionary<string, string> _map = new(StringComparer.OrdinalIgnoreCase);
+    // RecordTrusted is called from the scan's Parallel.ForEachAsync workers — concurrent writes to a
+    // plain Dictionary corrupt it, so every _map access holds this.
+    static readonly object Lock = new();
     static bool _loaded;
 
     static string FilePath => Path.Combine(ConfigPathResolver.ConfigFolder, "product-signers.json");
 
     public static void Load()
     {
-        if (_loaded) return;
-        _loaded = true;
-        try
+        lock (Lock)
         {
-            if (!File.Exists(FilePath)) return;
-            var d = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(FilePath));
-            if (d != null) foreach (var kv in d) _map[kv.Key] = kv.Value;
+            if (_loaded) return;
+            _loaded = true;
+            try
+            {
+                if (!File.Exists(FilePath)) return;
+                var d = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(FilePath));
+                if (d != null) foreach (var kv in d) _map[kv.Key] = kv.Value;
+            }
+            catch (Exception ex) { Log("Product-signer registry load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
         }
-        catch (Exception ex) { Log("Product-signer registry load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
     }
 
-    static void Save()
+    static void Save() // caller holds Lock
     {
         try
         {
@@ -57,10 +63,13 @@ internal static class ProductSignerRegistry
         if (string.IsNullOrWhiteSpace(publisher)) return;
         string? key = ProductKey(filePath);
         if (key == null) return;
-        if (!_map.TryGetValue(key, out var existing) || !string.Equals(existing, publisher, StringComparison.OrdinalIgnoreCase))
+        lock (Lock)
         {
-            _map[key] = publisher;
-            Save();
+            if (!_map.TryGetValue(key, out var existing) || !string.Equals(existing, publisher, StringComparison.OrdinalIgnoreCase))
+            {
+                _map[key] = publisher;
+                Save();
+            }
         }
     }
 
@@ -70,7 +79,8 @@ internal static class ProductSignerRegistry
     {
         Load();
         string? key = ProductKey(filePath);
-        if (key == null || !_map.TryGetValue(key, out var known) || string.IsNullOrWhiteSpace(known)) return null;
+        string? known;
+        lock (Lock) { if (key == null || !_map.TryGetValue(key, out known) || string.IsNullOrWhiteSpace(known)) return null; }
         if (trust.Trusted && string.Equals(trust.Publisher, known, StringComparison.OrdinalIgnoreCase)) return null;
         return string.Format(Strings.SignerContinuityFormat, key, known, trust.Trusted ? Strings.SignerDifferentPublisherPrefix + trust.Publisher : Strings.BaselineSignerInvalid);
     }

@@ -30,11 +30,14 @@ internal static class BaselineStore
 {
     static readonly Dictionary<string, BaselineRecord> _records = new(StringComparer.OrdinalIgnoreCase);
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
+    // The periodic tray re-check verifies in the background while the user can pin/remove from the
+    // UI thread — every _records access must hold this (the other stores already follow the pattern).
+    static readonly object Lock = new();
     static bool _loaded;
 
     static string FilePath => System.IO.Path.Combine(ConfigPathResolver.ConfigFolder, "baseline.json");
 
-    public static void Load()
+    static void LoadUnderLock()
     {
         if (_loaded) return;
         _loaded = true;
@@ -50,7 +53,7 @@ internal static class BaselineStore
         catch (Exception ex) { Log("Baseline load failed: " + ex.Message, LogLevel.Warning); AtomicFile.BackupCorrupt(FilePath); }
     }
 
-    static void Save()
+    static void SaveUnderLock()
     {
         try
         {
@@ -60,43 +63,46 @@ internal static class BaselineStore
         catch (Exception ex) { Log("Baseline save failed: " + ex.Message, LogLevel.Warning); }
     }
 
-    public static int Count { get { Load(); return _records.Count; } }
-    public static bool Contains(string path) { Load(); return _records.ContainsKey(path); }
+    public static int Count { get { lock (Lock) { LoadUnderLock(); return _records.Count; } } }
+    public static bool Contains(string path) { lock (Lock) { LoadUnderLock(); return _records.ContainsKey(path); } }
 
     /// <summary>Pins (or refreshes) a file's expected state. Computes hash + signer now.</summary>
     public static async Task<bool> PinAsync(string path, CancellationToken ct = default)
     {
-        Load();
         try
         {
             if (!File.Exists(path)) return false;
             var (_, sha) = await HashService.ComputeAsync(path, ct);
             var fi = new FileInfo(path);
             var trust = TrustService.Evaluate(path);
-            _records[path] = new BaselineRecord
+            lock (Lock)
             {
-                Path = path,
-                Sha256 = sha,
-                Size = fi.Length,
-                Signer = trust.Trusted ? trust.Publisher : null,
-                MtimeTicks = fi.LastWriteTimeUtc.Ticks,
-                CapturedUtc = DateTime.UtcNow,
-            };
-            Save();
+                LoadUnderLock();
+                _records[path] = new BaselineRecord
+                {
+                    Path = path,
+                    Sha256 = sha,
+                    Size = fi.Length,
+                    Signer = trust.Trusted ? trust.Publisher : null,
+                    MtimeTicks = fi.LastWriteTimeUtc.Ticks,
+                    CapturedUtc = DateTime.UtcNow,
+                };
+                SaveUnderLock();
+            }
             Log("Pinned to integrity watch: " + path, LogLevel.Info);
             return true;
         }
         catch (Exception ex) { Log("Baseline pin failed: " + ex.Message, LogLevel.Warning); return false; }
     }
 
-    public static void Remove(string path) { Load(); if (_records.Remove(path)) Save(); }
+    public static void Remove(string path) { lock (Lock) { LoadUnderLock(); if (_records.Remove(path)) SaveUnderLock(); } }
 
     /// <summary>Re-hashes every watched path and reports drift; updates stored hash on benign change.</summary>
     public static async Task<List<DriftResult>> VerifyAsync(Action<int, int>? onProgress, CancellationToken ct)
     {
-        Load();
         var results = new List<DriftResult>();
-        var all = _records.Values.ToList();
+        List<BaselineRecord> all;
+        lock (Lock) { LoadUnderLock(); all = _records.Values.ToList(); }
         int i = 0;
         foreach (var r in all)
         {
@@ -124,11 +130,14 @@ internal static class BaselineStore
                 results.Add(new DriftResult(r.Path, DriftKind.ChangedStillUntrusted,
                     wasSigned ? Strings.BaselineDriftSamePublisher : Strings.BaselineDriftWasUnsigned));
                 // Benign drift: refresh the stored hash/size so the next verify is quiet.
-                r.Sha256 = sha;
-                try { r.Size = new FileInfo(r.Path).Length; } catch { /* keep old size */ }
+                lock (Lock)
+                {
+                    r.Sha256 = sha;
+                    try { r.Size = new FileInfo(r.Path).Length; } catch { /* keep old size */ }
+                }
             }
         }
-        Save();
+        lock (Lock) SaveUnderLock();
         return results;
     }
 }
