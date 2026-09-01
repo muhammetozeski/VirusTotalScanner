@@ -104,7 +104,10 @@ internal static class EntityGrid
             // ("Index -1") from MakeFirstDisplayedCellCurrentCell when its handle is created. We toggle the
             // mark ourselves on click (below), so user editing isn't needed anyway.
             ReadOnly = true,
-            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter },
+            // Unbound cells start with a null Value, and the style's default NullValue is string.Empty —
+            // a two-state checkbox cell cannot format that, so EVERY repaint raised a DataError
+            // ("Formatted value of the cell has a wrong type", 18k+/session). Null must mean unchecked.
+            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.MiddleCenter, NullValue = false },
         };
         grid.Columns.Insert(0, col);
 
