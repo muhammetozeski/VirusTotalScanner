@@ -908,6 +908,8 @@ internal static class Strings
     public static string CoverageWatchDownloads = "İndirilenler izleniyor";
     public static string CoverageUsbAutoScan = "USB otomatik tarama";
     public static string CoverageScheduledScan = "Zamanlı tarama";
+    public static string CoverageScheduledScanOnFormat = "Zamanlı tarama: {0}";
+    public static string CoverageScheduledScanOff = "Zamanlı tarama kapalı (seçtiğin tek bir klasörü zamanlanmış görevle tarar)";
     public static string CoverageContextMenu = "Sağ-tık menüsü";
     public static string TileCaptionFormat = "{0}  ›";
     public static string RecentScansTitle = "Son taramalar";

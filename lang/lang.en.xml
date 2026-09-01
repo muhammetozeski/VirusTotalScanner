@@ -550,6 +550,8 @@
   <s name="BarGroupScan">Scan:</s>
   <s name="BarGroupTools">Tools:</s>
   <s name="SearchPlaceholder">🔎  Search (name/path)…</s>
+  <s name="CoverageScheduledScanOnFormat">Scheduled scan: {0}</s>
+  <s name="CoverageScheduledScanOff">Scheduled scan off (sweeps one folder you choose, on a schedule)</s>
   <s name="BannerMuteTip">Mute this warning for this file (it stays in the history)</s>
   <s name="BannerMuteConfirmFormat">Stop showing this warning for "{0}"?\n\nThe file keeps its verdict and stays in the history; only this top banner goes quiet. Undo with Ctrl+K → "Unmute hidden warnings".</s>
   <s name="BannerMuteNoHash">This entry has no hash, so it cannot be muted.</s>
