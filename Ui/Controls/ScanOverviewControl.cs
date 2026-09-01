@@ -38,7 +38,6 @@ internal sealed class ScanOverviewControl : UserControl
     readonly FlowLayoutPanel _coverageRows = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0) };
     Control? _onboardCard;
     readonly FlowLayoutPanel _onboardRows = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0) };
-    bool _onboardDismissed;
 
     public ScanOverviewControl()
     {
@@ -145,7 +144,12 @@ internal sealed class ScanOverviewControl : UserControl
         card.Dock = DockStyle.Top; card.AutoSize = true; card.Margin = new Padding(8, 8, 8, 2); card.Visible = false;
         var header = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false };
         header.Controls.Add(ThemeManager.MakeTitle(Strings.OnboardCardTitle, 10.5f));
-        header.Controls.Add(ThemeManager.MakeButton(Strings.BtnHide, (_, _) => { _onboardDismissed = true; if (_onboardCard != null) _onboardCard.Visible = false; }));
+        header.Controls.Add(ThemeManager.MakeButton(Strings.BtnHide, (_, _) =>
+        {
+            Settings.OnboardDismissed.Value = true;
+            SettingsManager.SaveSettings(); // otherwise "Gizle" lasts only until the next launch
+            if (_onboardCard != null) _onboardCard.Visible = false;
+        }));
         card.Controls.Add(_onboardRows);
         card.Controls.Add(header);
         _onboardCard = card;
@@ -162,7 +166,7 @@ internal sealed class ScanOverviewControl : UserControl
         bool menuOk = ContextMenuInstaller.Verify() == MenuState.Ok; // registry is the source of truth
         bool watchOk = Settings.WatchDownloads;
         bool scannedOk = ScanHistoryStore.Count > 0;
-        if (_onboardDismissed || (keyOk && menuOk && watchOk && scannedOk)) { _onboardCard.Visible = false; return; }
+        if (Settings.OnboardDismissed || (keyOk && menuOk && watchOk && scannedOk)) { _onboardCard.Visible = false; return; }
 
         _onboardRows.Controls.Clear();
         _onboardRows.Controls.Add(CoverageRow(Strings.OnboardStepApiKey, keyOk, null, () => GoToTab?.Invoke(5), Strings.ActionGoSettings));
@@ -198,7 +202,14 @@ internal sealed class ScanOverviewControl : UserControl
             enable: () => { Settings.WatchDownloads.Value = true; SettingsManager.SaveSettings(); WatchDownloadsToggled?.Invoke(); Refresh2(); }, settings: null));
         _coverageRows.Controls.Add(CoverageRow(Strings.CoverageUsbAutoScan, Settings.WatchUsb,
             enable: () => { Settings.WatchUsb.Value = true; SettingsManager.SaveSettings(); Refresh2(); }, settings: null));
-        _coverageRows.Controls.Add(CoverageRow(Strings.CoverageScheduledScan, SweepScheduler.IsInstalled(), enable: null, settings: () => GoToTab?.Invoke(5)));
+        // Name the folder the scheduled task actually sweeps: "Zamanlı tarama" alone never said WHAT it
+        // would scan, which is not something a user can reasonably be asked to switch on blind.
+        bool sweepOn = SweepScheduler.IsInstalled();
+        string sweepFolder = Settings.SweepFolder.Value;
+        string sweepLabel = sweepOn && sweepFolder.Length > 0
+            ? string.Format(Strings.CoverageScheduledScanOnFormat, sweepFolder)
+            : sweepOn ? Strings.CoverageScheduledScan : Strings.CoverageScheduledScanOff;
+        _coverageRows.Controls.Add(CoverageRow(sweepLabel, sweepOn, enable: null, settings: () => GoToTab?.Invoke(5)));
         // The process-start guard needs admin for its WMI trace: the setting being ON is not the same
         // as the guard RUNNING, and that gap used to be invisible (guard silently off, user "protected").
         _coverageRows.Controls.Add(Settings.WatchProcessLaunches && !ProcessStartGuard.Active

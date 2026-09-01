@@ -131,6 +131,9 @@ internal static class Settings
     /// <summary>Semicolon-separated keys of the action drawers the user left open on the scan tab.</summary>
     public static readonly Setting<string> OpenDrawers = new("");
 
+    /// <summary>The overview's setup checklist was dismissed and must stay gone across restarts.</summary>
+    public static readonly Setting<bool> OnboardDismissed = new(false);
+
     /// <summary>Order a scan by a cheap local suspicion score so the scariest files get a verdict first.</summary>
     public static readonly Setting<bool> RiskWeightedOrdering = new(true);
 
