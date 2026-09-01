@@ -14,6 +14,7 @@ internal sealed class KeyVault
     readonly List<ApiKeyEntry> _keys = [];
     readonly object _lock = new();
     DateTime _lastCounterPersistUtc = DateTime.MinValue;
+    bool _undecryptable; // the stored blob failed to decrypt this session — guards it from being overwritten
 
     /// <summary>Raised on structural changes (add/remove/edit/disable).</summary>
     public event Action? Changed;
@@ -38,9 +39,13 @@ internal sealed class KeyVault
                 if (list != null) _keys.AddRange(list);
                 Log($"Key vault loaded: {_keys.Count} key(s)", LogLevel.Info);
             }
-            catch (CryptographicException)
+            catch (CryptographicException ex)
             {
-                Log("Key vault could not be decrypted (config likely copied from another user/PC). Starting empty.", LogLevel.Warning);
+                _undecryptable = true;
+                string backup = BackupUndecryptableBlob(enc);
+                Log("Key vault could not be decrypted (different Windows account, or a torn config write). "
+                    + (backup.Length > 0 ? $"Encrypted blob backed up to: {backup}. " : "Backing the blob up ALSO failed. ")
+                    + "Starting empty; the stored blob will not be overwritten until a key is added. " + ex.Message, LogLevel.Error);
             }
             catch (Exception ex)
             {
@@ -113,10 +118,39 @@ internal sealed class KeyVault
 
     public void RaiseCountersUpdated() { try { CountersUpdated?.Invoke(); } catch (Exception ex) { Log("CountersUpdated handler failed: " + ex.Message, LogLevel.Warning); } }
 
+    /// <summary>Preserves the still-encrypted blob to a sidecar file so the keys stay recoverable
+    /// (e.g. back on the right Windows account) instead of being lost to the next save. Tries the
+    /// data folder first, then %TEMP%; returns the written path, or "" when both fail.</summary>
+    static string BackupUndecryptableBlob(string encryptedBlob)
+    {
+        string name = $"keyvault-backup-{DateTime.Now:yyyyMMdd-HHmmss}.txt";
+        foreach (string folder in new[] { ConfigPathResolver.DataFolder, Path.GetTempPath() })
+        {
+            try
+            {
+                string path = Path.Combine(folder, name);
+                File.WriteAllText(path, encryptedBlob);
+                return path;
+            }
+            catch (Exception ex) { Log($"Key vault blob backup to '{folder}' failed: {ex.Message}", LogLevel.Warning); }
+        }
+        return "";
+    }
+
     void PersistToConfig()
     {
         string json;
-        lock (_lock) json = JsonSerializer.Serialize(_keys, JsonOpts);
+        bool empty;
+        lock (_lock) { json = JsonSerializer.Serialize(_keys, JsonOpts); empty = _keys.Count == 0; }
+        if (_undecryptable && empty)
+        {
+            // The stored blob is unreadable only HERE (wrong account / torn read) and memory holds
+            // nothing: writing now would empty the user's real vault for good. Keep the stored blob —
+            // the previous behavior did exactly this overwrite and destroyed saved keys.
+            Log("Key vault save skipped to protect the stored (undecryptable) blob from being emptied.", LogLevel.Warning);
+            return;
+        }
+        _undecryptable = false; // a real vault is being written; the old blob lives on in the backup file
         try
         {
             Settings.EncryptedKeyVault.Value = CryptoService.ProtectToBase64(json);
