@@ -4,8 +4,8 @@ using System.Security.Principal;
 namespace VirusTotalScanner;
 
 /// <summary>
-/// Windows privilege helpers. Adapted from C:\E\KodlamaProjeleri\CSharp\TPMPass\AdminHelper.cs.
-/// The context menu uses HKCU and needs no admin; this is here only for optional flows.
+/// Windows privilege helpers. Used by the elevation-requiring flows: the HKLM context-menu
+/// install/repair/uninstall and the WMI process-start guard.
 /// </summary>
 internal static class AdminHelper
 {
