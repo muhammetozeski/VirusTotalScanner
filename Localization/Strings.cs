@@ -360,6 +360,7 @@ internal static class Strings
     public static string MenuQuarantine = "⚠  Karantinaya al (.VIRUS)";
 
     public static string ProgressSummaryFormat = "Toplam {0} • Tamamlanan {1} • Zararlı {2} • Şüpheli {3} • Temiz {4} • İmzalı↷atlandı {5} • Hata {6}";
+    public static string PendingQueuedFormat = "{0} öğe kuyruğa eklendi — bu tarama bitince otomatik taranacak.";
 
     // ---- scan queue control: scan-entry / lookup / export / cache messages ----
     public static string FolderPickDescription = "Taranacak klasör (alt klasörler dahil)";

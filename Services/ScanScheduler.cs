@@ -60,17 +60,61 @@ internal sealed class ScanScheduler
     public void Resume() { _pause.Resume(); Log("Scan resumed.", LogLevel.Info); }
     public void Cancel() { try { _cts?.Cancel(); } catch (Exception ex) { Log("Cancel failed: " + ex.Message, LogLevel.Warning); } Log("Scan cancel requested.", LogLevel.Info); }
 
+    // Paths that arrived while a run was active, drained into an automatic follow-up run —
+    // a drop / right-click / forwarded path during a scan is queued, never silently discarded.
+    readonly object _pendingLock = new();
+    readonly List<string> _pendingPaths = [];
+    ScanOptions? _pendingOpts;
+
+    /// <summary>Raised (marshalled via <see cref="UiPost"/>) when a scan request arrives while a run
+    /// is active and gets queued behind it. Carries the total pending path count.</summary>
+    public event Action<int>? PendingQueued;
+
     public async Task RunAsync(IEnumerable<string> paths, ScanOptions opts, CancellationToken externalCt = default)
     {
-        if (IsRunning) { Log("Scan already running; ignoring new request.", LogLevel.Warning); return; }
+        lock (_pendingLock)
+        {
+            if (IsRunning)
+            {
+                _pendingPaths.AddRange(paths);
+                _pendingOpts = opts;
+                int pending = _pendingPaths.Count;
+                Log($"Scan already running; queued {pending} path(s) for an automatic follow-up run.", LogLevel.Info);
+                UiPost(() => { try { PendingQueued?.Invoke(pending); } catch (Exception ex) { Log("PendingQueued handler failed: " + ex.Message, LogLevel.Warning); } });
+                return;
+            }
+            IsRunning = true; // reserved inside the lock, so two racing requests can't both start
+        }
 
+        var runPaths = paths;
+        var runOpts = opts;
+        bool clearQueue = true; // only the user-initiated first run clears the grid; follow-ups append
+        while (true)
+        {
+            await RunCoreAsync(runPaths, runOpts, clearQueue, externalCt);
+            lock (_pendingLock)
+            {
+                if (_cts?.IsCancellationRequested == true) { _pendingPaths.Clear(); _pendingOpts = null; } // Cancel covers the queued batch too
+                if (_pendingPaths.Count == 0) { IsRunning = false; return; }
+                runPaths = _pendingPaths.ToArray();
+                _pendingPaths.Clear();
+                runOpts = _pendingOpts ?? runOpts;
+                _pendingOpts = null;
+                clearQueue = false;
+            }
+        }
+    }
+
+    /// <summary>One scan pass over one batch of paths. Never touches <see cref="IsRunning"/> — the
+    /// pending-queue loop in <see cref="RunAsync"/> owns that flag.</summary>
+    async Task RunCoreAsync(IEnumerable<string> paths, ScanOptions opts, bool clearQueue, CancellationToken externalCt)
+    {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
         var ct = _cts.Token;
-        IsRunning = true;
         ResetCounters();
         _stopwatch.Restart();
         lock (_rateLock) _recent.Clear();
-        UiPost(() => Items.Clear());
+        if (clearQueue) UiPost(() => Items.Clear());
         try { Started?.Invoke(); } catch (Exception ex) { Log("Started handler failed: " + ex.Message, LogLevel.Warning); }
 
         var archiveTemps = new List<string>(); // temp folders from archive expansion, cleaned in finally
@@ -137,7 +181,6 @@ internal sealed class ScanScheduler
             if (!ct.IsCancellationRequested) ScanSessionStore.Clear();
             foreach (var td in archiveTemps) ArchiveExpander.CleanupTemp(td);
             _cache.Flush();
-            IsRunning = false;
             try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
             Log("Scan finished.", LogLevel.Info);
         }

@@ -142,6 +142,7 @@ internal sealed class ScanQueueControl : UserControl
         _scheduler.ItemFinished += OnItemFinished;
         _scheduler.Started += () => SafeUi(() => { _exhaustPromptShown = false; UpdateRunningState(true); _emptyCard.Visible = false; _grid.Visible = true; });
         _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); UpdateEmptyState(); });
+        _scheduler.PendingQueued += n => _summary.Text = string.Format(Strings.PendingQueuedFormat, n); // already on the UI thread via UiPost
         _scheduler.Items.ListChanged += (_, e) =>
         {
             if (e.ListChangedType is System.ComponentModel.ListChangedType.ItemAdded or System.ComponentModel.ListChangedType.ItemDeleted or System.ComponentModel.ListChangedType.Reset)
