@@ -697,6 +697,9 @@ internal static class Strings
     public static string TipHelp = "Uygulamadaki terimlerin ve sinyallerin sözlüğü.";
     public static string BarGroupScan = "Tara:";
     public static string BarGroupTools = "Araçlar:";
+    public static string DrawerMoreScans = "Diğer tarama yolları";
+    public static string DrawerReports = "Raporlar ve dışa aktarma";
+    public static string DrawerTools = "Araçlar";
     public static string SearchPlaceholder = "🔎  Ara (ad/yol)…";
     public static string ChipAll = "Tümü";
     public static string ChipMalicious = "Zararlı";

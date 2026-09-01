@@ -128,6 +128,9 @@ internal static class Settings
     /// <summary>Folders watched when <see cref="WatchDownloads"/> is on (; separated; empty = Downloads + Desktop).</summary>
     public static readonly Setting<string> WatchFolders = new("");
 
+    /// <summary>Semicolon-separated keys of the action drawers the user left open on the scan tab.</summary>
+    public static readonly Setting<string> OpenDrawers = new("");
+
     /// <summary>Order a scan by a cheap local suspicion score so the scariest files get a verdict first.</summary>
     public static readonly Setting<bool> RiskWeightedOrdering = new(true);
 

@@ -550,6 +550,9 @@
   <s name="BarGroupScan">Scan:</s>
   <s name="BarGroupTools">Tools:</s>
   <s name="SearchPlaceholder">🔎  Search (name/path)…</s>
+  <s name="DrawerMoreScans">Other ways to scan</s>
+  <s name="DrawerReports">Reports and export</s>
+  <s name="DrawerTools">Tools</s>
   <s name="ChipAll">All</s>
   <s name="ChipMalicious">Malicious</s>
   <s name="ChipSkipped">Skipped</s>
