@@ -3,9 +3,20 @@ using System.Drawing.Imaging;
 
 namespace VirusTotalScanner;
 
-/// <summary>Dev-only: renders the main window to a PNG off-screen (for visual review). Used via --snapshot.</summary>
+/// <summary>Dev-only: renders the main window (every tab) and the parameterless tool dialogs to PNGs
+/// off-screen for visual review. Used via --snapshot.</summary>
 internal static class SnapshotRunner
 {
+    // Tool dialogs that need no arguments; each is opened off-screen and captured as <base>-dlg-<name>.png.
+    static readonly (string Name, Func<Form> Create)[] Dialogs =
+    [
+        ("vault", () => new QuarantineVaultDialog()),
+        ("timeline", () => new IncidentTimelineDialog()),
+        ("escalation", () => new EscalationDossierDialog()),
+        ("reverdict", () => new HistoryReverdictDialog()),
+        ("triage", () => new DownloadsTriageDialog()),
+    ];
+
     public static int Run(string path, string[]? preloadHashes = null)
     {
         try
@@ -18,7 +29,7 @@ internal static class SnapshotRunner
                 ShowInTaskbar = false,
             };
             form.Show();
-            for (int i = 0; i < 8; i++) { Application.DoEvents(); Thread.Sleep(120); }
+            Pump(8, 120);
 
             // Optionally pre-load real results so the snapshot shows the engine table / trusted-skip.
             if (preloadHashes is { Length: > 0 })
@@ -49,7 +60,7 @@ internal static class SnapshotRunner
                     catch (Exception ex) { Console.Error.WriteLine("preload failed: " + ex.Message); }
                 }
                 form.SelectFirstResult();
-                for (int i = 0; i < 4; i++) { Application.DoEvents(); Thread.Sleep(100); }
+                Pump(4, 100);
             }
 
             string dir = Path.GetDirectoryName(path) ?? ".";
@@ -57,12 +68,24 @@ internal static class SnapshotRunner
             for (int tab = 0; tab < 6; tab++) // all six tabs: overview, scan, quota, logs, history, settings
             {
                 form.SelectTab(tab);
-                for (int i = 0; i < 4; i++) { Application.DoEvents(); Thread.Sleep(80); }
-                using var bmp = new Bitmap(form.Width, form.Height);
-                form.DrawToBitmap(bmp, new Rectangle(0, 0, form.Width, form.Height));
-                string outPath = Path.Combine(dir, $"{baseName}-tab{tab}.png");
-                bmp.Save(outPath, ImageFormat.Png);
-                Console.WriteLine("snapshot: " + outPath);
+                Pump(4, 80);
+                Save(form, Path.Combine(dir, $"{baseName}-tab{tab}.png"));
+            }
+
+            foreach (var (name, create) in Dialogs)
+            {
+                try
+                {
+                    using var dlg = create();
+                    dlg.StartPosition = FormStartPosition.Manual;
+                    dlg.Location = new Point(-4000, -4000);
+                    dlg.ShowInTaskbar = false;
+                    dlg.Show(form);
+                    Pump(4, 100);
+                    Save(dlg, Path.Combine(dir, $"{baseName}-dlg-{name}.png"));
+                    dlg.Close();
+                }
+                catch (Exception ex) { Console.Error.WriteLine($"dialog snapshot failed ({name}): {ex}"); }
             }
             form.Close();
             return 0;
@@ -72,5 +95,18 @@ internal static class SnapshotRunner
             Console.Error.WriteLine("snapshot failed: " + ex);
             return 1;
         }
+    }
+
+    static void Pump(int rounds, int sleepMs)
+    {
+        for (int i = 0; i < rounds; i++) { Application.DoEvents(); Thread.Sleep(sleepMs); }
+    }
+
+    static void Save(Form form, string outPath)
+    {
+        using var bmp = new Bitmap(form.Width, form.Height);
+        form.DrawToBitmap(bmp, new Rectangle(0, 0, form.Width, form.Height));
+        bmp.Save(outPath, ImageFormat.Png);
+        Console.WriteLine("snapshot: " + outPath);
     }
 }
