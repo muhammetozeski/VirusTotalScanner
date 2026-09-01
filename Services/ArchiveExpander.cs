@@ -35,18 +35,32 @@ internal static class ArchiveExpander
         catch { return false; }
     }
 
+    /// <summary>True when the file starts with the ZIP signature ("PK"). Extensions lie — e.g. game
+    /// engines ship native DLLs named .whl — and those must never trigger the expand-archives prompt
+    /// or a doomed extraction attempt.</summary>
+    static bool HasZipMagic(string path)
+    {
+        try
+        {
+            using var fs = File.OpenRead(path);
+            Span<byte> b = stackalloc byte[2];
+            return fs.Read(b) == 2 && b[0] == (byte)'P' && b[1] == (byte)'K';
+        }
+        catch { return false; }
+    }
+
     /// <summary>True for archives this class can actually open and extract here and now.</summary>
     public static bool IsExpandable(string path)
     {
         string ext = Path.GetExtension(path);
-        return ZipFamily.Contains(ext) || (SevenZipFormats.Contains(ext) && Has7z);
+        return (ZipFamily.Contains(ext) && HasZipMagic(path)) || (SevenZipFormats.Contains(ext) && Has7z);
     }
 
     /// <summary>True for any archive kind (so the UI can offer to expand / warn about unsupported).</summary>
     public static bool IsArchive(string path)
     {
         string ext = Path.GetExtension(path);
-        return ZipFamily.Contains(ext) || SevenZipFormats.Contains(ext);
+        return ZipFamily.Contains(ext) ? HasZipMagic(path) : SevenZipFormats.Contains(ext);
     }
 
     /// <summary>
