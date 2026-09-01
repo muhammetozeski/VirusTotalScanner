@@ -16,7 +16,6 @@
   <s name="FirstRunAddKey">Would you like to add a VirusTotal API key now?</s>
   <s name="FirstRunMenuPrompt">Add 'Scan with VirusTotal' to the right-click menu?\n(For all users; administrator permission / UAC will be requested.)</s>
   <s name="FirstRunMenuTitle">Permission</s>
-  <s name="RepairMenuPrompt">The right-click menu entry points to an old exe path (the app was moved). Repair it now?</s>
   <s name="ResumePromptFormat">An interrupted scan was found ({0} item(s)):\n{1}\n\nResume where it left off?</s>
   <s name="ResumePromptTitle">Interrupted scan</s>
   <s name="BtnSelectFiles">📄  Select files…</s>
@@ -713,6 +712,7 @@
   <s name="CoverageUsbAutoScan">USB auto-scan</s>
   <s name="CoverageScheduledScan">Scheduled scan</s>
   <s name="CoverageContextMenu">Right-click menu</s>
+  <s name="CoverageContextMenuStale">Right-click menu (points to an old install)</s>
   <s name="TileCaptionFormat">{0}  ›</s>
   <s name="RecentScansTitle">Recent scans</s>
   <s name="RecentEmptyHint">No scans yet — drop a file above.</s>

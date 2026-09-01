@@ -43,9 +43,6 @@ internal static class Settings
     /// ceiling is ~650 MB, so very large files cannot be analyzed anyway.</summary>
     public static readonly Setting<int> MaxFileSizeMB = new(0);
 
-    /// <summary>Whether the Explorer context-menu entries have been installed.</summary>
-    public static readonly Setting<bool> ContextMenuInstalled = new(false);
-
     /// <summary>Exclude safe extensions from the file context menu (AppliesTo query). Off by
     /// default so the verb always shows reliably; turning it on adds an AppliesTo filter.</summary>
     public static readonly Setting<bool> ContextMenuExcludeSafe = new(false);

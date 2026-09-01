@@ -504,11 +504,8 @@ internal sealed partial class MainForm : Form
 
         if (!Settings.FirstRunCompleted)
             RunFirstRunWizard();
-        else if (ContextMenuInstaller.NeedsRepair())
-        {
-            if (NativeMessageBox.Confirm(Strings.RepairMenuPrompt))
-                ContextMenuInstaller.Repair(out _);
-        }
+        // A stale right-click menu (exe moved) is surfaced passively on the overview coverage card
+        // with a one-click repair — no modal nag on startup.
 
         OfferResume();
         StartWatchCheck();

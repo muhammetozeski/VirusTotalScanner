@@ -36,7 +36,7 @@ internal static class Strings
     public static string FirstRunMenuTitle = "İzin";
 
     // ---- resume / repair ----
-    public static string RepairMenuPrompt = "Sağ tuş menüsü kaydı eski exe yolunu gösteriyor (uygulama taşınmış). Şimdi onarılsın mı?";
+    public static string CoverageContextMenuStale = "Sağ-tık menüsü (eski kuruluma işaret ediyor)";
     public static string ResumePromptFormat = "Yarım kalan bir tarama bulundu ({0} öğe):\n{1}\n\nKaldığı yerden devam edilsin mi?";
     public static string ResumePromptTitle = "Yarım kalan tarama";
 

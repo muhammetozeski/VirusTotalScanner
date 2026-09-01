@@ -40,9 +40,9 @@ internal static class ContextMenuInstaller
             WriteVerb(DirVerbKey, $"\"{Exe}\" --scan --recurse \"%1\"", "");
             WriteVerb(BgVerbKey, $"\"{Exe}\" --scan --recurse \"%V\"", "");
 
-            Settings.ContextMenuInstalled.Value = true;
-            Settings.ContextMenuExcludeSafe.Value = excludeSafe;
-            SettingsManager.SaveSettings();
+            // No settings write here: this often runs in a SECOND, elevated process, and any config
+            // save from it gets overwritten by the main process's later saves (stale in-memory copy).
+            // Installed-state has one source of truth - the registry, read via Verify().
             Log("Context menu installed (HKLM) for: " + Exe, LogLevel.Info);
             return true;
         }
@@ -79,8 +79,6 @@ internal static class ContextMenuInstaller
             DeleteTree(FileVerbKey);
             DeleteTree(DirVerbKey);
             DeleteTree(BgVerbKey);
-            Settings.ContextMenuInstalled.Value = false;
-            SettingsManager.SaveSettings();
             Log("Context menu removed (HKLM).", LogLevel.Info);
             return true;
         }
@@ -121,8 +119,6 @@ internal static class ContextMenuInstaller
         MenuState.Stale => Strings.MenuStateStale,
         _ => Strings.MenuStateUnknown,
     };
-
-    public static bool NeedsRepair() => Settings.ContextMenuInstalled && Verify() == MenuState.Stale;
 
     // ---- internals ----
 

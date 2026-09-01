@@ -155,7 +155,7 @@ internal sealed class ScanOverviewControl : UserControl
     {
         if (_onboardCard == null) return;
         bool keyOk = AppServices.Vault.UsableKeyCount > 0 || Settings.KeylessGuiLookup;
-        bool menuOk = Settings.ContextMenuInstalled;
+        bool menuOk = ContextMenuInstaller.Verify() == MenuState.Ok; // registry is the source of truth
         bool watchOk = Settings.WatchDownloads;
         bool scannedOk = ScanHistoryStore.Count > 0;
         if (_onboardDismissed || (keyOk && menuOk && watchOk && scannedOk)) { _onboardCard.Visible = false; return; }
@@ -192,8 +192,23 @@ internal sealed class ScanOverviewControl : UserControl
         _coverageRows.Controls.Add(CoverageRow(Strings.CoverageUsbAutoScan, Settings.WatchUsb,
             enable: () => { Settings.WatchUsb.Value = true; SettingsManager.SaveSettings(); Refresh2(); }, settings: null));
         _coverageRows.Controls.Add(CoverageRow(Strings.CoverageScheduledScan, SweepScheduler.IsInstalled(), enable: null, settings: () => GoToTab?.Invoke(5)));
-        _coverageRows.Controls.Add(CoverageRow(Strings.CoverageContextMenu, Settings.ContextMenuInstalled, enable: null, settings: () => GoToTab?.Invoke(5)));
+        var menuState = ContextMenuInstaller.Verify();
+        _coverageRows.Controls.Add(menuState == MenuState.Stale
+            // The verbs exist but point at another exe (the app was moved): offer the one-click,
+            // elevation-capable repair right here instead of a modal prompt on startup.
+            ? CoverageRow(Strings.CoverageContextMenuStale, false, enable: RepairMenuInBackground, settings: null, Strings.BtnRepair)
+            : CoverageRow(Strings.CoverageContextMenu, menuState == MenuState.Ok, enable: null, settings: () => GoToTab?.Invoke(5)));
     }
+
+    /// <summary>Runs the elevation-capable menu repair off the UI thread (the UAC prompt must not
+    /// block the message loop), then refreshes the coverage card with the new registry state.</summary>
+    void RepairMenuInBackground() =>
+        _ = Task.Run(() =>
+        {
+            ContextMenuInstaller.Repair(out _);
+            try { if (IsHandleCreated) BeginInvoke(Refresh2); }
+            catch (Exception ex) { Log("Coverage refresh after repair failed: " + ex.Message, LogLevel.Warning); }
+        });
 
     Control CoverageRow(string label, bool on, Action? enable, Action? settings, string? actionLabel = null)
     {
