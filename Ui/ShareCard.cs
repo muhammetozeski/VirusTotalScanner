@@ -53,7 +53,7 @@ internal static class ShareCard
         if (total > 0)
         {
             int bx = 18, bw = W - 36, bh = 14;
-            using (var track = new SolidBrush(Blend(t.SubtleText, t.Background, 0.3f)))
+            using (var track = new SolidBrush(ThemeManager.Blend(t.SubtleText, t.Background, 0.3f)))
             using (var path = Rounded(new Rectangle(bx, y, bw, bh), 7))
                 g.FillPath(track, path);
             int fill = (int)(bw * Math.Min(1.0, det / (double)total));
@@ -74,7 +74,7 @@ internal static class ShareCard
         // Hashes + footer.
         string sha = item.Sha256 ?? report?.Sha256 ?? "";
         if (sha.Length > 0) g.DrawString(Strings.ShareCardSha256Label + sha, mono, subtle, 18, H - 50);
-        using (var fpen = new Pen(Blend(t.SubtleText, t.Background, 0.4f))) g.DrawLine(fpen, 18, H - 28, W - 18, H - 28);
+        using (var fpen = new Pen(ThemeManager.Blend(t.SubtleText, t.Background, 0.4f))) g.DrawLine(fpen, 18, H - 28, W - 18, H - 28);
         g.DrawString($"{AppConstants.AppTitle} • {DateTime.Now:yyyy-MM-dd}", bodyFont, subtle, 18, H - 22);
 
         return bmp;
@@ -131,8 +131,6 @@ internal static class ShareCard
 
     static string Trim(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
 
-    static Color Blend(Color a, Color b, float t) => Color.FromArgb(
-        (int)(a.R * t + b.R * (1 - t)), (int)(a.G * t + b.G * (1 - t)), (int)(a.B * t + b.B * (1 - t)));
 
     static GraphicsPath Rounded(Rectangle r, int radius)
     {

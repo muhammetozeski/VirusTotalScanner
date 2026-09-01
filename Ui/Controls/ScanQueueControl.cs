@@ -481,7 +481,7 @@ internal sealed class ScanQueueControl : UserControl
     void ShowQuarantineUndo(string fileName, QuarantineEntry entry)
     {
         _undoEntry = entry;
-        _undoBar.BackColor = RecallBlend(Theme.Current.Success, Theme.Current.Panel, 0.22f);
+        _undoBar.BackColor = ThemeManager.Blend(Theme.Current.Success, Theme.Current.Panel, 0.22f);
         _undoLabel.ForeColor = Theme.Current.Text;
         _undoLabel.Text = string.Format(Strings.UndoQuarantinedFormat, fileName);
         _undoBar.Visible = true;
@@ -522,7 +522,7 @@ internal sealed class ScanQueueControl : UserControl
             var priorAtPath = atPath.LastOrDefault();
             if (priorAtPath != null && !string.Equals(priorAtPath.Md5, md5, StringComparison.OrdinalIgnoreCase))
             {
-                _recallBar.BackColor = RecallBlend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
+                _recallBar.BackColor = ThemeManager.Blend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
                 _recallLabel.Text = string.Format(Strings.RecallPathChangedFormat, priorAtPath.WhenLocal, priorAtPath.Verdict, priorAtPath.Ratio).TrimEnd();
                 _recallBar.Visible = true;
                 return;
@@ -533,13 +533,11 @@ internal sealed class ScanQueueControl : UserControl
         var prior = history.Where(e => string.Equals(e.Md5, md5, StringComparison.OrdinalIgnoreCase)).ToList();
         if (prior.Count < 2) { _recallBar.Visible = false; return; } // 1 = only the current scan's own record
         var last = prior[^2];
-        _recallBar.BackColor = RecallBlend(Theme.Current.Accent, Theme.Current.Panel, 0.22f);
+        _recallBar.BackColor = ThemeManager.Blend(Theme.Current.Accent, Theme.Current.Panel, 0.22f);
         _recallLabel.Text = string.Format(Strings.RecallSeenBeforeFormat, prior.Count - 1, last.WhenLocal, last.Verdict, last.Ratio).TrimEnd();
         _recallBar.Visible = true;
     }
 
-    static Color RecallBlend(Color a, Color b, float t) => Color.FromArgb(
-        (int)(a.R * t + b.R * (1 - t)), (int)(a.G * t + b.G * (1 - t)), (int)(a.B * t + b.B * (1 - t)));
 
     void ConfigureGrid()
     {

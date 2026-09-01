@@ -146,6 +146,13 @@ internal static class ThemeManager
             : ControlPaint.Dark(p.Surface, 0.02f);
     }
 
+    /// <summary>Linear mix of two colors (t = weight of <paramref name="a"/>) — the one tint helper
+    /// behind every banner/card accent blend.</summary>
+    public static Color Blend(Color a, Color b, float t) => Color.FromArgb(
+        Clamp(a.R * t + b.R * (1 - t)), Clamp(a.G * t + b.G * (1 - t)), Clamp(a.B * t + b.B * (1 - t)));
+
+    static int Clamp(double v) => v < 0 ? 0 : v > 255 ? 255 : (int)v;
+
     // ---- factories ----
 
     public static Button MakeButton(string text, EventHandler? onClick = null, bool accent = false)

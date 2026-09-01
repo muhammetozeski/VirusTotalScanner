@@ -224,7 +224,9 @@ internal sealed class ScanOverviewControl : UserControl
         // and a uniform row height so button/no-button rows have even vertical rhythm.
         var row = new FlowLayoutPanel { AutoSize = true, MinimumSize = new Size(0, 30), WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
         row.Controls.Add(new Label { Text = on ? "✓" : "✗", AutoSize = false, Width = 22, Height = 28, ForeColor = on ? Theme.Current.Success : Theme.Current.Warning, Font = new Font("Segoe UI", 10f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(2, 0, 4, 0) });
-        row.Controls.Add(new Label { Text = label, AutoSize = false, Width = 240, Height = 28, ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 0, 8, 0) });
+        // AutoSize with a minimum: short labels still align the action-button column, long ones (the
+        // stale-menu / needs-admin states) grow instead of being clipped mid-word.
+        row.Controls.Add(new Label { Text = label, AutoSize = true, MinimumSize = new Size(240, 28), ForeColor = on ? Theme.Current.Text : Theme.Current.Warning, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 0, 8, 0) });
         if (!on)
         {
             if (enable != null) row.Controls.Add(ThemeManager.MakeButton(actionLabel ?? Strings.ActionEnable, (_, _) => enable()));
@@ -358,7 +360,7 @@ internal sealed class ScanOverviewControl : UserControl
 
     void SetBanner(string title, string rationale, Color accent, string btnText, Action? action)
     {
-        _statusBanner.BackColor = Blend(accent, Theme.Current.Panel, 0.22f);
+        _statusBanner.BackColor = ThemeManager.Blend(accent, Theme.Current.Panel, 0.22f);
         _statusLabel.ForeColor = Theme.Current.Text;
         _statusLabel.Text = title + "  —  " + rationale;
         _statusAction = action;
@@ -424,7 +426,7 @@ internal sealed class ScanOverviewControl : UserControl
         if (pending > 0) msgs.Add(string.Format(Strings.AttentionOfflineQueueFormat, pending));
 
         if (msgs.Count == 0) { _attention.Visible = false; return; }
-        _attention.BackColor = Blend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
+        _attention.BackColor = ThemeManager.Blend(Theme.Current.Warning, Theme.Current.Panel, 0.30f);
         _attentionLabel.ForeColor = Theme.Current.Text;
         _attentionLabel.Text = string.Format(Strings.AttentionPrefixFormat, string.Join("   •   ", msgs));
         _attention.Visible = true;
@@ -458,8 +460,6 @@ internal sealed class ScanOverviewControl : UserControl
         Refresh2();
     }
 
-    static Color Blend(Color a, Color b, float t) => Color.FromArgb(
-        (int)(a.R * t + b.R * (1 - t)), (int)(a.G * t + b.G * (1 - t)), (int)(a.B * t + b.B * (1 - t)));
 
     static GraphicsPath Rounded(Rectangle r, int radius)
     {

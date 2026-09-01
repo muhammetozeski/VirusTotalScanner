@@ -57,9 +57,9 @@ internal sealed class VerdictHeroPanel : Panel
         // Tinted rounded background + subtle border in the verdict color.
         using (var bg = Rounded(rect, 14))
         {
-            using var fill = new SolidBrush(Blend(_accent, t.Panel, 0.16f));
+            using var fill = new SolidBrush(ThemeManager.Blend(_accent, t.Panel, 0.16f));
             g.FillPath(fill, bg);
-            using var border = new Pen(Blend(_accent, t.Panel, 0.45f));
+            using var border = new Pen(ThemeManager.Blend(_accent, t.Panel, 0.45f));
             g.DrawPath(border, bg);
         }
 
@@ -97,10 +97,6 @@ internal sealed class VerdictHeroPanel : Panel
         if (!string.IsNullOrEmpty(_takeaway)) g.DrawString("👉  " + _takeaway, kFont, textBrush, new RectangleF(tx, ty, tw, 20), ell);
     }
 
-    static Color Blend(Color a, Color b, float t) => Color.FromArgb(
-        Clamp(a.R * t + b.R * (1 - t)), Clamp(a.G * t + b.G * (1 - t)), Clamp(a.B * t + b.B * (1 - t)));
-
-    static int Clamp(double v) => v < 0 ? 0 : v > 255 ? 255 : (int)v;
 
     static GraphicsPath Rounded(Rectangle r, int radius)
     {

@@ -128,8 +128,8 @@ internal sealed class ScanHistoryControl : UserControl
     {
         int n = EscalationStore.Count;
         if (n == 0) { _escBanner.Visible = false; return; }
-        _escBanner.BackColor = Color.FromArgb(60, 30, 30);
-        _escLabel.ForeColor = Color.FromArgb(255, 140, 140);
+        _escBanner.BackColor = ThemeManager.Blend(Theme.Current.Danger, Theme.Current.Panel, 0.25f);
+        _escLabel.ForeColor = Theme.Current.Danger;
         var latest = EscalationStore.All().OrderByDescending(r => r.FlipUtc).First();
         _escLabel.Text = string.Format(Strings.HistoryEscalationBannerFormat, n, latest.Name, latest.NewRatio);
         _escBanner.Visible = true;
