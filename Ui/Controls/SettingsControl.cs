@@ -77,12 +77,13 @@ internal sealed class SettingsControl : UserControl
     {
         int w = _flow.ClientSize.Width - 28;
         if (w < 200) return;
-        foreach (Control c in _flow.Controls) c.Width = w;
+        // Pin the width, let each AutoSize card's height follow its content.
+        foreach (Control c in _flow.Controls) { c.MinimumSize = new Size(w, 0); c.MaximumSize = new Size(w, 0); }
     }
 
     Panel BuildKeysCard()
     {
-        var card = Card(Strings.CardApiKeys, 270, out var body);
+        var card = Card(Strings.CardApiKeys, out var body);
 
         _keysGrid.Dock = DockStyle.Top;
         _keysGrid.Height = 150;
@@ -106,7 +107,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildContextMenuCard()
     {
-        var card = Card(Strings.CardContextMenu, 180, out var body);
+        var card = Card(Strings.CardContextMenu, out var body);
         _menuStatus.AutoSize = true;
         _menuStatus.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
 
@@ -128,7 +129,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildAllowlistCard()
     {
-        var card = Card(Strings.CardAllowlist, 280, out var body);
+        var card = Card(Strings.CardAllowlist, out var body);
 
         _allowGrid.Dock = DockStyle.Top;
         _allowGrid.Height = 150;
@@ -183,7 +184,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildFolderSuppressionCard()
     {
-        var card = Card(Strings.CardFolderSuppression, 230, out var body);
+        var card = Card(Strings.CardFolderSuppression, out var body);
 
         _folderGrid.Dock = DockStyle.Top;
         _folderGrid.Height = 130;
@@ -225,7 +226,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildWatchFoldersCard()
     {
-        var card = Card(Strings.CardWatchFolders, 230, out var body);
+        var card = Card(Strings.CardWatchFolders, out var body);
 
         _watchGrid.Dock = DockStyle.Top;
         _watchGrid.Height = 110;
@@ -276,7 +277,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildTrustCard()
     {
-        var card = Card(Strings.CardTrust, 330, out var body);
+        var card = Card(Strings.CardTrust, out var body);
 
         var info = ThemeManager.MakeLabel(Strings.TrustInfo, subtle: true);
 
@@ -325,7 +326,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildVerdictCard()
     {
-        var card = Card(Strings.CardVerdictCats, 340, out var body);
+        var card = Card(Strings.CardVerdictCats, out var body);
 
         _catGrid = new DataGridView { Dock = DockStyle.Top, Height = 130, AutoGenerateColumns = false };
         _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColMinDetections, DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
@@ -393,7 +394,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildAutoActionCard()
     {
-        var card = Card(Strings.CardAutoAction, 300, out var body);
+        var card = Card(Strings.CardAutoAction, out var body);
 
         _aaGrid = new DataGridView { Dock = DockStyle.Top, Height = 150, AutoGenerateColumns = false };
         _aaGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = Strings.ColBackgroundOnly, DataPropertyName = nameof(AutoActionRule.BackgroundOnly), Width = 105 });
@@ -427,7 +428,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildScanCard()
     {
-        var card = Card(Strings.CardScan, 390, out var body);
+        var card = Card(Strings.CardScan, out var body);
 
         var concurrency = LabeledNumeric(Strings.ScanConcurrencyLabel, Settings.MaxConcurrentScans, 1, 16,
             v => { Settings.MaxConcurrentScans.Value = v; SettingsManager.SaveSettings(); });
@@ -471,7 +472,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildSweepCard()
     {
-        var card = Card(Strings.CardSweep, 250, out var body);
+        var card = Card(Strings.CardSweep, out var body);
 
         var status = ThemeManager.MakeLabel(SweepStatusText(), subtle: true);
         var folderBox = new TextBox { Dock = DockStyle.Top, Text = Settings.SweepFolder };
@@ -526,7 +527,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildGeneralCard()
     {
-        var card = Card(Strings.CardGeneral, 540, out var body);
+        var card = Card(Strings.CardGeneral, out var body);
 
         var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
@@ -671,7 +672,7 @@ internal sealed class SettingsControl : UserControl
     Panel BuildConfirmGatesCard()
     {
         var gates = ConfirmGateManager.All.ToList();
-        var card = Card(Strings.CardConfirmGates, 70 + gates.Count * 30, out var body);
+        var card = Card(Strings.CardConfirmGates, out var body);
         body.Controls.Add(ThemeManager.MakeLabel(Strings.ConfirmGatesHint, subtle: true));
         foreach (var gate in gates)
         {
@@ -694,7 +695,7 @@ internal sealed class SettingsControl : UserControl
 
     Panel BuildAboutCard()
     {
-        var card = Card(Strings.CardAbout, 170, out var body);
+        var card = Card(Strings.CardAbout, out var body);
         body.Controls.Add(ThemeManager.MakeLabel($"{AppConstants.AppTitle} v{AppConstants.Version}", subtle: true));
         var link = new LinkLabel { Text = Strings.AboutGetKeyLink, AutoSize = true };
         link.LinkClicked += (_, _) => OpenUrlInBrowser("https://www.virustotal.com/gui/my-apikey");
@@ -805,16 +806,19 @@ internal sealed class SettingsControl : UserControl
 
     // ---- ui helpers ----
 
-    Panel Card(string title, int height, out FlowLayoutPanel body)
+    /// <summary>A settings card that sizes to its content — fixed pixel heights clipped or padded the
+    /// cards whenever fonts, DPI or the language changed the content height.</summary>
+    Panel Card(string title, out FlowLayoutPanel body)
     {
         var card = ThemeManager.MakeCard();
-        card.Height = height;
-        card.Width = 700;
+        card.AutoSize = true;
+        card.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        card.MinimumSize = new Size(700, 0);
 
         var titleLbl = ThemeManager.MakeTitle(title);
         titleLbl.Dock = DockStyle.Top;
 
-        body = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = false, BackColor = Color.Transparent };
+        body = new FlowLayoutPanel { Dock = DockStyle.Top, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.Transparent };
         // Add controls bottom-up because Dock=Top stacks in reverse insertion order.
         card.Controls.Add(body);
         card.Controls.Add(titleLbl);
