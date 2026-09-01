@@ -59,7 +59,7 @@ internal sealed class QuarantineVaultDialog : Form
             new(Strings.MenuCopyVtUrl, e => VtUrl(e.Sha256)),
         ],
         [
-            new(Strings.BtnRestore, _ => _ = RestoreSelectedAsync()),
+            new(Strings.BtnRestore, rows => _ = RestoreSelectedAsync()),
             new(Strings.MenuOpenVt, _ => OpenVtForSelected(), enabled: t => t.Any(e => !string.IsNullOrEmpty(e.Sha256))),
             new(Strings.BtnVaultPurge, _ => PurgeSelected(), separatorBefore: true),
         ]);
