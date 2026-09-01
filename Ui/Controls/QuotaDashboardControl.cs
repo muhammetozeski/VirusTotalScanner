@@ -102,14 +102,19 @@ internal sealed class QuotaDashboardControl : UserControl
         card.Width = 320;
         card.Height = 188;
 
+        // Both lines are pinned to the card's inner width and ellipsized: a long key label or a long
+        // "disabled: <http error>" text used to run past the card edge and get cut mid-word.
+        int innerWidth = card.Width - card.Padding.Horizontal;
         var title = new Label
         {
             Text = (string.IsNullOrWhiteSpace(entry.Label) ? Strings.ColKey : entry.Label) + "  •  " + entry.Masked,
             Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
-            AutoSize = true,
+            AutoSize = false,
+            AutoEllipsis = true,
             Location = new Point(12, 10),
+            Size = new Size(innerWidth, 22),
         };
-        var status = new Label { AutoSize = true, Location = new Point(12, 34), Tag = "subtle" };
+        var status = new Label { AutoSize = false, AutoEllipsis = true, Location = new Point(12, 34), Size = new Size(innerWidth, 18), Tag = "subtle" };
 
         card.Controls.Add(title);
         card.Controls.Add(status);
