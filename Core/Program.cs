@@ -68,7 +68,7 @@ internal static class Program
     static void InstallGlobalExceptionLogging()
     {
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-            Log("UNHANDLED exception: " + (e.ExceptionObject as Exception)?.ToString() ?? e.ExceptionObject?.ToString(), LogLevel.Error);
+            Log("UNHANDLED exception: " + ((e.ExceptionObject as Exception)?.ToString() ?? e.ExceptionObject?.ToString()), LogLevel.Error);
 
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
         {
