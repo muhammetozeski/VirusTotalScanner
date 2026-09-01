@@ -34,10 +34,13 @@ internal static class AtomicFile
             else
                 File.Move(tmp, path);
         }
-        catch
+        catch (Exception ex)
         {
             // File.Replace can fail across odd filesystems / antivirus locks — fall back to a plain
-            // overwrite so we still persist (just without the atomicity guarantee this once).
+            // overwrite so we still persist (just without the atomicity guarantee this once). Logged
+            // because a torn read of this very window is the prime suspect for the key-vault
+            // decrypt failure seen in the field.
+            Log($"Atomic replace failed for {path} ({ex.Message}); falling back to a plain copy.", LogLevel.Warning);
             File.Copy(tmp, path, overwrite: true);
             try { File.Delete(tmp); } catch { }
         }
