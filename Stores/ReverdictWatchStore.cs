@@ -65,7 +65,9 @@ internal static class ReverdictWatchStore
         Changed?.Invoke();
     }
 
-    public static void Update(WatchEntry entry) { lock (Lock) { Save(); } Changed?.Invoke(); }
+    /// <summary>Persists in-place field edits made on entries obtained from <see cref="List"/> (the
+    /// snapshot copies the list, not the entry objects) and notifies listeners.</summary>
+    public static void Persist() { lock (Lock) { Save(); } Changed?.Invoke(); }
 
     static List<WatchEntry> Load()
     {
@@ -103,7 +105,7 @@ internal static class WatchService
                 e.LastDetections = now;
                 e.LastTotal = r.TotalEngines;
                 e.LastCheckedUtc = DateTime.UtcNow;
-                ReverdictWatchStore.Update(e);
+                ReverdictWatchStore.Persist();
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) { Log("Watch re-check failed for " + e.Name + ": " + ex.Message, LogLevel.Warning); }
