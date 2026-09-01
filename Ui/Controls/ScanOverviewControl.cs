@@ -70,6 +70,10 @@ internal sealed class ScanOverviewControl : UserControl
         DragDrop += OnDrop;
 
         ScanHistoryStore.Changed += OnStoreChanged;
+        // The banner honors the allowlist / folder suppression, so it must also refresh the moment
+        // the user marks a file clean or mutes a folder — not only when history rows change.
+        AllowlistStore.Changed += OnStoreChanged;
+        FolderSuppressionStore.Changed += OnStoreChanged;
         VisibleChanged += (_, _) => { if (Visible) Refresh2(); };
         Refresh2();
     }
@@ -78,7 +82,12 @@ internal sealed class ScanOverviewControl : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) ScanHistoryStore.Changed -= OnStoreChanged;
+        if (disposing)
+        {
+            ScanHistoryStore.Changed -= OnStoreChanged;
+            AllowlistStore.Changed -= OnStoreChanged;
+            FolderSuppressionStore.Changed -= OnStoreChanged;
+        }
         base.Dispose(disposing);
     }
 
@@ -359,12 +368,8 @@ internal sealed class ScanOverviewControl : UserControl
     void UpdateStatusBanner()
     {
         HistoryEntry? liveThreat = null;
-        try
-        {
-            liveThreat = ScanHistoryStore.All().FirstOrDefault(e =>
-                VerdictCategories.IsThreat(e.Detections) && !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path!));
-        }
-        catch { }
+        try { liveThreat = ScanHistoryStore.FirstLiveThreat(); }
+        catch (Exception ex) { Log("Status banner live-threat scan failed: " + ex.Message, LogLevel.Warning); }
 
         if (liveThreat != null)
         {

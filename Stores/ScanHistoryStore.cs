@@ -58,6 +58,32 @@ internal static class ScanHistoryStore
         lock (Lock) { return Entries.LastOrDefault(e => string.Equals(e.Md5, md5, StringComparison.OrdinalIgnoreCase)); }
     }
 
+    /// <summary>The overview banner's question: for each on-disk path, take its most recent scan row
+    /// (an older "threat" row never outvotes a newer clean rescan of the same path), keep the ones
+    /// still flagged, still present, and not excused by the user (allowlist / folder suppression).
+    /// Returns the first such live threat, or null when the disk is clean by latest knowledge.</summary>
+    public static HistoryEntry? FirstLiveThreat()
+    {
+        var latestPerPath = All()
+            .Where(e => !string.IsNullOrEmpty(e.Path))
+            .GroupBy(e => e.Path!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(e => e.WhenUtc).First());
+
+        foreach (var e in latestPerPath)
+        {
+            if (!VerdictCategories.IsThreat(e.Detections)) continue;
+            try
+            {
+                if (!File.Exists(e.Path!)) continue;
+                if (AllowlistStore.Contains(e.Md5, e.Sha256)) continue;
+                if (FolderSuppressionStore.Contains(e.Path)) continue;
+                return e;
+            }
+            catch (Exception ex) { Log($"Live-threat check failed for {e.Name}: {ex.Message}", LogLevel.Warning); }
+        }
+        return null;
+    }
+
     public static void Record(ScanItem item, string source)
     {
         if (item == null) return;
