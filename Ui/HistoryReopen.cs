@@ -7,7 +7,7 @@ internal static class HistoryReopen
 {
     public static void Show(HistoryEntry? e, IWin32Window? owner, Action<string[]>? rescan)
     {
-        if (e == null) return;
+        if (e == null) { UiFeedback.NeedSelection(); return; }
         var report = string.IsNullOrEmpty(e.Md5) ? null : AppServices.Cache.TryGet(e.Md5, int.MaxValue);
         if (report == null)
         {

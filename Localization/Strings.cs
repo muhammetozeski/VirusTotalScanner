@@ -422,6 +422,7 @@ internal static class Strings
     public static string SelectionFileMissing = "Seçili satırın dosyası artık diskte yok.";
     public static string SelectionNoHash = "Seçili satırın hash'i yok — önce taranması gerekir.";
     public static string NothingToCopyInfo = "Kopyalanacak bir değer yok.";
+    public static string KeyRowGone = "Bu anahtar artık kasada yok — liste yenilendi.";
 
     // ---- scan queue control: quarantine + find-copies messages ----
     public static string NeedVtResultInfo = "Önce dosyanın VT sonucu olmalı.";

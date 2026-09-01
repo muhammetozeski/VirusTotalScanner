@@ -137,7 +137,7 @@ internal sealed class EscalationDossierDialog : Form
     void QuarantineSelected()
     {
         var r = Selected();
-        if (r == null) return;
+        if (r == null) { UiFeedback.NeedSelection(Strings.DetailActionQuarantine); return; }
         if (!r.OnDisk || string.IsNullOrEmpty(r.FilePath)) { _status.Text = Strings.EscalationCannotQuarantineGone; return; }
         if (QuarantineVault.Quarantine(r.FilePath, null, r.Rec.Hash, null, out var err)) { _status.Text = string.Format(Strings.EscalationQuarantinedFormat, r.Name); Load2(); }
         else _status.Text = Strings.EscalationQuarantineFailedPrefix + err;

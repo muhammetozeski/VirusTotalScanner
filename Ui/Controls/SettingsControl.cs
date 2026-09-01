@@ -739,9 +739,9 @@ internal sealed class SettingsControl : UserControl
     void EditKey()
     {
         var id = SelectedKeyId();
-        if (id == null) return;
+        if (id == null) { UiFeedback.NeedSelection(Strings.BtnEdit); return; }
         var entry = AppServices.Vault.Keys.FirstOrDefault(k => k.Id == id);
-        if (entry == null) return;
+        if (entry == null) { UiFeedback.Refused(Strings.KeyRowGone, Strings.BtnEdit); return; }
         using var dlg = new ApiKeyDialog(entry.Label, entry.Key);
         if (dlg.ShowDialog(this) == DialogResult.OK)
             AppServices.Vault.UpdateMeta(id, dlg.KeyLabel, dlg.KeyValue);
@@ -750,7 +750,7 @@ internal sealed class SettingsControl : UserControl
     void RemoveKey()
     {
         var id = SelectedKeyId();
-        if (id == null) return;
+        if (id == null) { UiFeedback.NeedSelection(Strings.BtnRemove); return; }
         if (NativeMessageBox.Confirm(Strings.KeyDeleteConfirm)) AppServices.Vault.Remove(id);
     }
 

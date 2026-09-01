@@ -207,7 +207,7 @@ internal sealed class ScanHistoryControl : UserControl
 
     void EditNote(HistoryEntry? h)
     {
-        if (h == null) return;
+        if (h == null) { UiFeedback.NeedSelection(Strings.MenuHistoryEditNote); return; }
         string? note = Dialogs.InputBox(Strings.HistoryNotePrompt, Strings.ColHistoryNote, h.Note ?? "");
         if (note != null) { h.Note = note; ScanHistoryStore.Persist(); }
     }

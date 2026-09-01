@@ -265,9 +265,16 @@ internal static class EntityGrid
     static void CopyProp<T>(DataGridView grid, RowProp<T> prop) where T : class
     {
         var vals = Targets<T>(grid).Select(prop.Value).Where(s => !string.IsNullOrEmpty(s)).ToList();
-        if (vals.Count == 0) return;
+        if (vals.Count == 0)
+        {
+            // Every list's copy menu lands here; a bare return left the user staring at an unchanged
+            // clipboard with no idea whether the row was wrong or the app was.
+            if (Targets<T>(grid).Count == 0) UiFeedback.NeedSelection(prop.Label);
+            else UiFeedback.Refused(Strings.NothingToCopyInfo, prop.Label);
+            return;
+        }
         try { Clipboard.SetText(string.Join(Environment.NewLine, vals)); }
-        catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); UiFeedback.Refused(Strings.CopyFailedPrefix + ex.Message, prop.Label); }
     }
 
     // ---- internals ----

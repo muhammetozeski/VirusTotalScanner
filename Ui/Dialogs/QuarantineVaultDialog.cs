@@ -98,7 +98,7 @@ internal sealed class QuarantineVaultDialog : Form
     void PurgeSelected()
     {
         var entries = SelectedEntries();
-        if (entries.Count == 0) return;
+        if (entries.Count == 0) { UiFeedback.NeedSelection(Strings.BtnVaultPurge); return; }
         string prompt = entries.Count == 1
             ? string.Format(Strings.VaultPurgeOneConfirmFormat, entries[0].FileName)
             : string.Format(Strings.VaultPurgeManyConfirmFormat, entries.Count);
@@ -130,7 +130,7 @@ internal sealed class QuarantineVaultDialog : Form
     async Task RestoreSelectedAsync()
     {
         var entries = SelectedEntries();
-        if (entries.Count == 0) return;
+        if (entries.Count == 0) { UiFeedback.NeedSelection(Strings.BtnRestore); return; }
 
         if (entries.Count == 1)
         {
