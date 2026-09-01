@@ -26,6 +26,9 @@ internal sealed class ScanDetailControl : UserControl
     readonly CheckBox _majorOnly = new() { Text = Strings.DetailMajorOnlyCheck, AutoSize = true, Margin = new Padding(10, 4, 0, 0) };
     readonly DataGridView _engines = new EntityGridView();
     readonly Label _empty = new();
+    // Hidden outright while nothing is selected: an overlay label cannot be relied on to cover it,
+    // because ThemeManager turns every label's background transparent.
+    readonly Panel _scroll = new() { Dock = DockStyle.Fill, AutoScroll = true };
 
     ScanItem? _item;
 
@@ -158,19 +161,17 @@ internal sealed class ScanDetailControl : UserControl
 
         // One scroll container for the entire detail: when the content is taller than the pane, the user
         // scrolls down to the engine table instead of it being crushed to a sliver at the bottom.
-        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        scroll.Controls.Add(root);
-        scroll.Resize += (_, _) =>
+        _scroll.Controls.Add(root);
+        _scroll.Resize += (_, _) =>
         {
-            int w = scroll.ClientSize.Width;
+            int w = _scroll.ClientSize.Width;
             if (w <= 0) return;
             // Keep the wrapping meta label inside the pane width so no horizontal scrollbar appears.
             _meta.MaximumSize = new Size(Math.Max(120, w - 6), 0);
         };
 
-        Controls.Add(scroll);
+        Controls.Add(_scroll);
         Controls.Add(_empty);
-        _empty.BringToFront();
         Show(null); // start in the empty state
     }
 
@@ -294,16 +295,16 @@ internal sealed class ScanDetailControl : UserControl
         bool hasReport = report != null;
         _behaviourPanel.Visible = false; // collapse last item's digest; the behaviour button re-opens it
 
-        _empty.BackColor = Theme.Current.Background; // opaque so it covers the detail rows
         if (!hasReport && !trustedSkip)
         {
+            _scroll.Visible = false;
             _empty.Visible = true;
-            _empty.BringToFront();
             _actionStrip.Visible = false;
             _engines.DataSource = null;
             return;
         }
         _empty.Visible = false;
+        _scroll.Visible = true;
 
         if (trustedSkip)
         {
