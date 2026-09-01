@@ -131,7 +131,7 @@ internal sealed class EscalationDossierDialog : Form
             : string.Format(Strings.EscalationSummaryFormat, _rows.Count, live);
     }
 
-    DossierRow? Selected() => _grid.CurrentRow?.DataBoundItem as DossierRow;
+    DossierRow? Selected() => EntityGrid.CurrentItem<DossierRow>(_grid);
 
     void QuarantineSelected()
     {

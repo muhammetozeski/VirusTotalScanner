@@ -148,11 +148,11 @@ internal sealed class SettingsControl : UserControl
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRemoveFromList, (_, _) =>
         {
-            if (_allowGrid.CurrentRow?.DataBoundItem is AllowlistEntry e) AllowlistStore.Remove(e.Hash);
+            if (EntityGrid.CurrentItem<AllowlistEntry>(_allowGrid) is { } e) AllowlistStore.Remove(e.Hash);
         }));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnReviewMarkClean, (_, _) =>
         {
-            if (_allowGrid.CurrentRow?.DataBoundItem is AllowlistEntry e) AllowlistStore.MarkReviewed(e.Hash);
+            if (EntityGrid.CurrentItem<AllowlistEntry>(_allowGrid) is { } e) AllowlistStore.MarkReviewed(e.Hash);
         }));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnHealthCheck, async (_, _) =>
         {
@@ -201,7 +201,7 @@ internal sealed class SettingsControl : UserControl
         }, accent: true));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRemoveFromList, (_, _) =>
         {
-            if (_folderGrid.CurrentRow?.DataBoundItem is FolderRule r) FolderSuppressionStore.Remove(r.Folder);
+            if (EntityGrid.CurrentItem<FolderRule>(_folderGrid) is { } r) FolderSuppressionStore.Remove(r.Folder);
         }));
         var hint = ThemeManager.MakeLabel(Strings.FolderSuppressionHint, subtle: true);
 
@@ -296,11 +296,11 @@ internal sealed class SettingsControl : UserControl
         }, accent: true));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnPickColor, (_, _) =>
         {
-            if (_catGrid.CurrentRow?.DataBoundItem is not VerdictCategory c) return;
+            if (EntityGrid.CurrentItem<VerdictCategory>(_catGrid) is not { } c) return;
             using var dlg = new ColorDialog { Color = c.Color, FullOpen = true };
             if (dlg.ShowDialog() == DialogResult.OK) { c.ColorHex = "#" + dlg.Color.R.ToString("X2") + dlg.Color.G.ToString("X2") + dlg.Color.B.ToString("X2"); _catGrid.Invalidate(); }
         }));
-        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (_catGrid.CurrentRow?.DataBoundItem is VerdictCategory c) _catRows!.Remove(c); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (EntityGrid.CurrentItem<VerdictCategory>(_catGrid) is { } c) _catRows!.Remove(c); }));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSave, (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info(Strings.CatsSaved); }));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDefault, (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
 
@@ -351,7 +351,7 @@ internal sealed class SettingsControl : UserControl
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAddShort, (_, _) => _aaRows!.Add(new AutoActionRule()), accent: true));
-        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (_aaGrid.CurrentRow?.DataBoundItem is AutoActionRule r) _aaRows!.Remove(r); }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => { if (EntityGrid.CurrentItem<AutoActionRule>(_aaGrid) is { } r) _aaRows!.Remove(r); }));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSave, (_, _) => { AutoActionStore.Replace(_aaRows!); NativeMessageBox.Info(Strings.AutoActionSaved); }));
 
         body.Controls.Add(buttons);
@@ -694,7 +694,7 @@ internal sealed class SettingsControl : UserControl
         if (NativeMessageBox.Confirm(Strings.KeyDeleteConfirm)) AppServices.Vault.Remove(id);
     }
 
-    string? SelectedKeyId() => (_keysGrid.CurrentRow?.DataBoundItem as KeyRow)?.Id;
+    string? SelectedKeyId() => EntityGrid.CurrentItem<KeyRow>(_keysGrid)?.Id;
 
     void RefreshKeys()
     {

@@ -1293,7 +1293,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         int n = _grid.Rows.Count;
         if (n == 0) return;
-        int cur = _grid.CurrentRow?.Index ?? (forward ? -1 : 0);
+        int cur = EntityGrid.CurrentIndex(_grid) ?? (forward ? -1 : 0);
         for (int step = 1; step <= n; step++)
         {
             int idx = (((forward ? cur + step : cur - step) % n) + n) % n;
@@ -1323,7 +1323,7 @@ internal sealed class ScanQueueControl : UserControl
         _detail.Show(item);
     }
 
-    ScanItem? SelectedItem() => _grid.CurrentRow?.DataBoundItem as ScanItem;
+    ScanItem? SelectedItem() => EntityGrid.CurrentItem<ScanItem>(_grid);
 
     /// <summary>Ctrl+Shift+C: copy the selected file's verdict card to the clipboard as an IMAGE (reusing the
     /// proven ShareCard renderer), so a colored badge can be pasted straight into Teams/WhatsApp/mail without

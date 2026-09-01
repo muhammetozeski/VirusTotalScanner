@@ -149,6 +149,23 @@ internal static class EntityGrid
 
     // ---- selection / mark accessors ----
 
+    /// <summary>The current row's bound item. The CurrencyManager keeps a stale position while the
+    /// bound view shrinks (filter chip click, list rebuild), and then the CurrentRow getter itself
+    /// throws IndexOutOfRangeException ("Index N does not have a value") — treat that as "no
+    /// selection" instead of crashing the UI thread.</summary>
+    public static T? CurrentItem<T>(DataGridView grid) where T : class
+    {
+        try { return grid.CurrentRow?.DataBoundItem as T; }
+        catch (IndexOutOfRangeException) { return null; }
+    }
+
+    /// <summary>grid.CurrentRow?.Index with the same stale-position guard as <see cref="CurrentItem{T}"/>.</summary>
+    public static int? CurrentIndex(DataGridView grid)
+    {
+        try { return grid.CurrentRow?.Index; }
+        catch (IndexOutOfRangeException) { return null; }
+    }
+
     /// <summary>Rows whose mark checkbox is ticked.</summary>
     public static List<T> Marked<T>(DataGridView grid) where T : class
     {
@@ -172,7 +189,7 @@ internal static class EntityGrid
         if (marked.Count > 0) return marked;
         var sel = Selected<T>(grid);
         if (sel.Count > 0) return sel;
-        return grid.CurrentRow?.DataBoundItem is T one ? [one] : [];
+        return CurrentItem<T>(grid) is { } one ? [one] : [];
     }
 
     /// <summary>Set the mark on every highlighted row.</summary>

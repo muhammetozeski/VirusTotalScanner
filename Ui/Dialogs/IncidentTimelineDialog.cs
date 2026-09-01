@@ -165,7 +165,7 @@ internal sealed class IncidentTimelineDialog : Form
 
     void ShowSelectedDay()
     {
-        _files.DataSource = (_days.CurrentRow?.DataBoundItem as TimelineDay)?.Files;
+        _files.DataSource = EntityGrid.CurrentItem<TimelineDay>(_days)?.Files;
     }
 
     static void RevealFiles(IReadOnlyList<TimelineFile> files)

@@ -79,7 +79,7 @@ internal sealed class RecurrenceDialog : Form
         ThemeManager.StyleButton(close);
     }
 
-    RecurrenceService.Recurrence? Selected() => _grid.CurrentRow?.DataBoundItem as RecurrenceService.Recurrence;
+    RecurrenceService.Recurrence? Selected() => EntityGrid.CurrentItem<RecurrenceService.Recurrence>(_grid);
 
     void RescanSelected()
     {

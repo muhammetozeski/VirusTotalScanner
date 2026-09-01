@@ -196,7 +196,7 @@ internal sealed class ScanHistoryControl : UserControl
         ]);
     }
 
-    HistoryEntry? Selected() => _grid.CurrentRow?.DataBoundItem as HistoryEntry;
+    HistoryEntry? Selected() => EntityGrid.CurrentItem<HistoryEntry>(_grid);
 
     void RescanRows(IReadOnlyList<HistoryEntry> rows)
     {

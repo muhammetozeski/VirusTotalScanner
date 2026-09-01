@@ -32,7 +32,7 @@ internal sealed class HistoryReverdictDialog : Form
         });
         var reveal = ThemeManager.MakeButton(Strings.BtnEscalationReveal, (_, _) =>
         {
-            if (_grid.CurrentRow?.DataBoundItem is ReverdictEscalation e && !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path))
+            if (EntityGrid.CurrentItem<ReverdictEscalation>(_grid) is { } e && !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path))
                 try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + e.Path + "\""); } catch { }
         });
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };

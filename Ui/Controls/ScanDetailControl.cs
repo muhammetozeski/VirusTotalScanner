@@ -233,7 +233,7 @@ internal sealed class ScanDetailControl : UserControl
         _engines.Height = Math.Max(0, h);
     }
 
-    VtEngineResult? SelectedEngine() => _engines.CurrentRow?.DataBoundItem as VtEngineResult;
+    VtEngineResult? SelectedEngine() => EntityGrid.CurrentItem<VtEngineResult>(_engines);
 
     void SearchEngineResult()
     {

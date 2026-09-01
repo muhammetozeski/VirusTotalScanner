@@ -77,7 +77,7 @@ internal sealed class ThreatHotspotDialog : Form
         ThemeManager.StyleButton(close);
     }
 
-    ThreatHotspotService.Hotspot? Selected() => _grid.CurrentRow?.DataBoundItem as ThreatHotspotService.Hotspot;
+    ThreatHotspotService.Hotspot? Selected() => EntityGrid.CurrentItem<ThreatHotspotService.Hotspot>(_grid);
 
     void Reveal() => RevealDir(Selected()?.Directory);
 

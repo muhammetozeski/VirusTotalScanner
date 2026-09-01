@@ -64,7 +64,7 @@ internal sealed class PersistenceHooksDialog : Form
 
     void RemoveSelected()
     {
-        if (_grid.CurrentRow?.DataBoundItem is not PersistenceHunter.Hook h) return;
+        if (EntityGrid.CurrentItem<PersistenceHunter.Hook>(_grid) is not { } h) return;
         if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.PersistHookRemoveConfirmFormat, h.Location, h.Name))) return;
         if (PersistenceHunter.Remove(h, out var err))
         {
