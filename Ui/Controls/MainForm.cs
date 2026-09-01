@@ -226,6 +226,7 @@ internal sealed partial class MainForm : Form
         AddTab(Strings.TabLogs, _logs);
         AddTab(Strings.TabHistory, _history);
         AddTab(Strings.TabSettings, _settings);
+        _tabs.SelectedIndex = 1; // land on Tarama: the tab the user actually came to use
     }
 
     void AddTab(string text, Control content)
