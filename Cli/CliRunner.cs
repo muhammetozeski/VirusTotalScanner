@@ -336,13 +336,11 @@ internal static class CliRunner
 
         var r = item.Report;
         string verdict = r?.Verdict ?? (item.Status == ScanStatus.Failed ? Strings.CliVerdictError : "?");
-        var color = verdict switch
-        {
-            "ZARARLI" => ConsoleColor.Red,
-            "ŞÜPHELİ" => ConsoleColor.Yellow,
-            "TEMİZ" => ConsoleColor.Green,
-            _ => ConsoleColor.Gray,
-        };
+        // Color by the verdict CATEGORY logic, not by matching the (user-renamable, localizable) name.
+        var color = r == null || r.TotalEngines == 0 ? ConsoleColor.Gray
+            : r.IsMalicious ? ConsoleColor.Red
+            : r.DetectionCount > 0 ? ConsoleColor.Yellow
+            : ConsoleColor.Green;
         try { Console.ForegroundColor = color; } catch { }
         string ratio = r != null ? $" ({r.DetectionCount}/{r.TotalEngines})" : "";
         Console.WriteLine($"[{verdict}]{ratio}  {item.FileName}");
