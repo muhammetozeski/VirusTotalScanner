@@ -54,7 +54,7 @@ internal static class SnapshotRunner
 
             string dir = Path.GetDirectoryName(path) ?? ".";
             string baseName = Path.GetFileNameWithoutExtension(path);
-            for (int tab = 0; tab < 4; tab++)
+            for (int tab = 0; tab < 6; tab++) // all six tabs: overview, scan, quota, logs, history, settings
             {
                 form.SelectTab(tab);
                 for (int i = 0; i < 4; i++) { Application.DoEvents(); Thread.Sleep(80); }
