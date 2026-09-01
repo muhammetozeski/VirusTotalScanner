@@ -40,10 +40,11 @@ internal static class GuiScrapeService
         get { try { return !string.IsNullOrEmpty(CoreWebView2Environment.GetAvailableBrowserVersionString()); } catch { return false; } }
     }
 
-    /// <summary>Looks up a hash (sha256 preferred) via the GUI. Returns null if not found / cancelled / timed out.</summary>
-    public static async Task<VtFileReport?> LookupAsync(string hash, CancellationToken ct = default)
+    /// <summary>The one navigate-and-capture round trip all three fetches share: opens the GUI page,
+    /// waits for the page's own /ui/files/&lt;hash&gt;&lt;suffix&gt; response (captcha flow included)
+    /// and returns the captured JSON, or null on miss / timeout / cancel. Serialized by the gate.</summary>
+    static async Task<string?> FetchJsonAsync(string hash, string suffix, string pageUrl, string logLabel, CancellationToken ct)
     {
-        hash = hash.Trim().ToLowerInvariant();
         await _gate.WaitAsync(ct);
         try
         {
@@ -51,11 +52,12 @@ internal static class GuiScrapeService
 
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _targetHash = hash;
-            _currentUrl = AppConstants.VtGuiFile + hash;
+            _targetSuffix = suffix;
+            _currentUrl = pageUrl;
             _pending = tcs;
             _captchaShown = false;
 
-            Log("Keyless GUI lookup: " + hash, LogLevel.Info);
+            Log(logLabel + ": " + hash, LogLevel.Info);
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             _timeoutCts = timeout;
@@ -64,7 +66,7 @@ internal static class GuiScrapeService
             _form!.BeginInvoke(() =>
             {
                 try { _web!.CoreWebView2.Navigate(_currentUrl); }
-                catch (Exception ex) { tcs.TrySetResult(null); Log("GUI navigate failed: " + ex.Message, LogLevel.Warning); }
+                catch (Exception ex) { tcs.TrySetResult(null); Log(logLabel + " navigate failed: " + ex.Message, LogLevel.Warning); }
             });
 
             string? json;
@@ -74,8 +76,19 @@ internal static class GuiScrapeService
             _pending = null;
             _timeoutCts = null;
             HideBrowser();
+            return string.IsNullOrEmpty(json) ? null : json;
+        }
+        finally { _targetSuffix = ""; _gate.Release(); }
+    }
 
-            if (string.IsNullOrEmpty(json)) return null;
+    /// <summary>Looks up a hash (sha256 preferred) via the GUI. Returns null if not found / cancelled / timed out.</summary>
+    public static async Task<VtFileReport?> LookupAsync(string hash, CancellationToken ct = default)
+    {
+        hash = hash.Trim().ToLowerInvariant();
+        try
+        {
+            string? json = await FetchJsonAsync(hash, "", AppConstants.VtGuiFile + hash, "Keyless GUI lookup", ct);
+            if (json == null) return null;
 
             var dto = JsonSerializer.Deserialize<VtResponse<VtFileData>>(json, JsonOpts);
             var report = VtApiClient.MapReport(dto?.Data?.Attributes);
@@ -83,7 +96,6 @@ internal static class GuiScrapeService
             return report;
         }
         catch (Exception ex) { Log("Keyless GUI lookup failed: " + ex.Message, LogLevel.Warning); return null; }
-        finally { _gate.Release(); }
     }
 
     /// <summary>Fetches the community comments for a hash via the GUI (keyless). Empty on miss.</summary>
@@ -91,39 +103,10 @@ internal static class GuiScrapeService
     {
         hash = hash.Trim().ToLowerInvariant();
         var result = new List<VtComment>();
-        await _gate.WaitAsync(ct);
         try
         {
-            if (!await EnsureReadyAsync()) return result;
-
-            var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _targetHash = hash;
-            _targetSuffix = "/comments";
-            _currentUrl = AppConstants.VtGuiFile + hash + "/community";
-            _pending = tcs;
-            _captchaShown = false;
-
-            Log("Keyless GUI comments: " + hash, LogLevel.Info);
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            _timeoutCts = timeout;
-            timeout.CancelAfter(TimeSpan.FromSeconds(45));
-
-            _form!.BeginInvoke(() =>
-            {
-                try { _web!.CoreWebView2.Navigate(_currentUrl); }
-                catch (Exception ex) { tcs.TrySetResult(null); Log("GUI navigate (comments) failed: " + ex.Message, LogLevel.Warning); }
-            });
-
-            string? json;
-            using (timeout.Token.Register(() => tcs.TrySetResult(null)))
-                json = await tcs.Task;
-
-            _pending = null;
-            _timeoutCts = null;
-            HideBrowser();
-
-            if (string.IsNullOrEmpty(json)) return result;
+            string? json = await FetchJsonAsync(hash, "/comments", AppConstants.VtGuiFile + hash + "/community", "Keyless GUI comments", ct);
+            if (json == null) return result;
 
             var dto = JsonSerializer.Deserialize<VtResponse<List<VtCommentData>>>(json, JsonOpts);
             foreach (var c in dto?.Data ?? [])
@@ -140,7 +123,6 @@ internal static class GuiScrapeService
             return result;
         }
         catch (Exception ex) { Log("Keyless GUI comments failed: " + ex.Message, LogLevel.Warning); return result; }
-        finally { _targetSuffix = ""; _gate.Release(); }
     }
 
     /// <summary>Fetches the aggregated sandbox behaviour summary for a hash via the GUI (keyless).</summary>
@@ -148,39 +130,11 @@ internal static class GuiScrapeService
     {
         hash = hash.Trim().ToLowerInvariant();
         var b = new VtBehaviour();
-        await _gate.WaitAsync(ct);
         try
         {
-            if (!await EnsureReadyAsync()) return b;
-
-            var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _targetHash = hash;
-            _targetSuffix = "/behaviours"; // the per-sandbox reports list (the GUI does not call behaviour_summary)
-            _currentUrl = AppConstants.VtGuiFile + hash + "/behavior";
-            _pending = tcs;
-            _captchaShown = false;
-
-            Log("Keyless GUI behaviour: " + hash, LogLevel.Info);
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            _timeoutCts = timeout;
-            timeout.CancelAfter(TimeSpan.FromSeconds(45));
-
-            _form!.BeginInvoke(() =>
-            {
-                try { _web!.CoreWebView2.Navigate(_currentUrl); }
-                catch (Exception ex) { tcs.TrySetResult(null); Log("GUI navigate (behaviour) failed: " + ex.Message, LogLevel.Warning); }
-            });
-
-            string? json;
-            using (timeout.Token.Register(() => tcs.TrySetResult(null)))
-                json = await tcs.Task;
-
-            _pending = null;
-            _timeoutCts = null;
-            HideBrowser();
-
-            if (string.IsNullOrEmpty(json)) return b;
+            // "/behaviours" is the per-sandbox reports list (the GUI does not call behaviour_summary).
+            string? json = await FetchJsonAsync(hash, "/behaviours", AppConstants.VtGuiFile + hash + "/behavior", "Keyless GUI behaviour", ct);
+            if (json == null) return b;
 
             // /behaviours returns a list of per-sandbox reports; merge them all and dedup.
             var reports = JsonSerializer.Deserialize<VtResponse<List<VtBehaviourReportData>>>(json, JsonOpts)?.Data;
@@ -203,7 +157,6 @@ internal static class GuiScrapeService
             return b;
         }
         catch (Exception ex) { Log("Keyless GUI behaviour failed: " + ex.Message, LogLevel.Warning); return b; }
-        finally { _targetSuffix = ""; _gate.Release(); }
     }
 
     public static void Shutdown()
