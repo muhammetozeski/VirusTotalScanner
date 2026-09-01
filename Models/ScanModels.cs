@@ -17,6 +17,20 @@ internal enum ScanStatus
     Cancelled,
 }
 
+/// <summary>Why a lookup ended with no report. "VirusTotal has never seen this file and there is no key
+/// to upload it with" and "it was uploaded and the analysis was still running when we stopped waiting"
+/// are opposite situations for the user, so the row must not describe them with one sentence.</summary>
+internal enum LookupFailure
+{
+    None,
+    /// <summary>Not in VirusTotal, and no usable API key, so it could not be submitted.</summary>
+    UnknownNoKey,
+    /// <summary>Uploaded successfully, but the analysis had not finished when the poll window ran out.</summary>
+    AnalysisTimedOut,
+    /// <summary>Every channel that was tried came back empty.</summary>
+    LookupEmpty,
+}
+
 /// <summary>One file in the scan queue. Bindable to a DataGridView via BindingList.</summary>
 internal sealed class ScanItem : INotifyPropertyChanged
 {

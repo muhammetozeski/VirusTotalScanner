@@ -268,6 +268,7 @@ internal sealed class ScanScheduler
             var dedupGate = _md5Gates!.GetOrAdd(md5, _ => new SemaphoreSlim(1, 1));
             await dedupGate.WaitAsync(ct);
             VtFileReport? report;
+            var failure = LookupFailure.None;
             try
             {
                 var dup = (opts.UseCache && !opts.BypassTrust) ? _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays) : null;
@@ -276,7 +277,7 @@ internal sealed class ScanScheduler
                 {
                     // Only the actual VT network call is gated to MaxConcurrency; everything above ran wide.
                     await _lookupGate!.WaitAsync(ct);
-                    try { report = await DoLookupAsync(item, md5, sha256, opts, ct); }
+                    try { (report, failure) = await DoLookupAsync(item, md5, sha256, opts, ct); }
                     finally { _lookupGate.Release(); }
                 }
             }
@@ -284,9 +285,16 @@ internal sealed class ScanScheduler
 
             if (report == null)
             {
-                item.Error = Strings.ItemErrorNoReport;
+                string reason = failure switch
+                {
+                    LookupFailure.UnknownNoKey => Strings.ItemErrorUnknownNoKey,
+                    LookupFailure.AnalysisTimedOut => string.Format(Strings.ItemErrorAnalysisTimedOutFormat, PollWindowMinutes),
+                    _ => Strings.ItemErrorNoReport,
+                };
+                UiPost(() => item.Error = reason);
                 SetStatus(item, ScanStatus.Failed);
                 Bump(ref _failed);
+                Log($"No report for {item.FileName} ({failure}): {reason}", LogLevel.Warning);
                 // Offline self-heal: if we're offline, remember the file to retry when connectivity returns
                 // (a real "not found" while online is NOT queued, so 404s don't pile up).
                 if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
@@ -319,17 +327,21 @@ internal sealed class ScanScheduler
     }
 
     /// <summary>The resilient lookup chain for one file (GUI first, then API + upload, GUI last
-    /// resort), caching the result. Held under a per-md5 gate so duplicates in a run share it.</summary>
-    async Task<VtFileReport?> DoLookupAsync(ScanItem item, string md5, string sha256, ScanOptions opts, CancellationToken ct)
+    /// resort), caching the result. Held under a per-md5 gate so duplicates in a run share it.
+    /// Returns the report, or null plus the reason there is none.</summary>
+    async Task<(VtFileReport? Report, LookupFailure Failure)> DoLookupAsync(ScanItem item, string md5, string sha256, ScanOptions opts, CancellationToken ct)
     {
         await _pause.WaitWhilePausedAsync(ct);
         SetStatus(item, ScanStatus.LookingUp);
 
         bool preferGui = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         VtFileReport? report = null;
+        var failure = LookupFailure.LookupEmpty;
 
         if (preferGui)
             report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
+
+        if (report == null && !_rotator.HasUsableKeys) failure = LookupFailure.UnknownNoKey;
 
         if (report == null && _rotator.HasUsableKeys)
         {
@@ -349,6 +361,7 @@ internal sealed class ScanScheduler
                 finally { _uploadGate.Release(); }
                 SetStatus(item, ScanStatus.Polling);
                 report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
+                if (report == null) failure = LookupFailure.AnalysisTimedOut;
             }
         }
 
@@ -359,23 +372,30 @@ internal sealed class ScanScheduler
         if (report != null && opts.UseCache && report.TotalEngines > 0)
             _cache.Put(md5, report, item.FilePath);
 
-        return report;
+        return (report, report != null ? LookupFailure.None : failure);
     }
 
+    const int PollIntervalSeconds = 15;
+    const int MaxPolls = 60;
+    public const int PollWindowMinutes = PollIntervalSeconds * MaxPolls / 60;
+
+    /// <summary>Waits for a submitted analysis to finish, then fetches the finished report. Returns null
+    /// when the analysis is still running after the whole poll window, which the caller reports as its own
+    /// outcome — the file did reach VirusTotal, so it must not be described as "not found".</summary>
     async Task<VtFileReport?> PollUntilCompleteAsync(string analysisId, string sha256, ScanItem item, CancellationToken ct)
     {
-        const int maxPolls = 60; // ~ up to 15 min at 15s
-        for (int i = 0; i < maxPolls; i++)
+        for (int i = 0; i < MaxPolls; i++)
         {
             ct.ThrowIfCancellationRequested();
             await _pause.WaitWhilePausedAsync(ct);
-            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            await Task.Delay(TimeSpan.FromSeconds(PollIntervalSeconds), ct);
 
             var info = await CallWithRotation(key => _api.GetAnalysisAsync(analysisId, key, ct), ct);
             UiPost(() => item.Detail = string.Format(Strings.PollProgressDetailFormat, info.Status, i + 1));
             if (info.IsCompleted)
                 return await CallWithRotation(key => _api.GetFileReportAsync(sha256, key, ct), ct);
         }
+        Log($"Analysis {analysisId} for {item.FileName} still unfinished after {PollWindowMinutes} min; giving up.", LogLevel.Warning);
         return null;
     }
 

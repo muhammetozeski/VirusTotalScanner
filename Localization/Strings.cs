@@ -416,6 +416,13 @@ internal static class Strings
     public static string VerifyHashMismatchFormat = "✗ EŞLEŞMEDİ ({0})\n\nBeklenen: {1}\nGerçek:   {2}\n\nDosya değiştirilmiş veya yanlış hash.";
     public static string VerifyHashErrorPrefix = "Doğrulama hatası: ";
 
+    // ---- UiFeedback: why an action did nothing ----
+    public static string FeedbackSource = "Eylem";
+    public static string NeedSelectionInfo = "Önce listeden bir satır seç.";
+    public static string SelectionFileMissing = "Seçili satırın dosyası artık diskte yok.";
+    public static string SelectionNoHash = "Seçili satırın hash'i yok — önce taranması gerekir.";
+    public static string NothingToCopyInfo = "Kopyalanacak bir değer yok.";
+
     // ---- scan queue control: quarantine + find-copies messages ----
     public static string NeedVtResultInfo = "Önce dosyanın VT sonucu olmalı.";
     public static string QuarantineConfirmFormat = "'{0}' karantinaya alınsın mı? (uzantısı .VIRUS yapılır, çalıştırılamaz; sonradan geri yüklenebilir)";
@@ -1258,7 +1265,9 @@ internal static class Strings
     public static string SkipReasonTooLargeFormat = "çok büyük (>{0} MB)";
     public static string SkipReasonKnownGoodList = "Bilinen temiz (yerel liste)";
     public static string SkipReasonDevFolder = "Geliştirme klasörü (kullanıcı onayı)";
-    public static string ItemErrorNoReport = "VT'de bulunamadı veya sorgu sonuç vermedi (yükleme için API anahtarı gerekir).";
+    public static string ItemErrorNoReport = "Sorgu sonuç vermedi — hiçbir kanal bu dosya için yanıt döndürmedi.";
+    public static string ItemErrorUnknownNoKey = "VirusTotal'de kayıtlı değil ve yüklemek için kullanılabilir API anahtarı yok.";
+    public static string ItemErrorAnalysisTimedOutFormat = "Dosya VirusTotal'e yüklendi ama analiz {0} dakikada bitmedi. Biraz sonra 'Hatalıları yeniden tara' ile sonucu alabilirsin.";
     public static string UploadProgressDetailFormat = "Yükleniyor… {0:F0}%  {1}/{2}  ({3}/s)";
     public static string PollProgressDetailFormat = "Analiz bekleniyor… (durum: {0}, {1}. yoklama)";
 

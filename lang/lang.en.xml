@@ -582,6 +582,13 @@
   <s name="ClipboardEmptyInfo">The clipboard is empty or contains no text.</s>
   <s name="ClipboardNotPathInfoFormat">The clipboard text is not a file path, folder, or hash:\n{0}</s>
   <s name="NoFailedRowsInfo">No failed rows to rescan.</s>
+  <s name="ItemErrorUnknownNoKey">Not on VirusTotal, and there is no usable API key to upload it with.</s>
+  <s name="ItemErrorAnalysisTimedOutFormat">Uploaded to VirusTotal, but the analysis did not finish within {0} minutes. Try "Rescan failed" again shortly to pick up the result.</s>
+  <s name="FeedbackSource">Action</s>
+  <s name="NeedSelectionInfo">Select a row from the list first.</s>
+  <s name="SelectionFileMissing">The selected row's file is no longer on disk.</s>
+  <s name="SelectionNoHash">The selected row has no hash yet — it needs to be scanned first.</s>
+  <s name="NothingToCopyInfo">There is no value to copy.</s>
   <s name="PersistenceCleanupConfirmFormat">{0} has been quarantined, but {1} autostart hook(s) still point to it (Windows will try to run it every boot). Clean them up now?</s>
   <s name="QuarantineKillConfirmFormat">This file is running right now: {0}.\nClose it first to quarantine?</s>
   <s name="QuarantineLockedRebootFormat">{0} is still locked; it has been marked for deletion on the next reboot. Please restart.</s>

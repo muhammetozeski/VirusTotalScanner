@@ -568,23 +568,29 @@ internal sealed class ScanQueueControl : UserControl
         copyMenu.DropDownItems.Add(Strings.MenuCopyMd5, null, (_, _) => CopySafe(SelectedItem()?.Md5));
         copyMenu.DropDownItems.Add(Strings.MenuCopyFilePath, null, (_, _) => CopySafe(SelectedItem()?.FilePath));
         copyMenu.DropDownItems.Add(Strings.MenuCopyFileName, null, (_, _) => CopySafe(SelectedItem()?.FileName));
-        copyMenu.DropDownItems.Add(Strings.MenuCopyVerdictLine, null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(VerdictLine(i)); });
+        copyMenu.DropDownItems.Add(Strings.MenuCopyVerdictLine, null, (_, _) => CopySafe(SelectedItem() is { } i ? VerdictLine(i) : null));
         menu.Items.Add(copyMenu);
 
         var shareMenu = new ToolStripMenuItem(Strings.MenuShare);
         shareMenu.DropDownItems.Add(Strings.MenuShareCardImage, null, (_, _) =>
         {
             var i = SelectedItem();
-            if (i == null) return;
+            if (i == null) { UiFeedback.NeedSelection(Strings.MenuShareCardImage); return; }
             try { using var bmp = ShareCard.Render(i); Clipboard.SetImage(bmp); _summary.Text = Strings.ShareCardCopiedInfo; }
             catch (Exception ex) { NativeMessageBox.Error(Strings.CopyFailedPrefix + ex.Message); }
         });
-        shareMenu.DropDownItems.Add(Strings.MenuShareSummaryText, null, (_, _) => { var i = SelectedItem(); if (i != null) CopySafe(ShareCard.Text(i)); });
-        shareMenu.DropDownItems.Add(Strings.MenuShareMarkdown, null, (_, _) => { var i = SelectedItem(); if (i != null) { CopySafe(ShareCard.Markdown(i)); _summary.Text = Strings.ShareMarkdownCopiedInfo; } });
+        shareMenu.DropDownItems.Add(Strings.MenuShareSummaryText, null, (_, _) => CopySafe(SelectedItem() is { } i ? ShareCard.Text(i) : null));
+        shareMenu.DropDownItems.Add(Strings.MenuShareMarkdown, null, (_, _) => { if (SelectedItem() is { } i) { CopySafe(ShareCard.Markdown(i)); _summary.Text = Strings.ShareMarkdownCopiedInfo; } else UiFeedback.NeedSelection(Strings.MenuShareMarkdown); });
         shareMenu.DropDownItems.Add(Strings.MenuShareSaveCard, null, (_, _) => SaveShareCard());
         menu.Items.Add(shareMenu);
 
-        var miReveal = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRevealFile, null, (_, _) => { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); });
+        var miReveal = (ToolStripMenuItem)menu.Items.Add(Strings.MenuRevealFile, null, (_, _) =>
+        {
+            var i = SelectedItem();
+            if (i == null) UiFeedback.NeedSelection(Strings.MenuRevealFile);
+            else if (!File.Exists(i.FilePath)) UiFeedback.Refused(Strings.SelectionFileMissing, Strings.MenuRevealFile);
+            else RevealInExplorer(i.FilePath);
+        });
         var miNeighbors = (ToolStripMenuItem)menu.Items.Add(Strings.MenuNeighbors, null, (_, _) => ShowNeighbors());
         var miFindCopies = (ToolStripMenuItem)menu.Items.Add(Strings.MenuFindCopies, null, (_, _) => _ = FindCopiesAsync());
         var miPin = (ToolStripMenuItem)menu.Items.Add(Strings.MenuPinBaseline, null, (_, _) => _ = PinBaselineAsync());
@@ -592,7 +598,8 @@ internal sealed class ScanQueueControl : UserControl
         var miWatch = (ToolStripMenuItem)menu.Items.Add(Strings.MenuWatchAdd, null, (_, _) =>
         {
             var i = SelectedItem();
-            if (i?.Sha256 == null) return;
+            if (i == null) { UiFeedback.NeedSelection(Strings.MenuWatchAdd); return; }
+            if (i.Sha256 == null) { UiFeedback.Refused(Strings.SelectionNoHash, Strings.MenuWatchAdd); return; }
             if (ReverdictWatchStore.Contains(i.Sha256)) ReverdictWatchStore.Remove(i.Sha256);
             else ReverdictWatchStore.Add(i);
         });
@@ -824,13 +831,15 @@ internal sealed class ScanQueueControl : UserControl
     void RescanSelected()
     {
         var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
-        if (paths.Length > 0) StartScan(paths, recurse: false);
+        if (paths.Length == 0) { NoRowsToActOn(Strings.MenuRescan); return; }
+        StartScan(paths, recurse: false);
     }
 
     void RescanIgnoringTrust()
     {
         var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
-        if (paths.Length > 0) StartScan(paths, recurse: false, bypassTrust: true);
+        if (paths.Length == 0) { NoRowsToActOn(Strings.MenuRescanNoTrust); return; }
+        StartScan(paths, recurse: false, bypassTrust: true);
     }
 
     /// <summary>Re-run exactly the rows that failed (transient 429s / network blips) — one-click post-sweep
@@ -928,7 +937,12 @@ internal sealed class ScanQueueControl : UserControl
     void MarkCleanSelected()
     {
         var items = SelectedItems().Where(i => !string.IsNullOrEmpty(i.Sha256) || !string.IsNullOrEmpty(i.Md5)).ToList();
-        if (items.Count == 0) return;
+        if (items.Count == 0)
+        {
+            if (SelectedItems().Count == 0) UiFeedback.NeedSelection(Strings.MenuMarkClean);
+            else UiFeedback.Refused(Strings.SelectionNoHash, Strings.MenuMarkClean);
+            return;
+        }
         int n = 0;
         foreach (var i in items)
             if (AllowlistStore.Add(i, Strings.AllowlistReasonUserMarkedClean)) { i.SkipReason = Strings.SkipReasonUserSaidClean; i.Status = ScanStatus.TrustedSkipped; n++; }
@@ -938,7 +952,7 @@ internal sealed class ScanQueueControl : UserControl
     void QuarantineSelected()
     {
         var items = SelectedItems().Where(i => File.Exists(i.FilePath)).ToList();
-        if (items.Count == 0) return;
+        if (items.Count == 0) { NoRowsToActOn(Strings.MenuQuarantine); return; }
         string prompt = items.Count == 1
             ? string.Format(Strings.QuarantineConfirmFormat, items[0].FileName)
             : string.Format(Strings.QuarantineBatchConfirmFormat, items.Count);
@@ -1067,7 +1081,7 @@ internal sealed class ScanQueueControl : UserControl
     void HuntPersistence()
     {
         var i = SelectedItem();
-        if (i == null) return;
+        if (i == null) { UiFeedback.NeedSelection(Strings.MenuHuntPersistence); return; }
         var hooks = PersistenceHunter.Find(i.FilePath);
         if (hooks.Count == 0) { NativeMessageBox.Info(string.Format(Strings.PersistenceNoneFormat, i.FileName)); return; }
         using var dlg = new PersistenceHooksDialog(i.FileName, hooks);
@@ -1077,7 +1091,8 @@ internal sealed class ScanQueueControl : UserControl
     async Task PinBaselineAsync()
     {
         var i = SelectedItem();
-        if (i == null || !File.Exists(i.FilePath)) return;
+        if (i == null) { UiFeedback.NeedSelection(Strings.MenuPinBaseline); return; }
+        if (!File.Exists(i.FilePath)) { UiFeedback.Refused(Strings.SelectionFileMissing, Strings.MenuPinBaseline); return; }
         if (await BaselineStore.PinAsync(i.FilePath))
             NativeMessageBox.Info(string.Format(Strings.BaselineAddedFormat, i.FileName, BaselineStore.Count));
         else NativeMessageBox.Error(Strings.BaselineAddFailed);
@@ -1120,7 +1135,7 @@ internal sealed class ScanQueueControl : UserControl
     void ShowNeighbors()
     {
         var i = SelectedItem();
-        if (i == null) return;
+        if (i == null) { UiFeedback.NeedSelection(Strings.MenuNeighbors); return; }
         var data = NeighborsService.Build(i.FilePath, AppServices.Cache);
         if (data == null) { NativeMessageBox.Info(Strings.FolderNotFoundInfo); return; }
         using var dlg = new NeighborsDialog(data, paths => StartScan(paths, recurse: false));
@@ -1393,7 +1408,22 @@ internal sealed class ScanQueueControl : UserControl
     /// <summary>The items batch actions apply to: the checkbox-marked rows if any, otherwise the
     /// highlighted rows, otherwise the single current row.</summary>
     List<ScanItem> SelectedItems() => EntityGrid.Targets<ScanItem>(_grid);
-    static void CopySafe(string? s) { if (!string.IsNullOrEmpty(s)) { try { Clipboard.SetText(s); } catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); } } }
+
+    /// <summary>Answers a row action that found nothing to work on, telling the two cases apart: the user
+    /// selected no row at all, or the selected rows' files have since left the disk.</summary>
+    void NoRowsToActOn(string action)
+    {
+        if (SelectedItems().Count == 0) UiFeedback.NeedSelection(action);
+        else UiFeedback.Refused(Strings.SelectionFileMissing, action);
+    }
+    // Every copy menu item funnels through here, so "nothing was selected" and "the row has no such
+    // value" both answer the click instead of leaving the clipboard silently untouched.
+    static void CopySafe(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) { UiFeedback.Refused(Strings.NothingToCopyInfo); return; }
+        try { Clipboard.SetText(s); }
+        catch (Exception ex) { Log("Clipboard copy failed: " + ex.Message, LogLevel.Warning); UiFeedback.Refused(Strings.CopyFailedPrefix + ex.Message); }
+    }
 
     void SaveShareCard()
     {
