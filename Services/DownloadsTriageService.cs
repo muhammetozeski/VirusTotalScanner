@@ -90,7 +90,7 @@ internal static class DownloadsTriageService
                 }
                 list.Add(di);
             }
-            catch { }
+            catch (Exception ex) { Log($"Downloads triage skipped {p}: {ex.Message}", LogLevel.Warning); }
             progress?.Invoke(++done, paths.Count);
         }
         return list;
