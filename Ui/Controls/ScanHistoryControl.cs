@@ -61,7 +61,7 @@ internal sealed class ScanHistoryControl : UserControl
                     {
                         ReportWriter.WriteHistory(dlg.FileName, rows, label);
                         NativeMessageBox.Info(string.Format(Strings.HistoryReportWrittenFormat, rows.Count, label));
-                        try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + dlg.FileName + "\""); } catch { }
+                        RevealInExplorer(dlg.FileName);
                     }
                     catch (Exception ex) { NativeMessageBox.Error(Strings.ReportWriteErrorPrefix + ex.Message); }
                 });
@@ -243,26 +243,7 @@ internal sealed class ScanHistoryControl : UserControl
         _count.Text = string.Format(Strings.HistoryCountFormat, rows.Count) + (ScanHistoryStore.Count != rows.Count ? string.Format(Strings.HistoryCountTotalSuffixFormat, ScanHistoryStore.Count) : "");
     }
 
-    /// <summary>Reopen the full result detail by rebuilding a ScanItem from the cached report.</summary>
-    void Reopen(HistoryEntry? e)
-    {
-        if (e == null) return;
-        var report = string.IsNullOrEmpty(e.Md5) ? null : AppServices.Cache.TryGet(e.Md5, int.MaxValue);
-        if (report == null)
-        {
-            // Evicted from cache: offer to re-scan (if the file is still there) instead of a dead end.
-            bool here = e.Path != null && File.Exists(e.Path);
-            string head = string.Format(Strings.HistoryReopenHeadFormat, e.Name, e.Verdict, e.Ratio);
-            if (here && NativeMessageBox.Confirm(head + Strings.HistoryReopenRescanSuffix))
-                RescanRequested?.Invoke([e.Path!]);
-            else if (!here)
-                NativeMessageBox.Info(head + Strings.ReopenFileGoneSuffix + (e.Path ?? Strings.ReopenNoPath));
-            return;
-        }
-        var item = new ScanItem(e.Path ?? e.Name) { Report = report, Status = ScanStatus.Completed, Md5 = e.Md5, Sha256 = e.Sha256 };
-        using var dlg = new DetailDialog(item);
-        dlg.ShowDialog(FindForm());
-    }
+    void Reopen(HistoryEntry? e) => HistoryReopen.Show(e, FindForm(), paths => RescanRequested?.Invoke(paths));
 
     /// <summary>True if the row's file still exists; otherwise tells the user plainly.</summary>
     static bool EnsureFile(HistoryEntry? h)

@@ -338,21 +338,7 @@ internal sealed class ScanOverviewControl : UserControl
         return Theme.Current.Success;
     }
 
-    void Reopen(HistoryEntry e)
-    {
-        var report = string.IsNullOrEmpty(e.Md5) ? null : AppServices.Cache.TryGet(e.Md5, int.MaxValue);
-        if (report == null)
-        {
-            bool here = e.Path != null && File.Exists(e.Path);
-            string head = string.Format(Strings.HistoryReopenHeadFormat, e.Name, e.Verdict, e.Ratio);
-            if (here && NativeMessageBox.Confirm(head + Strings.HistoryReopenRescanSuffix)) ScanRequested?.Invoke([e.Path!]);
-            else if (!here) NativeMessageBox.Info(head + Strings.ReopenFileGoneSuffix + (e.Path ?? Strings.ReopenNoPath));
-            return;
-        }
-        var item = new ScanItem(e.Path ?? e.Name) { Report = report, Status = ScanStatus.Completed, Md5 = e.Md5, Sha256 = e.Sha256 };
-        using var dlg = new DetailDialog(item);
-        dlg.ShowDialog(FindForm());
-    }
+    void Reopen(HistoryEntry e) => HistoryReopen.Show(e, FindForm(), paths => ScanRequested?.Invoke(paths));
 
     void BuildStatusBanner()
     {

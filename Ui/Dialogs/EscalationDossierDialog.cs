@@ -145,8 +145,7 @@ internal sealed class EscalationDossierDialog : Form
     void RevealSelected()
     {
         var r = Selected();
-        if (r?.OnDisk == true && !string.IsNullOrEmpty(r.FilePath))
-            try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + r.FilePath + "\""); } catch { }
+        if (r?.OnDisk == true && !string.IsNullOrEmpty(r.FilePath)) RevealInExplorer(r.FilePath);
         else _status.Text = Strings.EscalationFileNotOnDisk;
     }
 
@@ -159,9 +158,6 @@ internal sealed class EscalationDossierDialog : Form
 
     void OpenVtSelected()
     {
-        var r = Selected();
-        if (r == null || string.IsNullOrEmpty(r.Sha)) return;
-        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://www.virustotal.com/gui/file/" + r.Sha) { UseShellExecute = true }); }
-        catch (Exception ex) { _status.Text = Strings.EscalationOpenFailedPrefix + ex.Message; }
+        if (VtUrl(Selected()?.Sha) is { } url) OpenUrlInBrowser(url);
     }
 }

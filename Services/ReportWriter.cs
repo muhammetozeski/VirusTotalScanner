@@ -177,7 +177,7 @@ internal static class ReportWriter
         File.WriteAllText(path, content, new UTF8Encoding(false));
     }
 
-    static string VtUrl(HistoryEntry e) => !string.IsNullOrEmpty(e.Sha256) ? "https://www.virustotal.com/gui/file/" + e.Sha256 : "";
+    static string VtUrl(HistoryEntry e) => HelperFunctions.VtUrl(e.Sha256) ?? "";
 
     static string BuildHistoryCsv(List<HistoryEntry> list)
     {

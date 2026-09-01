@@ -51,7 +51,7 @@ internal static class GuiScrapeService
 
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _targetHash = hash;
-            _currentUrl = "https://www.virustotal.com/gui/file/" + hash;
+            _currentUrl = AppConstants.VtGuiFile + hash;
             _pending = tcs;
             _captchaShown = false;
 
@@ -99,7 +99,7 @@ internal static class GuiScrapeService
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _targetHash = hash;
             _targetSuffix = "/comments";
-            _currentUrl = "https://www.virustotal.com/gui/file/" + hash + "/community";
+            _currentUrl = AppConstants.VtGuiFile + hash + "/community";
             _pending = tcs;
             _captchaShown = false;
 
@@ -156,7 +156,7 @@ internal static class GuiScrapeService
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _targetHash = hash;
             _targetSuffix = "/behaviours"; // the per-sandbox reports list (the GUI does not call behaviour_summary)
-            _currentUrl = "https://www.virustotal.com/gui/file/" + hash + "/behavior";
+            _currentUrl = AppConstants.VtGuiFile + hash + "/behavior";
             _pending = tcs;
             _captchaShown = false;
 

@@ -33,7 +33,7 @@ internal sealed class HistoryReverdictDialog : Form
         var reveal = ThemeManager.MakeButton(Strings.BtnEscalationReveal, (_, _) =>
         {
             if (EntityGrid.CurrentItem<ReverdictEscalation>(_grid) is { } e && !string.IsNullOrEmpty(e.Path) && File.Exists(e.Path))
-                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + e.Path + "\""); } catch { }
+                RevealInExplorer(e.Path);
         });
         var close = new Button { Text = Strings.BtnClose, DialogResult = DialogResult.Cancel, Width = 90 };
 
@@ -111,7 +111,7 @@ internal sealed class HistoryReverdictDialog : Form
         _grid.CellDoubleClick += (_, e) =>
         {
             if (e.RowIndex >= 0 && _grid.Rows[e.RowIndex].DataBoundItem is ReverdictEscalation x && !string.IsNullOrEmpty(x.Path) && File.Exists(x.Path))
-                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + x.Path + "\""); } catch { }
+                RevealInExplorer(x.Path);
         };
     }
 

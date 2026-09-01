@@ -88,7 +88,6 @@ internal sealed class RecurrenceDialog : Form
 
     void RevealSelected()
     {
-        if (Selected()?.LastPath is { Length: > 0 } p && File.Exists(p))
-            try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + p + "\""); } catch { }
+        if (Selected()?.LastPath is { Length: > 0 } p && File.Exists(p)) RevealInExplorer(p);
     }
 }

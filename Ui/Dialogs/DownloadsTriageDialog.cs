@@ -127,7 +127,7 @@ internal sealed class DownloadsTriageDialog : Form
         _grid.CellDoubleClick += (_, e) =>
         {
             if (e.RowIndex >= 0 && _grid.Rows[e.RowIndex].DataBoundItem is DownloadItem d && File.Exists(d.Path))
-                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + d.Path + "\""); } catch { }
+                RevealInExplorer(d.Path);
         };
     }
 

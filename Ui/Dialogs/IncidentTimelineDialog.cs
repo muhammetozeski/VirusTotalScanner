@@ -114,7 +114,7 @@ internal sealed class IncidentTimelineDialog : Form
         _files.CellDoubleClick += (_, e) =>
         {
             if (e.RowIndex >= 0 && _files.Rows[e.RowIndex].DataBoundItem is TimelineFile f && File.Exists(f.Path))
-                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + f.Path + "\""); } catch { }
+                RevealInExplorer(f.Path);
         };
     }
 

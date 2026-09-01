@@ -70,7 +70,7 @@ public static class Logger
                         if (!_oldFilesCleaned)
                         {
                             _oldFilesCleaned = true;
-                            try { DeleteOldestFiles(folder, DeleteOlderThanLastXFile, LogFileNamePrefix); } catch { }
+                            try { HelperFunctions.DeleteOldestFiles(folder, DeleteOlderThanLastXFile, LogFileNamePrefix); } catch { }
                         }
                         string file = Path.Combine(folder, LogFileNamePrefix + " " + startTime + ".txt");
                         File.AppendAllText(file, Message + "\n");
@@ -220,31 +220,4 @@ public static class Logger
     }
     static void SafeSetForeground(ConsoleColor c) { try { Console.ForegroundColor = c; } catch { } }
 
-    static void DeleteOldestFiles(string folderPath, int filesToKeep, string prefix = "")
-    {
-        if (!Directory.Exists(folderPath)) return;
-
-        var files = Directory.GetFiles(folderPath)
-            .Select(p => new { Path = p, FileName = Path.GetFileNameWithoutExtension(p) })
-            .ToList();
-
-        var datedFiles = new List<(string Path, DateTime Date)>();
-        foreach (var file in files)
-        {
-            string name = file.FileName;
-            name = name.Contains(prefix) ? name.Remove(name.IndexOf(prefix), prefix.Length) : name;
-            name = name.Trim();
-            if (DateTime.TryParseExact(name, "yyyy.MM.dd HH.mm.ss.ff",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None, out DateTime fileDate))
-                datedFiles.Add((file.Path, fileDate));
-        }
-
-        var sorted = datedFiles.OrderBy(f => f.Date).ToList();
-        int toDelete = sorted.Count - filesToKeep;
-        for (int i = 0; i < toDelete; i++)
-        {
-            try { File.Delete(sorted[i].Path); } catch { }
-        }
-    }
 }
