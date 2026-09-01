@@ -9,8 +9,15 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class SingleInstance
 {
-    const string MutexName = @"Local\VirusTotalScanner.SingleInstance";
-    const string PipeName = "VirusTotalScanner.ipc";
+    // Scoped to THIS exe's path: a second launch of the same install still forwards into the running
+    // window (the context-menu multi-select case), but a copy running from another folder (a new
+    // version being tried out, a dev build) is its own instance instead of forwarding into — or
+    // fighting over the pipe with — an unrelated install.
+    static readonly string InstanceId = Convert.ToHexString(
+        System.Security.Cryptography.MD5.HashData(
+            System.Text.Encoding.UTF8.GetBytes(AppConstants.ThisExePath.ToLowerInvariant())))[..8];
+    static readonly string MutexName = @"Local\VirusTotalScanner.SingleInstance." + InstanceId;
+    static readonly string PipeName = "VirusTotalScanner.ipc." + InstanceId;
 
     static Mutex? _mutex;
 
