@@ -354,8 +354,12 @@ internal sealed class ScanOverviewControl : UserControl
     {
         _statusBtn.FlatAppearance.BorderSize = 0;
         _statusBtn.Click += (_, _) => _statusAction?.Invoke();
-        _statusBanner.Controls.Add(_statusBtn);   // docked edge first
-        _statusBanner.Controls.Add(_statusLabel); // fill last
+        // Docking lays children out from the LAST collection index to the first, so the Fill label
+        // must sit at index 0 (docked last, taking what remains). The old reversed order let the
+        // label swallow the whole banner and squeezed the action button to zero width — the banner's
+        // "Geçmişi aç →" button was invisible.
+        _statusBanner.Controls.Add(_statusLabel);
+        _statusBanner.Controls.Add(_statusBtn);
     }
 
     void SetBanner(string title, string rationale, Color accent, string btnText, Action? action)

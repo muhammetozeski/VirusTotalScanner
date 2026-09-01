@@ -456,9 +456,10 @@ internal sealed class ScanQueueControl : UserControl
         var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand };
         close.FlatAppearance.BorderSize = 0;
         close.Click += (_, _) => _recallBar.Visible = false;
+        // Fill label at index 0 (docked last); BringToFront on the button moved it to index 0 and
+        // let the Fill label dock first over the whole bar, zeroing the button's width.
         _recallBar.Controls.Add(_recallLabel);
         _recallBar.Controls.Add(close);
-        close.BringToFront();
         return _recallBar;
     }
 
@@ -469,11 +470,11 @@ internal sealed class ScanQueueControl : UserControl
         var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand };
         close.FlatAppearance.BorderSize = 0;
         close.Click += (_, _) => HideUndo();
+        // Same index rule as the recall bar: Fill label first, edge buttons after (docked first).
+        // The BringToFront calls used to zero both buttons — the quarantine Undo was unreachable.
         _undoBar.Controls.Add(_undoLabel);
         _undoBar.Controls.Add(undo);
         _undoBar.Controls.Add(close);
-        close.BringToFront();
-        undo.BringToFront();
         _undoTimer.Tick += (_, _) => HideUndo();
         return _undoBar;
     }
