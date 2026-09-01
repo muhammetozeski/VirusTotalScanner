@@ -6,8 +6,12 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class SelectionEnumerator
 {
+    /// <summary>Expands the selection into files. <paramref name="missingPaths"/>, when given, collects the
+    /// requested paths that are neither a file nor a folder — without it a deleted or unplugged target is
+    /// indistinguishable from an empty one, and the caller reports "nothing found, all clean".</summary>
     public static List<string> Expand(IEnumerable<string> paths, ISet<string> safeExtensions, bool recurse,
-        bool applySafeFilter, long maxSizeBytes = 0, List<string>? oversizeLedger = null)
+        bool applySafeFilter, long maxSizeBytes = 0, List<string>? oversizeLedger = null,
+        List<string>? missingPaths = null)
     {
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -36,11 +40,13 @@ internal static class SelectionEnumerator
                 }
                 else
                 {
+                    missingPaths?.Add(path);
                     Log("Path not found, skipping: " + path, LogLevel.Warning);
                 }
             }
             catch (Exception ex)
             {
+                missingPaths?.Add(path);
                 Log($"Enumeration error for '{path}': {ex.Message}", LogLevel.Warning);
             }
         }

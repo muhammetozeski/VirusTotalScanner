@@ -33,6 +33,10 @@ internal sealed class ScanScheduler
 
     public BindingList<ScanItem> Items { get; } = [];
 
+    /// <summary>Targets of the last run that could not be found on disk. Empty on a normal run; the CLI
+    /// turns a fully-missing selection into a non-zero exit so a script never reads it as "clean".</summary>
+    public IReadOnlyList<string> MissingPaths { get; private set; } = [];
+
     public event Action<OverallProgress>? ProgressChanged;
     public event Action<ScanItem>? ItemFinished;
     public event Action? Started;
@@ -124,8 +128,19 @@ internal sealed class ScanScheduler
             KnownGoodDb.Reload();
             var safe = SelectionEnumerator.ParseExtensions(Settings.SafeExtensions);
             var oversize = new List<string>();
+            var missing = new List<string>();
             var files = await Task.Run(() => SelectionEnumerator.Expand(
-                paths, safe, opts.Recurse, opts.ApplySafeFilter, opts.MaxFileSizeBytes, oversize), ct);
+                paths, safe, opts.Recurse, opts.ApplySafeFilter, opts.MaxFileSizeBytes, oversize, missing), ct);
+            MissingPaths = missing;
+            if (missing.Count > 0)
+            {
+                // Never let a vanished target read as "scanned, nothing found": a scheduled sweep of a
+                // folder that was renamed or is on an unplugged drive would report all-clean forever.
+                string list = string.Join(", ", missing.Take(5));
+                Log($"Scan target(s) not found ({missing.Count}): {list}", LogLevel.Warning);
+                UiStatusHub.Report(Strings.StatusSourceScan,
+                    string.Format(Strings.ScanTargetsMissingFormat, missing.Count, list), StatusSeverity.Warning);
+            }
 
             // Archive expansion: swap each ZIP-family archive for its extracted members so each member
             // is hashed and looked up on its own (no upload). Archives we cannot open stay as-is.

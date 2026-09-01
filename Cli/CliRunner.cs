@@ -74,6 +74,21 @@ internal static class CliRunner
         scanOpts.ExpandArchives = opts.ExpandArchives;
         await scheduler.RunAsync(scanPaths, scanOpts);
 
+        // A target that is not there was not examined, so it cannot be reported as clean. Every missing
+        // one is named; if none of them existed, exit 2 (IO) instead of 0 so a scheduled sweep of a
+        // renamed folder or an unplugged drive fails loudly instead of claiming an all-clear.
+        if (scheduler.MissingPaths.Count > 0)
+        {
+            foreach (var p in scheduler.MissingPaths)
+                Console.Error.WriteLine(string.Format(Strings.ScanTargetsMissingFormat, 1, p));
+            if (scheduler.Items.Count == 0)
+            {
+                Console.Error.WriteLine(Strings.CliErrAllTargetsMissing);
+                AppServices.Shutdown();
+                return 2;
+            }
+        }
+
         if (opts.Json) PrintJson(scheduler.Items);
 
         if (opts.ReportPath != null)
