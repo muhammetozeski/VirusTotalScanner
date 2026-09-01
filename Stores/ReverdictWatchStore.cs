@@ -96,7 +96,7 @@ internal static class WatchService
             if (string.IsNullOrEmpty(e.Sha256)) continue;
             try
             {
-                var r = await GuiScrapeService.LookupAsync(e.Sha256);
+                var r = await GuiScrapeService.LookupAsync(e.Sha256, ct);
                 if (r == null) continue;
                 int now = r.DetectionCount;
                 if (now > e.LastDetections) escalations.Add((e, e.LastDetections, now));
