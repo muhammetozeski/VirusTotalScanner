@@ -59,14 +59,23 @@ internal sealed class ScanQueueControl : UserControl
     {
         Dock = DockStyle.Fill;
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // action bar
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // scan action bar
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // tools bar
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // filter strip
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // split
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));   // overall
 
-        // ---- action bar ----
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(6) };
+        // ---- action bars: the "start a scan" verbs on one labelled row, the result/analysis tools on
+        // the next — instead of the old single 19-button soup that wrapped at random points ----
+        static Label GroupLabel(string text)
+        {
+            var l = ThemeManager.MakeTitle(text, 9.5f, subtle: true);
+            l.Margin = new Padding(6, 12, 2, 0);
+            return l;
+        }
+        var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(6, 6, 6, 0) };
+        bar.Controls.Add(GroupLabel(Strings.BarGroupScan));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFiles, (_, _) => SelectFiles(), accent: true));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnSelectFolder, (_, _) => SelectFolder(), accent: true));
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHashLookup, (_, _) => _ = HashLookupAsync()));
@@ -77,20 +86,24 @@ internal sealed class ScanQueueControl : UserControl
         _cancelBtn = ThemeManager.MakeButton(Strings.BtnCancel, (_, _) => _scheduler.Cancel());
         bar.Controls.Add(_pauseBtn);
         bar.Controls.Add(_cancelBtn);
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportCsv, (_, _) => ExportCsv()));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportReport, (_, _) => ExportReport()));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFolderRollup, (_, _) => ShowFolderRollup()));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFamilyClusters, (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnQuarantineVault, (_, _) => ShowQuarantineVault()));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnIncidentTimeline, (_, _) => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); }));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnDownloadsTriage, (_, _) => { using var d = new DownloadsTriageDialog(); d.ScanRequested += paths => StartScan(paths, recurse: false); d.ShowDialog(FindForm()); }));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHelp, (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
-        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnAllCommands, (_, _) => OpenPalette()));
         var hint = ThemeManager.MakeLabel(Strings.DropHint, subtle: true);
         bar.Controls.Add(hint);
+
+        var toolsBar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(6, 0, 6, 0) };
+        toolsBar.Controls.Add(GroupLabel(Strings.BarGroupTools));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportCsv, (_, _) => ExportCsv()));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnExportReport, (_, _) => ExportReport()));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFolderRollup, (_, _) => ShowFolderRollup()));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnFamilyClusters, (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnQuarantineVault, (_, _) => ShowQuarantineVault()));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnIncidentTimeline, (_, _) => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); }));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnDownloadsTriage, (_, _) => { using var d = new DownloadsTriageDialog(); d.ScanRequested += paths => StartScan(paths, recurse: false); d.ShowDialog(FindForm()); }));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnHelp, (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
+        toolsBar.Controls.Add(ThemeManager.MakeButton(Strings.BtnAllCommands, (_, _) => OpenPalette()));
         AttachBarTooltips(bar);
+        AttachBarTooltips(toolsBar);
 
         // ---- split ----
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
@@ -127,9 +140,10 @@ internal sealed class ScanQueueControl : UserControl
         bottom.Controls.Add(_summary, 0, 1);
 
         root.Controls.Add(bar, 0, 0);
-        root.Controls.Add(BuildFilterBar(), 0, 1);
-        root.Controls.Add(split, 0, 2);
-        root.Controls.Add(bottom, 0, 3);
+        root.Controls.Add(toolsBar, 0, 1);
+        root.Controls.Add(BuildFilterBar(), 0, 2);
+        root.Controls.Add(split, 0, 3);
+        root.Controls.Add(bottom, 0, 4);
         Controls.Add(root);
 
         _grid.SelectionChanged += (_, _) => { var it = SelectedItem(); _detail.Show(it); UpdateRecallBar(it); };
@@ -425,6 +439,8 @@ internal sealed class ScanQueueControl : UserControl
             [Strings.BtnRecheck] = Strings.TipRecheck,
             [Strings.BtnClearCache] = Strings.TipClearCache,
             [Strings.BtnIncidentTimeline] = Strings.TipIncidentTimeline,
+            [Strings.BtnDownloadsTriage] = Strings.TipDownloadsTriage,
+            [Strings.BtnHelp] = Strings.TipHelp,
             [Strings.BtnAllCommands] = Strings.TipAllCommands,
             [Strings.BtnPause] = Strings.TipPause,
             [Strings.BtnCancel] = Strings.TipCancel,

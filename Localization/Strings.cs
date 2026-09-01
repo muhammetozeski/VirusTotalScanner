@@ -685,6 +685,10 @@ internal static class Strings
     public static string TipAllCommands = "Tüm özelliklere tek yerden ulaş (kopya bul, autostart kancaları, aile kümeleri…).";
     public static string TipPause = "Devam eden taramayı duraklat / sürdür.";
     public static string TipCancel = "Devam eden taramayı iptal et.";
+    public static string TipDownloadsTriage = "İzlenen klasörlere son inen dosyaları kaynak/imza/verdikt ile listele.";
+    public static string TipHelp = "Uygulamadaki terimlerin ve sinyallerin sözlüğü.";
+    public static string BarGroupScan = "Tara:";
+    public static string BarGroupTools = "Araçlar:";
     public static string SearchPlaceholder = "🔎  Ara (ad/yol)…";
     public static string ChipAll = "Tümü";
     public static string ChipSkipped = "Atlandı";

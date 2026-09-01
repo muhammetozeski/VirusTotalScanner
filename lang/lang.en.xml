@@ -543,7 +543,11 @@
   <s name="TipIncidentTimeline">Group executables arriving on disk by arrival day.</s>
   <s name="TipAllCommands">Reach every feature from one place (find copies, autostart hooks, family clusters…).</s>
   <s name="TipPause">Pause / resume the running scan.</s>
-  <s name="TipCancel">Cancel the running scan.</s>
+  <s name="TipCancel">Cancel the running scan.</s>
+  <s name="TipDownloadsTriage">List recent arrivals in the watched folders with origin/signature/verdict.</s>
+  <s name="TipHelp">Glossary of the terms and signals used across the app.</s>
+  <s name="BarGroupScan">Scan:</s>
+  <s name="BarGroupTools">Tools:</s>
   <s name="SearchPlaceholder">🔎  Search (name/path)…</s>
   <s name="ChipAll">All</s>
   <s name="ChipSkipped">Skipped</s>
