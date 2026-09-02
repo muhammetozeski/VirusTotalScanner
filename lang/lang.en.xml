@@ -603,6 +603,8 @@
   <s name="NothingToCopyInfo">There is no value to copy.</s>
   <s name="KeyRowGone">That key is no longer in the vault — the list has been refreshed.</s>
   <s name="ScanTargetsMissingFormat">{0} target(s) not found (not scanned): {1}</s>
+  <s name="StatusWatcherFileUncheckedFormat">{0} NOT CHECKED — VirusTotal has no record of it, or the lookup could not run</s>
+  <s name="StatusWatcherUnstableFormat">{0} could not be read (download may be unfinished) — not scanned</s>
   <s name="CliErrAllTargetsMissing">ERROR: none of the given paths could be found; nothing was scanned.</s>
   <s name="PersistenceCleanupConfirmFormat">{0} has been quarantined, but {1} autostart hook(s) still point to it (Windows will try to run it every boot). Clean them up now?</s>
   <s name="QuarantineKillConfirmFormat">This file is running right now: {0}.\nClose it first to quarantine?</s>

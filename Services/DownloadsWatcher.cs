@@ -19,6 +19,8 @@ internal sealed class DownloadsWatcher : IDisposable
 
     public event Action<ScanItem>? ThreatFound;
     public int Seen, Cleared, Flagged;
+    /// <summary>Files that finished the pipeline with no verdict available — neither clean nor flagged.</summary>
+    public int Unchecked;
 
     public DownloadsWatcher(HashCache cache) => _cache = cache;
 
@@ -90,7 +92,13 @@ internal sealed class DownloadsWatcher : IDisposable
         lock (_lock) { if (!_inflight.Add(path)) return; }
         try
         {
-            if (!await WaitStableAsync(path)) return;
+            if (!await WaitStableAsync(path))
+            {
+                Log($"Downloads watch: '{path}' never became stable/readable; not scanned.", LogLevel.Warning);
+                UiStatusHub.Report(Strings.StatusSourceWatcher,
+                    string.Format(Strings.StatusWatcherUnstableFormat, Path.GetFileName(path)), StatusSeverity.Warning);
+                return;
+            }
             Interlocked.Increment(ref Seen);
 
             // Most download-borne malware arrives zipped: expand archives and scan each member through the
@@ -143,6 +151,20 @@ internal sealed class DownloadsWatcher : IDisposable
             ?? (GuiScrapeService.IsRuntimeAvailable ? await GuiScrapeService.LookupAsync(sha) : null);
         if (report != null && report.TotalEngines > 0) _cache.Put(md5, report, path);
 
+        if (report == null || report.TotalEngines == 0)
+        {
+            // No verdict at all: not cached, and either the keyless engine was unavailable or VirusTotal
+            // has never seen this file. A brand-new payload looks exactly like this, so announcing it as
+            // "temiz" is the one thing the watcher must never do.
+            if (!lure)
+            {
+                Interlocked.Increment(ref Unchecked);
+                UiStatusHub.Report(Strings.StatusSourceWatcher,
+                    string.Format(Strings.StatusWatcherFileUncheckedFormat, Path.GetFileName(path)), StatusSeverity.Warning);
+                return;
+            }
+        }
+
         // Flag if VT says malicious OR the name is a lure (catches brand-new payloads no engine has yet).
         if (report?.IsMalicious == true || lure)
         {
@@ -163,8 +185,10 @@ internal sealed class DownloadsWatcher : IDisposable
     /// <summary>Waits until the file stops growing and is readable (a download has finished), or gives up.</summary>
     static async Task<bool> WaitStableAsync(string path)
     {
+        const int attempts = 24, pollMs = 500; // ~12s
         long last = -1;
-        for (int i = 0; i < 24; i++) // up to ~12s
+        string? lastError = null;
+        for (int i = 0; i < attempts; i++)
         {
             try
             {
@@ -173,10 +197,14 @@ internal sealed class DownloadsWatcher : IDisposable
                 using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) { }
                 if (len == last && len > 0) return true;
                 last = len;
+                lastError = null;
             }
-            catch { /* still being written / locked */ }
-            await Task.Delay(500);
+            // Expected while the download still holds the file, so it is not logged per attempt — only
+            // once at the end, when the wait actually ran out with the file still unreadable.
+            catch (Exception ex) { lastError = ex.Message; }
+            await Task.Delay(pollMs);
         }
+        if (lastError != null) Log($"File stayed unreadable for {attempts * pollMs / 1000}s ({path}): {lastError}", LogLevel.Warning);
         return last > 0;
     }
 

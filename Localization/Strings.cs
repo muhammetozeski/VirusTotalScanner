@@ -496,6 +496,8 @@ internal static class Strings
     public static string StatusWatcherActiveFormat = "{0} klasör izleniyor";
     public static string StatusWatcherOff = "izleme kapalı";
     public static string StatusWatcherFileCleanFormat = "{0} temiz";
+    public static string StatusWatcherFileUncheckedFormat = "{0} DENETLENEMEDİ — VirusTotal'de kaydı yok ya da sorgu yapılamadı";
+    public static string StatusWatcherUnstableFormat = "{0} okunamadı (indirme bitmemiş olabilir) — taranmadı";
     public static string StatusWatcherFileFlaggedFormat = "{0} TEHDİT ({1})";
     public static string StatusCatchUpFormat = "kapalıyken inen {0} dosya denetlendi";
     public static string StatusProcGuardOn = "süreç başlatma koruması etkin";
