@@ -91,6 +91,9 @@ internal static class CliRunner
 
         if (opts.Json) PrintJson(scheduler.Items);
 
+        // A requested output that could not be produced is a failed run: exiting 0 would tell a scheduled
+        // sweep the report is sitting there waiting to be read.
+        bool outputFailed = false;
         if (opts.ReportPath != null)
         {
             try
@@ -98,13 +101,13 @@ internal static class CliRunner
                 ReportWriter.Write(opts.ReportPath, scheduler.Items.ToList());
                 if (!opts.Quiet && !opts.Json) Console.WriteLine(string.Format(Strings.CliReportWrittenFormat, opts.ReportPath));
             }
-            catch (Exception ex) { Console.Error.WriteLine(Strings.ReportWriteErrorPrefix + ex.Message); }
+            catch (Exception ex) { Console.Error.WriteLine(Strings.ReportWriteErrorPrefix + ex.Message); outputFailed = true; }
         }
 
         if (opts.SweepResultPath != null)
         {
             try { SweepResultStore.Write(opts.SweepResultPath, scheduler.Items); }
-            catch (Exception ex) { Console.Error.WriteLine(Strings.CliSweepResultWriteErrorPrefix + ex.Message); }
+            catch (Exception ex) { Console.Error.WriteLine(Strings.CliSweepResultWriteErrorPrefix + ex.Message); outputFailed = true; }
         }
 
         // Verdict-delta gate: compare against a prior --report json baseline (keyed by sha256).
@@ -112,7 +115,9 @@ internal static class CliRunner
         if (opts.DiffBaseline != null)
         {
             var delta = DiffService.Compare(scheduler.Items.ToList(), opts.DiffBaseline);
-            if (delta == null) Console.Error.WriteLine(Strings.CliDiffBaselineErrPrefix + opts.DiffBaseline);
+            // An unreadable baseline means --fail-on-new / --fail-on-regression never got to run. Passing
+            // the build because the gate could not be evaluated is the worst possible outcome for a gate.
+            if (delta == null) { Console.Error.WriteLine(Strings.CliDiffBaselineErrPrefix + opts.DiffBaseline); outputFailed = true; }
             else
             {
                 if (!opts.Json)
@@ -139,7 +144,8 @@ internal static class CliRunner
             int total = scheduler.Items.Count;
             Console.WriteLine(string.Format(Strings.CliDoneFormat, total, mal));
         }
-        return threat ? 1 : 0;
+        if (threat) return 1;
+        return outputFailed ? 2 : 0;
     }
 
     static async Task<int> DriftReportCmd(string path)
@@ -276,6 +282,9 @@ internal static class CliRunner
 
     static async Task<int> LookupAsync(string hash, bool json)
     {
+        // A typo is not the same answer as "VirusTotal has no record of this": without this check any
+        // garbage string came back as a confident "not found" with a success exit code.
+        if (!HashService.IsValidHash(hash)) { Console.Error.WriteLine(Strings.HashInvalidWarn); return 2; }
         bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         if (!keyless && !AppServices.Rotator.HasUsableKeys) { Console.Error.WriteLine(Strings.CliErrNoKeyOrKeyless); return 3; }
         try

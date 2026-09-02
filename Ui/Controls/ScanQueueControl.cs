@@ -802,7 +802,7 @@ internal sealed class ScanQueueControl : UserControl
     async Task HashLookupAsync(string input)
     {
         input = input.Trim().ToLowerInvariant();
-        if (!Regex.IsMatch(input, "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$"))
+        if (!HashService.IsValidHash(input))
         {
             NativeMessageBox.Warn(Strings.HashInvalidWarn);
             return;
@@ -833,7 +833,7 @@ internal sealed class ScanQueueControl : UserControl
         if (File.Exists(text)) { StartScan([text], recurse: false); return; }
         if (Directory.Exists(text)) { StartScan([text], recurse: true); return; }
         string hex = text.ToLowerInvariant();
-        if (Regex.IsMatch(hex, "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$")) { _ = HashLookupAsync(hex); return; }
+        if (HashService.IsValidHash(hex)) { _ = HashLookupAsync(hex); return; }
         NativeMessageBox.Info(string.Format(Strings.ClipboardNotPathInfoFormat, text.Length > 100 ? text[..100] + "…" : text));
     }
 

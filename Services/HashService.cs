@@ -6,6 +6,12 @@ namespace VirusTotalScanner;
 /// <summary>Computes MD5 (existence check, per requirement) and SHA-256 (report id) in one pass.</summary>
 internal static class HashService
 {
+    /// <summary>True for a syntactically valid MD5 (32), SHA-1 (40) or SHA-256 (64) hex digest. The one
+    /// check behind every hash entry point, so a typo is told apart from "VirusTotal has no record".</summary>
+    public static bool IsValidHash(string? text) =>
+        text != null && System.Text.RegularExpressions.Regex.IsMatch(text.Trim().ToLowerInvariant(),
+            "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$");
+
     public static async Task<(string Md5, string Sha256)> ComputeAsync(string path, CancellationToken ct = default)
     {
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
