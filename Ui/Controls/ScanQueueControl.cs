@@ -248,11 +248,15 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (i.Status == ScanStatus.Failed) return Bucket.Error;
         if (i.Status is ScanStatus.TrustedSkipped or ScanStatus.Skipped or ScanStatus.Cancelled) return Bucket.Skipped;
-        var r = i.Report;
-        if (r == null) return Bucket.All; // in-progress / no verdict yet → only under "Tümü"
-        if (r.IsMalicious) return Bucket.Malicious;
-        if (r.DetectionCount > 0) return Bucket.Suspicious;
-        return Bucket.Clean;
+        // Unknown covers both "not looked up yet" and "VirusTotal returned no engine results"; neither is
+        // clean, so those rows appear only under "Tümü" instead of padding the Temiz chip.
+        return VerdictClassifier.Of(i.Report) switch
+        {
+            VerdictClass.Malicious => Bucket.Malicious,
+            VerdictClass.Suspicious => Bucket.Suspicious,
+            VerdictClass.Clean => Bucket.Clean,
+            _ => Bucket.All,
+        };
     }
 
     bool FilterActive => _bucket != Bucket.All || _search.Text.Trim().Length > 0;
@@ -1226,7 +1230,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         _lastProgress = p;
         _overall.Invalidate();
-        string text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed);
+        string text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed, p.Unknown);
         if (p.Done < p.Total && p.FilesPerSec > 0)
         {
             string eta = p.Remaining is { } rem ? string.Format(Strings.ProgressEtaFormat, ShortDuration(rem)) : "";

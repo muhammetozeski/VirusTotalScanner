@@ -143,6 +143,8 @@ internal sealed class OverallProgress
     public int Malicious { get; set; }
     public int Suspicious { get; set; }
     public int Clean { get; set; }
+    /// <summary>Scanned, but VirusTotal returned no engine results — never folded into <see cref="Clean"/>.</summary>
+    public int Unknown { get; set; }
     public int Failed { get; set; }
     public int Skipped { get; set; }
     public int SignedSkipped { get; set; }

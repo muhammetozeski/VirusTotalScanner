@@ -46,7 +46,7 @@ internal sealed class ScanScheduler
     public bool IsPaused => _pause.IsPaused;
 
     // aggregate counters
-    int _total, _done, _malicious, _suspicious, _clean, _failed, _skipped, _signedSkipped;
+    int _total, _done, _malicious, _suspicious, _clean, _unknown, _failed, _skipped, _signedSkipped;
 
     // live throughput / ETA
     readonly System.Diagnostics.Stopwatch _stopwatch = new();
@@ -441,14 +441,17 @@ internal sealed class ScanScheduler
     {
         SetStatus(item, ScanStatus.Completed);
         PendingOutbox.Remove(item.FilePath); // healed: this file finally got a verdict
-        // Bucket by the user's verdict categories: highest band -> malicious, any other threat
-        // band -> suspicious, else clean.
-        if (report.TotalEngines > 0 && report.IsMalicious)
+        switch (VerdictClassifier.Of(report))
         {
-            bool topBand = ReferenceEquals(VerdictCategories.Classify(report.DetectionCount), VerdictCategories.All[^1]);
-            if (topBand) Bump(ref _malicious); else Bump(ref _suspicious);
+            case VerdictClass.Malicious:
+                // Within "threat", the highest band is counted as malicious and the rest as suspicious.
+                bool topBand = ReferenceEquals(VerdictCategories.Classify(report.DetectionCount), VerdictCategories.All[^1]);
+                if (topBand) Bump(ref _malicious); else Bump(ref _suspicious);
+                break;
+            case VerdictClass.Suspicious: Bump(ref _suspicious); break;
+            case VerdictClass.Clean: Bump(ref _clean); break;
+            default: Bump(ref _unknown); break;
         }
-        else Bump(ref _clean);
     }
 
     void TrustSkip(ScanItem item, string reason, string? publisher)
@@ -494,9 +497,9 @@ internal sealed class ScanScheduler
             return (rate, rem);
         }
     }
-    void Bump(ref int counter) { Interlocked.Increment(ref counter); }
+    static void Bump(ref int counter) { Interlocked.Increment(ref counter); }
 
-    void ResetCounters() { _total = _done = _malicious = _suspicious = _clean = _failed = _skipped = _signedSkipped = 0; }
+    void ResetCounters() { _total = _done = _malicious = _suspicious = _clean = _unknown = _failed = _skipped = _signedSkipped = 0; }
 
     void ReportProgress()
     {
@@ -507,6 +510,7 @@ internal sealed class ScanScheduler
             Malicious = _malicious,
             Suspicious = _suspicious,
             Clean = _clean,
+            Unknown = _unknown,
             Failed = _failed,
             Skipped = _skipped,
             SignedSkipped = _signedSkipped,
