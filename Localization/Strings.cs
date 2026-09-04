@@ -51,8 +51,11 @@ internal static class Strings
     public static string BtnExportReport = "📄  Rapor (HTML)";
     public static string BtnFolderRollup = "📊  Klasör özeti";
     public static string BtnRecheck = "🔁  Verdikt yeniden denetle";
-    public static string BtnClearCache = "🗑  Önbelleği temizle";
+    public static string BtnBackupCache = "💾  Önbelleği yedekle";
+    public static string BtnJumpToCurrent = "🎯  Şu an tarananı göster";
     public static string DropHint = "  Dosya/klasörleri buraya da sürükleyip bırakabilirsiniz.";
+    public static string JumpNothingRunning = "Şu anda taranan dosya yok — listede bekleyen de kalmamış.";
+    public static string JumpFailed = "Satıra atlanamadı (liste değişmiş olabilir).";
 
     // ---- settings: language switch ----
     public static string SettingsLanguageLabel = "Dil:";
@@ -381,8 +384,6 @@ internal static class Strings
     public static string ReportFilter = "HTML rapor|*.html|CSV|*.csv|JSON|*.json|Metin|*.txt";
     public static string ReportSavedPrefix = "Rapor kaydedildi: ";
     public static string ReportWriteErrorPrefix = "Rapor yazılamadı: ";
-    public static string CacheClearConfirmFormat = "Yerel hash önbelleği ({0} kayıt) temizlensin mi?";
-    public static string CacheClearedInfo = "Önbellek temizlendi.";
     public static string KeylessEnabledInfo = "Anahtarsız (GUI) mod açıldı. Sıradaki dosyalar kotasız sorgulanacak.";
 
     // ---- scan queue control: recheck / persistence / baseline / running / verify-hash ----
@@ -694,8 +695,34 @@ internal static class Strings
     public static string TipFamilyClusters = "Aynı zararlı ailesini paylaşan farklı dosyaları grupla.";
     public static string TipQuarantineVault = "Karantinaya alınanları gör; güvenliyse geri yükle.";
     public static string TipRecheck = "Eski önbellek kayıtlarını kotasız (GUI) yeniden sorgula.";
-    public static string TipClearCache = "Yerel hash önbelleğini temizle (verdiktler tekrar VT'den alınır).";
+    public static string TipBackupCache = "Hash önbelleğinin (cache.json) tarih damgalı bir kopyasını seçtiğin klasöre al. Önbellekteki her kayıt harcanmış VirusTotal kotasıdır; bu yüzden programda önbelleği silen bir düğme yok, sadece yedekleyen var.";
+    public static string TipJumpToCurrent = "Listede o an VirusTotal'e sorulan satıra atla ve seç. Aynı anda birkaç dosya işlenebildiği için en üstteki, yani sıranın önündeki gösterilir; hiçbiri işlenmiyorsa henüz başlamamış ilk satıra gider.";
+    public static string TipUndoQuarantine = "Az önce karantinaya alınan dosyayı eski yerine geri koy.";
     public static string TipIncidentTimeline = "Diske gelen çalıştırılabilirleri varış gününe göre kümele.";
+
+    // ---- scan tab: Tor row + non-button tooltips ----
+    public static string TorToggleLabel = "Tor kullan";
+    public static string TorNewCircuitBtn = "🔀 Devre değiştir";
+    public static string TorChangingCircuit = "Yeni devre kuruluyor…";
+    public static string TorSearchedPathsPrefix = "Aranan yerler:\n";
+    public static string TipTorToggle = "VirusTotal trafiğini (hem API hem anahtarsız tarayıcı) Tor üzerinden geçirir. VirusTotal'in anahtarsız arayüzü GÜNLÜK olarak IP başına sınırlıdır; sınır dolunca her sorgu 429/reCAPTCHA döner. Tor'un çıkış düğümü farklı bir IP olduğu için bu sınır sıfırlanır. Açıldığında tarayıcı temiz bir profille yeniden kurulur (eski oturum çerezi eski IP'ye bağlıdır).";
+    public static string TipTorNewCircuit = "Tor'dan yeni bir devre, yani yeni bir çıkış IP'si ister. Yeni IP de engellenirse tekrar basabilirsin. Sadece Tor açıkken çalışır; hata alındığında program bunu zaten kendiliğinden yapar.";
+    public static string TipTorStatus = "Tor'un durumu ve şu anki çıkış düğümünün IP adresi ile ülkesi. 'Kapalı' iken bağlantı doğrudan senin IP'nden gider.";
+    public static string TipSearchBox = "Dosya adı veya tam yol içinde canlı arama yapar (Ctrl+F). Esc temizler. Arama, seçili verdikt filtresiyle birlikte çalışır.";
+    public static string TipFilterCount = "Filtre açıkken: listede görünen satır sayısı / toplam satır sayısı.";
+    public static string TipQueueGrid = "Tarama kuyruğu. Satıra çift tıklamak dosyayı Gezgin'de açar, Enter VirusTotal sayfasını açar, sağ tık tüm işlemleri getirir. J/K tuşları tehditler arasında, Shift+J/K hatalar arasında gezinir.";
+    public static string TipSummaryLine = "Toplam/biten sayılar, verdikt dağılımı, saniyedeki dosya hızı ve tahmini kalan süre.";
+    public static string TipRecallBar = "Bu dosya (veya bu yol) daha önce tarandıysa: ne zaman, hangi sonuçla. Yoldaki içerik değiştiyse sarı uyarı çıkar.";
+    public static string TipUndoBar = "Son karantina işlemini geri almak için kısa süre açık kalan şerit.";
+    public static string TipChipAll = "Filtreyi kaldır: bütün satırlar. Parantezdeki sayı toplam satır sayısıdır.";
+    public static string TipChipClean = "Sadece hiçbir motorun bir şey bulmadığı dosyalar.";
+    public static string TipChipSuspicious = "Sadece az sayıda motorun işaretlediği, sınırda kalan dosyalar.";
+    public static string TipChipMalicious = "Sadece zararlı sayılan dosyalar — önce buraya bak.";
+    public static string TipChipSkipped = "VirusTotal'e hiç sorulmayanlar: güvenilir imzalı, bilinen temiz listesinde olan, boyut/uzantı elemesine takılan veya iptal edilen satırlar.";
+    public static string TipChipError = "Sorgunun sonuçlanamadığı satırlar (kota, ağ hatası, analiz zaman aşımı). 'Hatalıları yeniden tara' ile toplu tekrar denenir.";
+    public static string CacheBackupPickFolderDescription = "Önbellek yedeklerinin yazılacağı klasörü seç";
+    public static string CmdBackupCacheName = "Önbelleği yedekle";
+    public static string CmdBackupCacheDesc = "cache.json'un tarih damgalı bir kopyasını al";
     public static string TipAllCommands = "Tüm özelliklere tek yerden ulaş (kopya bul, autostart kancaları, aile kümeleri…).";
     public static string TipPause = "Devam eden taramayı duraklat / sürdür.";
     public static string TipCancel = "Devam eden taramayı iptal et.";
@@ -802,8 +829,6 @@ internal static class Strings
     public static string CmdExportReportDesc = "Sonuçları HTML/CSV/JSON/metin rapora yaz";
     public static string CmdExportCsvName = "Dışa aktar (CSV)";
     public static string CmdExportCsvDesc = "Sonuçları CSV olarak kaydet";
-    public static string CmdClearCacheName = "Önbelleği temizle";
-    public static string CmdClearCacheDesc = "Yerel hash önbelleğini sil";
     public static string CmdFindCopiesName = "Diğer kopyaları bul (disk)";
     public static string CmdFindCopiesDesc = "Seçili dosyanın birebir kopyalarını diskte ara";
     public static string CmdHuntPersistenceName = "Autostart kancalarını bul";
@@ -1267,7 +1292,6 @@ internal static class Strings
     public static string GateQuarantineQuestion = "Bu dosya karantinaya alınsın mı? (çalıştırılamasın diye uzantısı .VIRUS yapılır)";
     public static string GateContextMenuInstallTitle = "Sağ tuş menüsü kurulumu";
     public static string GateContextMenuInstallQuestion = "Sağ tuş menüsüne 'VirusTotal ile tara' eklensin mi? (yönetici gerekebilir)";
-    public static string GateClearCacheQuestion = "Yerel tarama önbelleği (cache.json) temizlensin mi?";
     public static string GateDeleteKeyTitle = "Anahtar sil";
     public static string GateDeleteKeyQuestion = "Bu API anahtarı silinsin mi?";
     public static string ConfirmDontAskAgain = "Bir daha sorma";

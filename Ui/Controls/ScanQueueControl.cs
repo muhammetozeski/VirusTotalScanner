@@ -44,6 +44,20 @@ internal sealed class ScanQueueControl : UserControl
     readonly Panel _recallBar = new() { Dock = DockStyle.Top, Height = 30, Visible = false, Padding = new Padding(10, 4, 4, 4) };
     readonly Label _recallLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
 
+    // ---- Tor row (lives on the right of the "Diğer tarama yolları" drawer header) ----
+    readonly CheckBox _torToggle = new() { Text = Strings.TorToggleLabel, AutoSize = true, Margin = new Padding(4, 6, 6, 2) };
+    readonly Button _torCircuitBtn = new()
+    {
+        Text = Strings.TorNewCircuitBtn,
+        AutoSize = true,
+        FlatStyle = FlatStyle.Flat,
+        Margin = new Padding(2, 2, 6, 2),
+        Padding = new Padding(6, 1, 6, 1),
+        Cursor = Cursors.Hand,
+    };
+    readonly Label _torStatus = new() { AutoSize = true, Margin = new Padding(2, 6, 4, 2), Tag = "subtle" };
+    bool _torUiSyncing; // guards the toggle's CheckedChanged while code (not the user) sets it
+
     // ---- quarantine undo bar ----
     readonly Panel _undoBar = new() { Dock = DockStyle.Top, Height = 32, Visible = false, Padding = new Padding(10, 4, 4, 4) };
     readonly Label _undoLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
@@ -75,6 +89,7 @@ internal sealed class ScanQueueControl : UserControl
         _cancelBtn = ThemeManager.MakeButton(Strings.BtnCancel, (_, _) => _scheduler.Cancel());
         bar.Controls.Add(_pauseBtn);
         bar.Controls.Add(_cancelBtn);
+        bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnJumpToCurrent, (_, _) => JumpToCurrent()));
         bar.Controls.Add(ThemeManager.MakeLabel(Strings.DropHint, subtle: true));
 
         var moreScans = new DrawerPanel("scan", Strings.DrawerMoreScans);
@@ -82,6 +97,7 @@ internal sealed class ScanQueueControl : UserControl
         moreScans.Add(ThemeManager.MakeButton(Strings.BtnVerifyHash, (_, _) => _ = VerifyHashAsync()));
         moreScans.Add(ThemeManager.MakeButton(Strings.BtnScanRunning, (_, _) => ScanRunning()));
         moreScans.Add(ThemeManager.MakeButton(Strings.BtnIntegrityCheck, (_, _) => _ = VerifyBaselineAsync()));
+        BuildTorRow(moreScans);
 
         var reports = new DrawerPanel("reports", Strings.DrawerReports);
         reports.Add(ThemeManager.MakeButton(Strings.BtnExportCsv, (_, _) => ExportCsv()));
@@ -94,7 +110,7 @@ internal sealed class ScanQueueControl : UserControl
         tools.Add(ThemeManager.MakeButton(Strings.BtnIncidentTimeline, (_, _) => { using var d = new IncidentTimelineDialog(); d.ShowDialog(FindForm()); }));
         tools.Add(ThemeManager.MakeButton(Strings.BtnFamilyClusters, (_, _) => { using var d = new FamilyClusterDialog(FamilyClusterService.Build(AppServices.Cache)); d.ShowDialog(FindForm()); }));
         tools.Add(ThemeManager.MakeButton(Strings.BtnRecheck, (_, _) => _ = RunRecheckAsync()));
-        tools.Add(ThemeManager.MakeButton(Strings.BtnClearCache, (_, _) => ClearCache()));
+        tools.Add(ThemeManager.MakeButton(Strings.BtnBackupCache, (_, _) => BackupCacheNow()));
         tools.Add(ThemeManager.MakeButton(Strings.BtnAllCommands, (_, _) => OpenPalette()));
         tools.Add(ThemeManager.MakeButton(Strings.BtnHelp, (_, _) => { using var d = new HelpDialog(); d.ShowDialog(FindForm()); }));
 
@@ -175,6 +191,7 @@ internal sealed class ScanQueueControl : UserControl
         };
         AppServices.Rotator.OnAllExhausted += t => SafeUi(() => OnAllKeysExhausted(t));
         AppServices.Rotator.OnResumed += () => SafeUi(() => _exhaustPromptShown = false);
+        AttachStaticTooltips();
 
         // Repaint live progress, but do NOT re-sort here. Re-sorting the whole view 4×/sec while verdicts
         // streamed in was what made a sorted list "go crazy" during a scan (rows jumping, selection/scroll
@@ -452,16 +469,45 @@ internal sealed class ScanQueueControl : UserControl
             [Strings.BtnFamilyClusters] = Strings.TipFamilyClusters,
             [Strings.BtnQuarantineVault] = Strings.TipQuarantineVault,
             [Strings.BtnRecheck] = Strings.TipRecheck,
-            [Strings.BtnClearCache] = Strings.TipClearCache,
+            [Strings.BtnBackupCache] = Strings.TipBackupCache,
             [Strings.BtnIncidentTimeline] = Strings.TipIncidentTimeline,
             [Strings.BtnDownloadsTriage] = Strings.TipDownloadsTriage,
             [Strings.BtnHelp] = Strings.TipHelp,
             [Strings.BtnAllCommands] = Strings.TipAllCommands,
             [Strings.BtnPause] = Strings.TipPause,
             [Strings.BtnCancel] = Strings.TipCancel,
+            [Strings.BtnJumpToCurrent] = Strings.TipJumpToCurrent,
+            [Strings.BtnUndo] = Strings.TipUndoQuarantine,
         };
-        foreach (Control c in bar.Controls)
-            if (c is Button b && tips.TryGetValue(b.Text, out var tip)) _tips.SetToolTip(b, tip);
+        // Walk the whole subtree: the drawers nest their buttons a couple of panels deep, and every
+        // one of them must carry its explanation — a bare verb on a button teaches nothing.
+        void Walk(Control c)
+        {
+            foreach (Control child in c.Controls)
+            {
+                if (child is Button b && tips.TryGetValue(b.Text, out var tip)) _tips.SetToolTip(b, tip);
+                Walk(child);
+            }
+        }
+        Walk(bar);
+    }
+
+    /// <summary>Hover help for the parts of the scan tab that are not action-bar buttons: the search
+    /// box, the verdict chips, the grid, the detail pane and the progress bar.</summary>
+    void AttachStaticTooltips()
+    {
+        _tips.SetToolTip(_search, Strings.TipSearchBox);
+        _tips.SetToolTip(_filterCount, Strings.TipFilterCount);
+        _tips.SetToolTip(_grid, Strings.TipQueueGrid);
+        _tips.SetToolTip(_summary, Strings.TipSummaryLine);
+        _tips.SetToolTip(_recallLabel, Strings.TipRecallBar);
+        _tips.SetToolTip(_undoLabel, Strings.TipUndoBar);
+        if (_chips.TryGetValue(Bucket.All, out var cAll)) _tips.SetToolTip(cAll, Strings.TipChipAll);
+        if (_chips.TryGetValue(Bucket.Clean, out var cClean)) _tips.SetToolTip(cClean, Strings.TipChipClean);
+        if (_chips.TryGetValue(Bucket.Suspicious, out var cSusp)) _tips.SetToolTip(cSusp, Strings.TipChipSuspicious);
+        if (_chips.TryGetValue(Bucket.Malicious, out var cMal)) _tips.SetToolTip(cMal, Strings.TipChipMalicious);
+        if (_chips.TryGetValue(Bucket.Skipped, out var cSkip)) _tips.SetToolTip(cSkip, Strings.TipChipSkipped);
+        if (_chips.TryGetValue(Bucket.Error, out var cErr)) _tips.SetToolTip(cErr, Strings.TipChipError);
     }
 
     // ---- "have I scanned this before?" recall bar ----
@@ -1215,13 +1261,151 @@ internal sealed class ScanQueueControl : UserControl
         catch (Exception ex) { NativeMessageBox.Error(Strings.ReportWriteErrorPrefix + ex.Message); }
     }
 
-    void ClearCache()
+    /// <summary>Takes one timestamped copy of the hash cache right now. There is deliberately no
+    /// "clear the cache" action anywhere in the app: every entry in it cost VirusTotal quota that
+    /// cannot be bought back, and re-scanning a whole disk to rebuild it is not a real option.</summary>
+    void BackupCacheNow()
     {
-        if (NativeMessageBox.Confirm(string.Format(Strings.CacheClearConfirmFormat, AppServices.Cache.Count)))
+        if (string.IsNullOrWhiteSpace(Settings.CacheBackupFolder.Value))
         {
-            AppServices.Cache.Clear();
-            NativeMessageBox.Info(Strings.CacheClearedInfo);
+            using var dlg = new FolderBrowserDialog { Description = Strings.CacheBackupPickFolderDescription };
+            if (dlg.ShowDialog(FindForm()) != DialogResult.OK || string.IsNullOrEmpty(dlg.SelectedPath)) return;
+            Settings.CacheBackupFolder.Value = dlg.SelectedPath;
+            SettingsManager.SaveSettings();
+            CacheBackupService.Reschedule();
         }
+
+        if (CacheBackupService.BackupNow(out string path, out string err))
+            NativeMessageBox.Info(string.Format(Strings.CacheBackupDoneFormat, path) + (err.Length > 0 ? "\n" + err : ""));
+        else
+            NativeMessageBox.Error(string.Format(Strings.CacheBackupFailedFormat, err));
+    }
+
+    // ---- Tor row ----
+
+    /// <summary>Builds the Tor controls that live on the right-hand side of the "Diğer tarama yolları"
+    /// header: the on/off toggle, a manual circuit change, and the live exit address + country. The
+    /// keyless VirusTotal path is limited per source IP, so this row is what unblocks a big scan.</summary>
+    void BuildTorRow(DrawerPanel drawer)
+    {
+        _torToggle.Checked = Settings.UseTor;
+        _torToggle.CheckedChanged += (_, _) =>
+        {
+            if (_torUiSyncing) return;
+            _ = ToggleTorAsync(_torToggle.Checked);
+        };
+        _torCircuitBtn.FlatAppearance.BorderSize = 1;
+        _torCircuitBtn.Click += (_, _) => _ = ChangeCircuitAsync();
+
+        drawer.AddHeaderExtra(_torToggle);
+        drawer.AddHeaderExtra(_torCircuitBtn);
+        drawer.AddHeaderExtra(_torStatus);
+
+        _tips.SetToolTip(_torToggle, Strings.TipTorToggle);
+        _tips.SetToolTip(_torCircuitBtn, Strings.TipTorNewCircuit);
+        _tips.SetToolTip(_torStatus, Strings.TipTorStatus);
+
+        TorService.StateChanged += () => SafeUi(RefreshTorRow);
+        NetworkBlockMonitor.TorAutoEnabled += () => SafeUi(RefreshTorRow);
+        NetworkBlockMonitor.CircuitAutoChanged += () => SafeUi(RefreshTorRow);
+        RefreshTorRow();
+    }
+
+    async Task ToggleTorAsync(bool on)
+    {
+        _torToggle.Enabled = false;
+        try
+        {
+            bool ok;
+            if (on)
+            {
+                ok = await TorService.EnableAsync();
+                if (!ok)
+                {
+                    NativeMessageBox.Error(string.Format(Strings.TorAutoEnableFailedFormat, TorService.LastError ?? "?")
+                        + "\n\n" + Strings.TorSearchedPathsPrefix + string.Join("\n", TorService.SearchedPaths().Take(6)));
+                }
+            }
+            else { TorService.Disable(); ok = true; }
+
+            Settings.UseTor.Value = TorService.IsActive;
+            SettingsManager.SaveSettings();
+            VtHttpClientFactory.Invalidate();
+            GuiScrapeService.InvalidateSession(on ? "tor on" : "tor off");
+            UiStatusHub.Report(Strings.StatusSourceTor, TorService.StatusLine(), ok ? StatusSeverity.Info : StatusSeverity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Log("Tor toggle failed: " + ex, LogLevel.Error);
+            NativeMessageBox.Error(string.Format(Strings.TorAutoEnableFailedFormat, ex.Message));
+        }
+        finally { _torToggle.Enabled = true; RefreshTorRow(); }
+    }
+
+    async Task ChangeCircuitAsync()
+    {
+        _torCircuitBtn.Enabled = false;
+        try
+        {
+            _torStatus.Text = Strings.TorChangingCircuit;
+            bool ok = await TorService.NewCircuitAsync();
+            if (ok) GuiScrapeService.InvalidateSession("manual circuit change");
+            else NativeMessageBox.Error(string.Format(Strings.TorCircuitFailedFormat, TorService.LastError ?? "?"));
+            UiStatusHub.Report(Strings.StatusSourceTor, TorService.StatusLine(), ok ? StatusSeverity.Info : StatusSeverity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Log("Manual circuit change failed: " + ex, LogLevel.Error);
+            NativeMessageBox.Error(string.Format(Strings.TorCircuitFailedFormat, ex.Message));
+        }
+        finally { _torCircuitBtn.Enabled = TorService.IsActive; RefreshTorRow(); }
+    }
+
+    void RefreshTorRow()
+    {
+        _torUiSyncing = true;
+        try
+        {
+            _torToggle.Checked = TorService.IsActive;
+            _torCircuitBtn.Enabled = TorService.IsActive && !TorService.IsBusy;
+            _torStatus.Text = TorService.StatusLine();
+            _torStatus.ForeColor = TorService.IsActive ? Theme.Current.Success
+                : TorService.IsBusy ? Theme.Current.Warning : Theme.Current.SubtleText;
+        }
+        catch (Exception ex) { Log("Tor row refresh failed: " + ex.Message, LogLevel.Warning); }
+        finally { _torUiSyncing = false; }
+    }
+
+    /// <summary>Selects and scrolls to the row VirusTotal is working on right now. With several
+    /// workers running there can be more than one in flight; the topmost is the front of the queue.
+    /// Falls back to the first not-yet-started row when nothing is in flight.</summary>
+    void JumpToCurrent()
+    {
+        try
+        {
+            var target = FirstMatchingRow(i => i.Status is ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)
+                      ?? FirstMatchingRow(i => i.Status == ScanStatus.Queued);
+            if (target == null) { _summary.Text = Strings.JumpNothingRunning; return; }
+
+            _grid.ClearSelection();
+            target.Selected = true;
+            _grid.CurrentCell = target.Cells[Math.Min(1, target.Cells.Count - 1)];
+            int first = Math.Max(0, target.Index - Math.Max(0, _grid.DisplayedRowCount(false) / 2));
+            _grid.FirstDisplayedScrollingRowIndex = Math.Min(first, Math.Max(0, _grid.Rows.Count - 1));
+            _grid.Focus();
+        }
+        catch (Exception ex)
+        {
+            Log("Jump to the current row failed: " + ex.Message, LogLevel.Warning);
+            _summary.Text = Strings.JumpFailed;
+        }
+    }
+
+    DataGridViewRow? FirstMatchingRow(Func<ScanItem, bool> match)
+    {
+        foreach (DataGridViewRow row in _grid.Rows)
+            if (row.DataBoundItem is ScanItem it && match(it)) return row;
+        return null;
     }
 
     // ---- event sinks ----
@@ -1487,7 +1671,7 @@ internal sealed class ScanQueueControl : UserControl
         new() { Name = Strings.CmdFolderRollupName, Desc = Strings.CmdFolderRollupDesc, Run = ShowFolderRollup },
         new() { Name = Strings.CmdExportReportName, Desc = Strings.CmdExportReportDesc, Run = ExportReport },
         new() { Name = Strings.CmdExportCsvName, Desc = Strings.CmdExportCsvDesc, Run = ExportCsv },
-        new() { Name = Strings.CmdClearCacheName, Desc = Strings.CmdClearCacheDesc, Run = ClearCache },
+        new() { Name = Strings.CmdBackupCacheName, Desc = Strings.CmdBackupCacheDesc, Run = BackupCacheNow },
         new() { Name = Strings.CmdFindCopiesName, Desc = Strings.CmdFindCopiesDesc, Run = () => _ = FindCopiesAsync() },
         new() { Name = Strings.CmdHuntPersistenceName, Desc = Strings.CmdHuntPersistenceDesc, Run = HuntPersistence },
         new() { Name = Strings.CmdNeighborsName, Desc = Strings.CmdNeighborsDesc, Run = ShowNeighbors },

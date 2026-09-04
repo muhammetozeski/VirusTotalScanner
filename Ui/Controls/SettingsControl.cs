@@ -51,6 +51,8 @@ internal sealed class SettingsControl : UserControl
         _flow.Controls.Add(BuildVerdictCard());
         _flow.Controls.Add(BuildAutoActionCard());
         _flow.Controls.Add(BuildScanCard());
+        _flow.Controls.Add(BuildTorCard());
+        _flow.Controls.Add(BuildCacheBackupCard());
         _flow.Controls.Add(BuildSweepCard());
         _flow.Controls.Add(BuildGeneralCard());
         _flow.Controls.Add(BuildConfirmGatesCard());
@@ -463,6 +465,212 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(uploads);
         body.Controls.Add(concurrency);
         return card;
+    }
+
+    readonly Label _torCardStatus = new() { AutoSize = true, AccessibleName = TooltipCatalog.TorStatusLabel };
+
+    /// <summary>The Tor card: what makes a whole-disk scan finish instead of stalling on "this IP has
+    /// asked enough for today". The scan tab carries the same toggle in its header; this card adds the
+    /// binary path, the automatic behaviour and a connection test.</summary>
+    Panel BuildTorCard()
+    {
+        var card = Card(Strings.CardTor, out var body);
+
+        var use = new CheckBox { Text = Strings.TorToggleLabel, AutoSize = true, Checked = Settings.UseTor };
+        var circuit = ThemeManager.MakeButton(Strings.TorNewCircuitBtn, null);
+        circuit.Enabled = TorService.IsActive;
+
+        use.CheckedChanged += async (_, _) =>
+        {
+            use.Enabled = false;
+            try
+            {
+                bool ok = true;
+                if (use.Checked) ok = await TorService.EnableAsync();
+                else TorService.Disable();
+                if (!ok) NativeMessageBox.Error(string.Format(Strings.TorAutoEnableFailedFormat, TorService.LastError ?? "?")
+                    + "\n\n" + Strings.TorSearchedPathsPrefix + string.Join("\n", TorService.SearchedPaths().Take(6)));
+                Settings.UseTor.Value = TorService.IsActive;
+                SettingsManager.SaveSettings();
+                VtHttpClientFactory.Invalidate();
+                GuiScrapeService.InvalidateSession("settings toggle");
+            }
+            catch (Exception ex) { Log("Tor settings toggle failed: " + ex, LogLevel.Error); NativeMessageBox.Error(ex.Message); }
+            finally { use.Enabled = true; use.Checked = TorService.IsActive; circuit.Enabled = TorService.IsActive; RefreshTorCard(); }
+        };
+        circuit.Click += async (_, _) =>
+        {
+            circuit.Enabled = false;
+            try
+            {
+                if (!await TorService.NewCircuitAsync()) NativeMessageBox.Error(string.Format(Strings.TorCircuitFailedFormat, TorService.LastError ?? "?"));
+                else GuiScrapeService.InvalidateSession("settings circuit change");
+            }
+            catch (Exception ex) { Log("Settings circuit change failed: " + ex, LogLevel.Error); NativeMessageBox.Error(ex.Message); }
+            finally { circuit.Enabled = TorService.IsActive; RefreshTorCard(); }
+        };
+
+        var autoEnable = new CheckBox { Text = Strings.TorAutoEnableLabel, AutoSize = true, Checked = Settings.TorAutoEnable };
+        autoEnable.CheckedChanged += (_, _) => { Settings.TorAutoEnable.Value = autoEnable.Checked; SettingsManager.SaveSettings(); };
+
+        var afterRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+        afterRow.Controls.Add(new Label { Text = Strings.TorAutoEnableAfterLabel, AutoSize = true, Margin = new Padding(20, 6, 6, 0) });
+        var afterNum = TooltipCatalog.Name(new NumericUpDown { Minimum = 1, Maximum = 100, Value = Math.Clamp(Settings.TorAutoEnableAfter.Value, 1, 100), Width = 60 }, TooltipCatalog.TorThresholdNum);
+        afterNum.ValueChanged += (_, _) => { Settings.TorAutoEnableAfter.Value = (int)afterNum.Value; SettingsManager.SaveSettings(); };
+        afterRow.Controls.Add(afterNum);
+
+        var onError = new CheckBox { Text = Strings.TorNewCircuitOnErrorLabel, AutoSize = true, Checked = Settings.TorNewCircuitOnError };
+        onError.CheckedChanged += (_, _) => { Settings.TorNewCircuitOnError.Value = onError.Checked; SettingsManager.SaveSettings(); };
+
+        var autoClick = new CheckBox { Text = Strings.CaptchaAutoClickLabel, AutoSize = true, Checked = Settings.CaptchaAutoClick };
+        autoClick.CheckedChanged += (_, _) => { Settings.CaptchaAutoClick.Value = autoClick.Checked; SettingsManager.SaveSettings(); };
+
+        var pathRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+        var pathBox = TooltipCatalog.Name(new TextBox { Width = 380, Text = Settings.TorExePath }, TooltipCatalog.TorPathBox);
+        pathBox.Leave += (_, _) => { Settings.TorExePath.Value = pathBox.Text.Trim(); SettingsManager.SaveSettings(); RefreshTorCard(); };
+        pathRow.Controls.Add(pathBox);
+        pathRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnTorFindExe, (_, _) =>
+        {
+            using var dlg = new OpenFileDialog { Filter = "tor.exe|tor.exe|*.exe|*.exe" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            pathBox.Text = dlg.FileName;
+            Settings.TorExePath.Value = dlg.FileName;
+            SettingsManager.SaveSettings();
+            RefreshTorCard();
+        }));
+        pathRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnTorTest, async (_, _) =>
+        {
+            try
+            {
+                if (!TorService.IsActive && !await TorService.EnableAsync())
+                {
+                    NativeMessageBox.Error(string.Format(Strings.TorAutoEnableFailedFormat, TorService.LastError ?? "?")
+                        + "\n\n" + Strings.TorSearchedPathsPrefix + string.Join("\n", TorService.SearchedPaths().Take(6)));
+                    return;
+                }
+                await TorService.RefreshExitInfoAsync();
+                NativeMessageBox.Info(string.Format(Strings.TorTestOkFormat, TorService.ExitIp ?? "?", TorService.ExitCountry ?? "?"));
+            }
+            catch (Exception ex) { Log("Tor test failed: " + ex, LogLevel.Error); NativeMessageBox.Error(ex.Message); }
+            finally { RefreshTorCard(); }
+        }));
+
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.TorCardHint, subtle: true));
+        body.Controls.Add(use);
+        body.Controls.Add(circuit);
+        body.Controls.Add(_torCardStatus);
+        body.Controls.Add(autoEnable);
+        body.Controls.Add(afterRow);
+        body.Controls.Add(onError);
+        body.Controls.Add(autoClick);
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.TorExePathLabel, subtle: true));
+        body.Controls.Add(pathRow);
+
+        TorService.StateChanged += () => SafeUi(RefreshTorCard);
+        RefreshTorCard();
+        return card;
+    }
+
+    void RefreshTorCard()
+    {
+        try
+        {
+            string found = TorService.FindTorExe() is { } exe
+                ? string.Format(Strings.TorFoundAtFormat, exe)
+                : Strings.TorNotFoundHint;
+            _torCardStatus.Text = TorService.StatusLine() + "\n" + found;
+            _torCardStatus.ForeColor = TorService.IsActive ? Theme.Current.Success : Theme.Current.SubtleText;
+        }
+        catch (Exception ex) { Log("Tor card refresh failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    readonly ListBox _cacheBackupList = new() { Height = 110, AccessibleName = TooltipCatalog.CacheBackupList, IntegralHeight = false };
+    readonly Label _cacheBackupStatus = new() { AutoSize = true };
+
+    /// <summary>The cache backup card. The app has no "clear cache" action on purpose — every entry in
+    /// cache.json is VirusTotal quota already spent — so this is the only cache-management surface.</summary>
+    Panel BuildCacheBackupCard()
+    {
+        var card = Card(Strings.CardCacheBackup, out var body);
+
+        var folderRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+        var folderBox = TooltipCatalog.Name(new TextBox { Width = 380, Text = Settings.CacheBackupFolder }, TooltipCatalog.CacheBackupFolderBox);
+        folderBox.Leave += (_, _) => { Settings.CacheBackupFolder.Value = folderBox.Text.Trim(); SettingsManager.SaveSettings(); CacheBackupService.Reschedule(); RefreshCacheBackups(); };
+        folderRow.Controls.Add(folderBox);
+        folderRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnPickFolder, (_, _) =>
+        {
+            using var dlg = new FolderBrowserDialog { Description = Strings.CacheBackupPickFolderDescription };
+            if (dlg.ShowDialog() != DialogResult.OK || string.IsNullOrEmpty(dlg.SelectedPath)) return;
+            folderBox.Text = dlg.SelectedPath;
+            Settings.CacheBackupFolder.Value = dlg.SelectedPath;
+            SettingsManager.SaveSettings();
+            CacheBackupService.Reschedule();
+            RefreshCacheBackups();
+        }));
+
+        var hoursRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+        hoursRow.Controls.Add(new Label { Text = Strings.CacheBackupHoursLabel, AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        var hoursNum = TooltipCatalog.Name(new NumericUpDown { Minimum = 0, Maximum = 720, Value = Math.Clamp(Settings.CacheBackupHours.Value, 0, 720), Width = 70 }, TooltipCatalog.CacheBackupHoursNum);
+        hoursNum.ValueChanged += (_, _) => { Settings.CacheBackupHours.Value = (int)hoursNum.Value; SettingsManager.SaveSettings(); CacheBackupService.Reschedule(); };
+        hoursRow.Controls.Add(hoursNum);
+        hoursRow.Controls.Add(new Label { Text = Strings.CacheBackupKeepLabel, AutoSize = true, Margin = new Padding(20, 6, 6, 0) });
+        var keepNum = TooltipCatalog.Name(new NumericUpDown { Minimum = 0, Maximum = 9999, Value = Math.Clamp(Settings.CacheBackupKeep.Value, 0, 9999), Width = 70 }, TooltipCatalog.CacheBackupKeepNum);
+        keepNum.ValueChanged += (_, _) => { Settings.CacheBackupKeep.Value = (int)keepNum.Value; SettingsManager.SaveSettings(); };
+        hoursRow.Controls.Add(keepNum);
+
+        var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Dock = DockStyle.Top };
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnBackupNow, (_, _) =>
+        {
+            if (CacheBackupService.BackupNow(out string path, out string err))
+                NativeMessageBox.Info(string.Format(Strings.CacheBackupDoneFormat, path) + (err.Length > 0 ? "\n" + err : ""));
+            else
+                NativeMessageBox.Error(string.Format(Strings.CacheBackupFailedFormat, err));
+            RefreshCacheBackups();
+        }, accent: true));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnRestoreBackup, (_, _) =>
+        {
+            if (_cacheBackupList.SelectedItem is not FileInfo fi) { UiFeedback.NeedSelection(Strings.BtnRestoreBackup); return; }
+            if (!NativeMessageBox.Confirm(string.Format(Strings.CacheRestoreConfirmFormat, fi.Name))) return;
+            if (CacheBackupService.Restore(fi.FullName, out string err)) NativeMessageBox.Info(string.Format(Strings.CacheRestoredFormat, AppServices.Cache.Count));
+            else NativeMessageBox.Error(Strings.CacheRestoreFailedPrefix + err);
+        }));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnOpenBackupFolder, (_, _) =>
+        {
+            string folder = (Settings.CacheBackupFolder.Value ?? "").Trim();
+            if (folder.Length == 0 || !Directory.Exists(folder)) { NativeMessageBox.Warn(Strings.CacheBackupNoFolder); return; }
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true }); }
+            catch (Exception ex) { Log("Opening the backup folder failed: " + ex.Message, LogLevel.Warning); NativeMessageBox.Error(ex.Message); }
+        }));
+
+        _cacheBackupList.Dock = DockStyle.Top;
+        _cacheBackupStatus.Tag = "subtle";
+
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.CacheBackupHint, subtle: true));
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.CacheBackupFolderLabel, subtle: true));
+        body.Controls.Add(folderRow);
+        body.Controls.Add(hoursRow);
+        body.Controls.Add(buttons);
+        body.Controls.Add(_cacheBackupStatus);
+        body.Controls.Add(_cacheBackupList);
+        RefreshCacheBackups();
+        return card;
+    }
+
+    void RefreshCacheBackups()
+    {
+        try
+        {
+            var files = CacheBackupService.Existing();
+            _cacheBackupList.BeginUpdate();
+            _cacheBackupList.Items.Clear();
+            foreach (var f in files) _cacheBackupList.Items.Add(f);
+            _cacheBackupList.DisplayMember = nameof(FileInfo.Name);
+            _cacheBackupList.EndUpdate();
+            _cacheBackupStatus.Text = files.Count == 0
+                ? Strings.CacheBackupNoneYet
+                : string.Format(Strings.CacheBackupCountFormat, files.Count, files[0].LastWriteTime.ToString("g"));
+        }
+        catch (Exception ex) { Log("Cache backup list refresh failed: " + ex.Message, LogLevel.Warning); }
     }
 
     static string SweepStatusText() =>

@@ -34,9 +34,6 @@ internal static class ConfirmGates
     public static readonly ConfirmGate ContextMenuInstall =
         new(Strings.GateContextMenuInstallTitle, Strings.GateContextMenuInstallQuestion);
 
-    public static readonly ConfirmGate ClearCache =
-        new(Strings.CmdClearCacheName, Strings.GateClearCacheQuestion);
-
     public static readonly ConfirmGate DeleteKey =
         new(Strings.GateDeleteKeyTitle, Strings.GateDeleteKeyQuestion);
 }

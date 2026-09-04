@@ -165,8 +165,8 @@ internal sealed class ScanOptions
     /// <summary>Expand ZIP-family archives and scan their members instead of the archive file.</summary>
     public bool ExpandArchives { get; set; }
     public bool UseCache { get; set; } = true;
-    public int CacheDays { get; set; } = 7;        // retention for clean verdicts
-    public int ThreatCacheDays { get; set; } = 365; // retention for malicious verdicts
+    public int CacheDays { get; set; }        // retention for clean verdicts (0 = never expires)
+    public int ThreatCacheDays { get; set; }  // retention for malicious verdicts (0 = never expires)
 
     /// <summary>Skip VT for trusted-signed / known-good files (the keyless quota saver).</summary>
     public bool SkipTrusted { get; set; } = true;

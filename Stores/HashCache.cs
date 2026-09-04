@@ -155,13 +155,6 @@ internal sealed class HashCache
         return set;
     }
 
-    public void Clear()
-    {
-        _entries.Clear();
-        _dirty = true;
-        Flush();
-    }
-
     public void MaybeSave()
     {
         if (!_dirty) return; // fast-path hint; the real throttle decision is made under the lock
