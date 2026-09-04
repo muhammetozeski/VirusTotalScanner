@@ -438,7 +438,10 @@ internal sealed class ScanDetailControl : UserControl
         var markClean = ThemeManager.MakeButton(Strings.MenuMarkClean, (_, _) => { if (_item != null) MarkCleanRequested?.Invoke(_item); });
         _actionStrip.Controls.Add(markClean);
         _actionStrip.Visible = true;
+        TooltipCatalog.Apply(_detailTips, _actionStrip);
     }
+
+    readonly ToolTip _detailTips = new() { AutoPopDelay = 32000, InitialDelay = 350, ReshowDelay = 100 };
 
     void RatioBar_Paint(object? sender, PaintEventArgs e)
     {

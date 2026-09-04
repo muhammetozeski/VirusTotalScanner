@@ -16,9 +16,10 @@ internal sealed class SettingsControl : UserControl
     }
 
     readonly FlowLayoutPanel _flow = new();
-    readonly TextBox _settingsSearch = new() { Dock = DockStyle.Top, Margin = new Padding(0), PlaceholderText = Strings.SettingsSearchPlaceholder };
-    readonly DataGridView _keysGrid = new();
-    readonly Label _menuStatus = new();
+    readonly TextBox _settingsSearch = new() { Dock = DockStyle.Top, Margin = new Padding(0), PlaceholderText = Strings.SettingsSearchPlaceholder, AccessibleName = TooltipCatalog.SettingsSearch };
+    readonly DataGridView _keysGrid = new() { AccessibleName = TooltipCatalog.KeysGrid };
+    readonly Label _menuStatus = new() { AccessibleName = TooltipCatalog.MenuStatus };
+    readonly ToolTip _tips = new() { AutoPopDelay = 32000, InitialDelay = 350, ReshowDelay = 100 };
 
     public SettingsControl()
     {
@@ -64,6 +65,7 @@ internal sealed class SettingsControl : UserControl
 
         RefreshKeys();
         RefreshMenuStatus();
+        TooltipCatalog.Apply(_tips, this);
     }
 
     /// <summary>All visible text within a card (title + every child control's Text), for the live filter.</summary>
@@ -154,7 +156,7 @@ internal sealed class SettingsControl : UserControl
         return card;
     }
 
-    readonly DataGridView _allowGrid = new();
+    readonly DataGridView _allowGrid = new() { AccessibleName = TooltipCatalog.AllowGrid };
 
     Panel BuildAllowlistCard()
     {
@@ -209,7 +211,7 @@ internal sealed class SettingsControl : UserControl
 
     void RefreshAllowlist() => _allowGrid.DataSource = AllowlistStore.All().ToList();
 
-    readonly DataGridView _folderGrid = new();
+    readonly DataGridView _folderGrid = new() { AccessibleName = TooltipCatalog.FolderGrid };
 
     Panel BuildFolderSuppressionCard()
     {
@@ -251,7 +253,7 @@ internal sealed class SettingsControl : UserControl
 
     sealed class WatchFolderRow { public string Folder { get; set; } = ""; } // grid binding needs a property
 
-    readonly DataGridView _watchGrid = new EntityGridView();
+    readonly DataGridView _watchGrid = new EntityGridView { AccessibleName = TooltipCatalog.WatchGrid };
 
     Panel BuildWatchFoldersCard()
     {
@@ -317,11 +319,11 @@ internal sealed class SettingsControl : UserControl
         msOnly.CheckedChanged += (_, _) => { Settings.TrustMicrosoftOnly.Value = msOnly.Checked; SettingsManager.SaveSettings(); };
 
         var allowLbl = ThemeManager.MakeLabel(Strings.TrustAllowLabel);
-        var allow = new TextBox { Dock = DockStyle.Top, Text = Settings.TrustPublisherAllowList };
+        var allow = TooltipCatalog.Name(new TextBox { Dock = DockStyle.Top, Text = Settings.TrustPublisherAllowList }, TooltipCatalog.TrustAllowBox);
         allow.Leave += (_, _) => { Settings.TrustPublisherAllowList.Value = allow.Text.Trim(); SettingsManager.SaveSettings(); };
 
         var dbRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
-        var dbBox = new TextBox { Width = 360, Text = Settings.KnownGoodHashDbPath, ReadOnly = true };
+        var dbBox = TooltipCatalog.Name(new TextBox { Width = 360, Text = Settings.KnownGoodHashDbPath, ReadOnly = true }, TooltipCatalog.KnownGoodBox);
         var pick = ThemeManager.MakeButton(Strings.TrustPickHashList, (_, _) =>
         {
             using var dlg = new OpenFileDialog { Filter = Strings.TrustHashFilter };
@@ -357,7 +359,7 @@ internal sealed class SettingsControl : UserControl
     {
         var card = Card(Strings.CardVerdictCats, out var body);
 
-        _catGrid = new DataGridView { Dock = DockStyle.Top, Height = 130, AutoGenerateColumns = false };
+        _catGrid = new DataGridView { Dock = DockStyle.Top, Height = 130, AutoGenerateColumns = false, AccessibleName = TooltipCatalog.CatGrid };
         _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColMinDetections, DataPropertyName = nameof(VerdictCategory.MinDetections), Width = 90 });
         _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColName, DataPropertyName = nameof(VerdictCategory.Name), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _catGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColColor, Width = 110, ReadOnly = true });
@@ -393,7 +395,7 @@ internal sealed class SettingsControl : UserControl
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnSave, (_, _) => { VerdictCategories.Save(_catRows!); RefreshCats(); Theme.ApplyFromSettings(); NativeMessageBox.Info(Strings.CatsSaved); }));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDefault, (_, _) => { VerdictCategories.Save(VerdictCategories.Defaults()); RefreshCats(); Theme.ApplyFromSettings(); }));
 
-        var majorBox = new TextBox { Dock = DockStyle.Top, Text = Settings.MajorEnginesList };
+        var majorBox = TooltipCatalog.Name(new TextBox { Dock = DockStyle.Top, Text = Settings.MajorEnginesList }, TooltipCatalog.MajorEnginesBox);
         var majorSave = ThemeManager.MakeButton(Strings.BtnSaveMajorEngines, (_, _) =>
         {
             Settings.MajorEnginesList.Value = majorBox.Text.Trim();
@@ -425,7 +427,7 @@ internal sealed class SettingsControl : UserControl
     {
         var card = Card(Strings.CardAutoAction, out var body);
 
-        _aaGrid = new DataGridView { Dock = DockStyle.Top, Height = 150, AutoGenerateColumns = false };
+        _aaGrid = new DataGridView { Dock = DockStyle.Top, Height = 150, AutoGenerateColumns = false, AccessibleName = TooltipCatalog.AutoActionGrid };
         _aaGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = Strings.ColBackgroundOnly, DataPropertyName = nameof(AutoActionRule.BackgroundOnly), Width = 105 });
         _aaGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColMinDetect, DataPropertyName = nameof(AutoActionRule.MinDetections), Width = 75 });
         _aaGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = Strings.ColFromInternet, DataPropertyName = nameof(AutoActionRule.RequireFromInternet), Width = 80 });
@@ -479,7 +481,7 @@ internal sealed class SettingsControl : UserControl
         skipSafe.CheckedChanged += (_, _) => { Settings.SkipSafeExtensionsOnScan.Value = skipSafe.Checked; SettingsManager.SaveSettings(); };
 
         var lbl = ThemeManager.MakeLabel(Strings.ScanSafeExtsLabel);
-        var exts = new TextBox { Dock = DockStyle.Top, Text = Settings.SafeExtensions, Height = 24 };
+        var exts = TooltipCatalog.Name(new TextBox { Dock = DockStyle.Top, Text = Settings.SafeExtensions, Height = 24 }, TooltipCatalog.SafeExtsBox);
         var save = ThemeManager.MakeButton(Strings.BtnSaveExts, (_, _) => { Settings.SafeExtensions.Value = exts.Text.Trim(); SettingsManager.SaveSettings(); });
 
         body.Controls.Add(exts);
@@ -711,8 +713,8 @@ internal sealed class SettingsControl : UserControl
     {
         var card = Card(Strings.CardSweep, out var body);
 
-        var status = ThemeManager.MakeLabel(SweepStatusText(), subtle: true);
-        var folderBox = new TextBox { Dock = DockStyle.Top, Text = Settings.SweepFolder };
+        var status = TooltipCatalog.Name(ThemeManager.MakeLabel(SweepStatusText(), subtle: true), TooltipCatalog.SweepStatus);
+        var folderBox = TooltipCatalog.Name(new TextBox { Dock = DockStyle.Top, Text = Settings.SweepFolder }, TooltipCatalog.SweepFolderBox);
         var pick = ThemeManager.MakeButton(Strings.BtnPickFolder, (_, _) =>
         {
             using var dlg = new FolderBrowserDialog { Description = Strings.SweepFolderDescription };
@@ -721,7 +723,7 @@ internal sealed class SettingsControl : UserControl
 
         var intervalRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         intervalRow.Controls.Add(ThemeManager.MakeLabel(Strings.SweepIntervalLabel));
-        var interval = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        var interval = TooltipCatalog.Name(new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 }, TooltipCatalog.SweepIntervalCombo);
         interval.Items.AddRange([Strings.SweepDaily, Strings.Sweep6h, Strings.Sweep12h, Strings.SweepWeekly]);
         interval.SelectedIndex = 0;
         intervalRow.Controls.Add(interval);
@@ -768,7 +770,7 @@ internal sealed class SettingsControl : UserControl
 
         var langRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         langRow.Controls.Add(ThemeManager.MakeLabel(Strings.SettingsLanguageLabel));
-        var langCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+        var langCombo = TooltipCatalog.Name(new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 }, TooltipCatalog.LanguageCombo);
         foreach (var (_, name) in LocManager.Available) langCombo.Items.Add(name);
         int curLang = Array.FindIndex(LocManager.Available, a => a.Code.Equals(Settings.Language.Value, StringComparison.OrdinalIgnoreCase));
         langCombo.SelectedIndex = curLang < 0 ? 0 : curLang;
@@ -786,7 +788,7 @@ internal sealed class SettingsControl : UserControl
 
         var themeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top };
         themeRow.Controls.Add(ThemeManager.MakeLabel(Strings.ThemeLabel));
-        var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+        var combo = TooltipCatalog.Name(new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 }, TooltipCatalog.ThemeCombo);
         combo.Items.AddRange([Strings.ThemeFollow, Strings.ThemeDark, Strings.ThemeLight]);
         combo.SelectedIndex = Settings.FollowWindowsTheme ? 0 : (string.Equals(Settings.Theme.Value, "Light", StringComparison.OrdinalIgnoreCase) ? 2 : 1);
         combo.SelectedIndexChanged += (_, _) =>
@@ -826,7 +828,7 @@ internal sealed class SettingsControl : UserControl
         autoQ.CheckedChanged += (_, _) => { Settings.AutoQuarantineWatchers.Value = autoQ.Checked; SettingsManager.SaveSettings(); };
         var autoQRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
         autoQRow.Controls.Add(new Label { Text = Strings.AutoQuarantineThresholdLabel, AutoSize = true, Margin = new Padding(20, 6, 6, 0) });
-        var autoQNum = new NumericUpDown { Minimum = 0, Maximum = 70, Value = Math.Max(0, Math.Min(70, Settings.AutoQuarantineThreshold.Value)), Width = 60 };
+        var autoQNum = TooltipCatalog.Name(new NumericUpDown { Minimum = 0, Maximum = 70, Value = Math.Max(0, Math.Min(70, Settings.AutoQuarantineThreshold.Value)), Width = 60 }, TooltipCatalog.AutoQuarantineNum);
         autoQNum.ValueChanged += (_, _) => { Settings.AutoQuarantineThreshold.Value = (int)autoQNum.Value; SettingsManager.SaveSettings(); };
         autoQRow.Controls.Add(autoQNum);
 
@@ -834,9 +836,9 @@ internal sealed class SettingsControl : UserControl
         mute.CheckedChanged += (_, _) => { Settings.MuteInFullscreen.Value = mute.Checked; SettingsManager.SaveSettings(); };
         var quietRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
         quietRow.Controls.Add(new Label { Text = Strings.QuietHoursLabel, AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
-        var qStart = new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursStart.Value)), Width = 55 };
+        var qStart = TooltipCatalog.Name(new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursStart.Value)), Width = 55 }, TooltipCatalog.QuietStartNum);
         qStart.ValueChanged += (_, _) => { Settings.QuietHoursStart.Value = (int)qStart.Value; SettingsManager.SaveSettings(); };
-        var qEnd = new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursEnd.Value)), Width = 55 };
+        var qEnd = TooltipCatalog.Name(new NumericUpDown { Minimum = 0, Maximum = 23, Value = Math.Max(0, Math.Min(23, Settings.QuietHoursEnd.Value)), Width = 55 }, TooltipCatalog.QuietEndNum);
         qEnd.ValueChanged += (_, _) => { Settings.QuietHoursEnd.Value = (int)qEnd.Value; SettingsManager.SaveSettings(); };
         quietRow.Controls.Add(qStart);
         quietRow.Controls.Add(new Label { Text = Strings.QuietHoursSeparator, AutoSize = true, Margin = new Padding(4, 6, 4, 0) });
@@ -844,13 +846,13 @@ internal sealed class SettingsControl : UserControl
 
         var retRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
         retRow.Controls.Add(new Label { Text = Strings.QuarantineRetentionLabel, AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
-        var retNum = new NumericUpDown { Minimum = 0, Maximum = 3650, Value = Math.Max(0, Math.Min(3650, Settings.QuarantineRetentionDays.Value)), Width = 70 };
+        var retNum = TooltipCatalog.Name(new NumericUpDown { Minimum = 0, Maximum = 3650, Value = Math.Max(0, Math.Min(3650, Settings.QuarantineRetentionDays.Value)), Width = 70 }, TooltipCatalog.RetentionNum);
         retNum.ValueChanged += (_, _) => { Settings.QuarantineRetentionDays.Value = (int)retNum.Value; SettingsManager.SaveSettings(); };
         retRow.Controls.Add(retNum);
 
         var perRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
         perRow.Controls.Add(new Label { Text = Strings.PeriodicRecheckLabel, AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
-        var perNum = new NumericUpDown { Minimum = 0, Maximum = 168, Value = Math.Max(0, Math.Min(168, Settings.PeriodicRecheckHours.Value)), Width = 70 };
+        var perNum = TooltipCatalog.Name(new NumericUpDown { Minimum = 0, Maximum = 168, Value = Math.Max(0, Math.Min(168, Settings.PeriodicRecheckHours.Value)), Width = 70 }, TooltipCatalog.PeriodicNum);
         perNum.ValueChanged += (_, _) => { Settings.PeriodicRecheckHours.Value = (int)perNum.Value; SettingsManager.SaveSettings(); };
         perRow.Controls.Add(perNum);
 
@@ -1066,7 +1068,9 @@ internal sealed class SettingsControl : UserControl
     {
         var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
         row.Controls.Add(ThemeManager.MakeLabel(label));
-        var nud = new NumericUpDown { Minimum = min, Maximum = max, Value = Math.Clamp(value, min, max), Width = 70 };
+        // The spinner carries no caption of its own, so it borrows the label's text as its tooltip key —
+        // hovering the number explains the setting just like hovering the words does.
+        var nud = new NumericUpDown { Minimum = min, Maximum = max, Value = Math.Clamp(value, min, max), Width = 70, AccessibleName = label };
         nud.ValueChanged += (_, _) => onChange((int)nud.Value);
         row.Controls.Add(nud);
         return row;

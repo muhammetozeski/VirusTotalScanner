@@ -5,8 +5,9 @@ namespace VirusTotalScanner;
 /// <summary>"Loglar" tab: live log stream + on/off toggle, clear, copy-all, open folder.</summary>
 internal sealed class LogViewerControl : UserControl
 {
-    readonly RichTextBox _box = new();
+    readonly RichTextBox _box = new() { AccessibleName = TooltipCatalog.LogBox };
     readonly CheckBox _enable = new();
+    readonly ToolTip _tips = new() { AutoPopDelay = 32000, InitialDelay = 350, ReshowDelay = 100 };
     int _lines;
     const int MaxLines = 3000;
 
@@ -39,6 +40,7 @@ internal sealed class LogViewerControl : UserControl
 
         Controls.Add(_box);
         Controls.Add(bar);
+        TooltipCatalog.Apply(_tips, this);
 
         LoggerHost.OnLogLine += OnLogLine;
     }

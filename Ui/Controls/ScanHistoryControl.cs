@@ -7,8 +7,9 @@ namespace VirusTotalScanner;
 /// offers rescan / open-location / copy-hash / open-VT.</summary>
 internal sealed class ScanHistoryControl : UserControl
 {
-    readonly DataGridView _grid = new EntityGridView();
-    readonly TextBox _search = new() { Width = 220 };
+    readonly DataGridView _grid = new EntityGridView { AccessibleName = TooltipCatalog.HistoryGrid };
+    readonly TextBox _search = new() { Width = 220, AccessibleName = TooltipCatalog.HistorySearch };
+    readonly ToolTip _tips = new() { AutoPopDelay = 32000, InitialDelay = 350, ReshowDelay = 100 };
     string _categoryFilter = ""; // "", "threat", "suspicious", "clean" — set by an overview tile drill-down
     readonly Panel _escBanner = new() { Dock = DockStyle.Fill, Visible = false, Cursor = Cursors.Hand, Padding = new Padding(12, 6, 12, 6) };
     readonly Label _escLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
@@ -104,6 +105,12 @@ internal sealed class ScanHistoryControl : UserControl
         root.Controls.Add(_escBanner, 0, 1);
         root.Controls.Add(_grid, 0, 2);
         Controls.Add(root);
+
+        _tips.SetToolTip(_threatsOnly, Strings.TtHistoryThreatsOnly);
+        _tips.SetToolTip(_starredOnly, Strings.TtHistoryStarredOnly);
+        _tips.SetToolTip(_count, Strings.TtHistoryCount);
+        _tips.SetToolTip(_escLabel, Strings.TtHistoryEscBanner);
+        TooltipCatalog.Apply(_tips, this);
 
         ScanHistoryStore.Changed += OnStoreChanged;
         EscalationStore.Changed += OnEscChanged;

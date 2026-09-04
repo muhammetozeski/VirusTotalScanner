@@ -35,6 +35,7 @@ internal sealed class ScanOverviewControl : UserControl
     /// <summary>The user turned on download-watching from the coverage card — the host (re)starts the watcher.</summary>
     public event Action? WatchDownloadsToggled;
 
+    readonly ToolTip _tips = new() { AutoPopDelay = 32000, InitialDelay = 350, ReshowDelay = 100 };
     readonly FlowLayoutPanel _coverageRows = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0) };
     Control? _onboardCard;
     readonly FlowLayoutPanel _onboardRows = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0) };
@@ -69,6 +70,16 @@ internal sealed class ScanOverviewControl : UserControl
 
         DragEnter += (_, e) => { if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true) e.Effect = DragDropEffects.Copy; };
         DragDrop += OnDrop;
+
+        _tips.SetToolTip(_attentionLabel, Strings.TtOverviewAttention);
+        _tips.SetToolTip(_statusLabel, Strings.TtOverviewStatus);
+        _tips.SetToolTip(_quota, Strings.TtOverviewQuota);
+        _tips.SetToolTip(_tehditNum, Strings.TtOverviewTileThreat);
+        _tips.SetToolTip(_supheliNum, Strings.TtOverviewTileSuspicious);
+        _tips.SetToolTip(_temizNum, Strings.TtOverviewTileClean);
+        _tips.SetToolTip(_recent, Strings.TtOverviewRecent);
+        _tips.SetToolTip(_drop, Strings.TtOverviewDrop);
+        TooltipCatalog.Apply(_tips, this);
 
         ScanHistoryStore.Changed += OnStoreChanged;
         // The banner honors the allowlist / folder suppression, so it must also refresh the moment
