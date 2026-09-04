@@ -99,11 +99,28 @@ internal sealed class KeyVault
         Save();
     }
 
-    /// <summary>Serialize + encrypt + write config, then raise Changed.</summary>
+    /// <summary>Serialize + encrypt + write config, mirror the keys to the plain-text backup file,
+    /// then raise Changed.</summary>
     public void Save()
     {
         PersistToConfig();
+        ExportPlaintext();
         try { Changed?.Invoke(); } catch (Exception ex) { Log("Vault Changed handler failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>Mirrors the current keys into the user's plain-text safety-net file. Never throws:
+    /// a failed backup must not stop a key from being saved.</summary>
+    public void ExportPlaintext()
+    {
+        try
+        {
+            List<string> keys;
+            lock (_lock) keys = _keys.Select(k => k.Key).Where(k => !string.IsNullOrWhiteSpace(k)).ToList();
+            if (keys.Count == 0) return; // nothing to add; the file's existing content stays untouched
+            if (!KeyPlaintextBackup.Export(keys, out string err) && err.Length > 0)
+                Log("API key plain-text backup could not be written: " + err, LogLevel.Warning);
+        }
+        catch (Exception ex) { Log("API key plain-text backup dispatch failed: " + ex.Message, LogLevel.Warning); }
     }
 
     /// <summary>Throttled counter persistence (called frequently during scans).</summary>

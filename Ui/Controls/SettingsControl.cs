@@ -101,9 +101,36 @@ internal sealed class SettingsControl : UserControl
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => RemoveKey()));
         var hint = ThemeManager.MakeLabel(Strings.KeysHint, subtle: true);
 
+        // Plain-text mirror of the keys: the encrypted vault is bound to this Windows account, so a
+        // reinstall makes it unreadable and the keys are gone unless they were written out somewhere.
+        var backupRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+        var backupBox = TooltipCatalog.Name(new TextBox { Width = 380, Text = Settings.KeyPlaintextBackupPath }, TooltipCatalog.KeyBackupPathBox);
+        backupBox.Leave += (_, _) => { Settings.KeyPlaintextBackupPath.Value = backupBox.Text.Trim(); SettingsManager.SaveSettings(); };
+        backupRow.Controls.Add(backupBox);
+        backupRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnPickKeyBackupFile, (_, _) =>
+        {
+            using var dlg = new SaveFileDialog { Filter = Strings.SettingsFileFilter, FileName = "VirusTotalScanner - API Keys.txt", OverwritePrompt = false };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            backupBox.Text = dlg.FileName;
+            Settings.KeyPlaintextBackupPath.Value = dlg.FileName;
+            SettingsManager.SaveSettings();
+        }));
+        backupRow.Controls.Add(ThemeManager.MakeButton(Strings.BtnWriteKeyBackupNow, (_, _) =>
+        {
+            Settings.KeyPlaintextBackupPath.Value = backupBox.Text.Trim();
+            SettingsManager.SaveSettings();
+            var keys = AppServices.Vault.Keys.Select(k => k.Key).ToList();
+            if (KeyPlaintextBackup.Export(keys, out string err))
+                NativeMessageBox.Info(string.Format(Strings.KeyBackupWrittenFormat, Settings.KeyPlaintextBackupPath.Value) + (err.Length > 0 ? "\n" + err : ""));
+            else
+                NativeMessageBox.Error(Strings.KeyBackupFailedPrefix + err);
+        }));
+
         body.Controls.Add(hint);
         body.Controls.Add(buttons);
         body.Controls.Add(_keysGrid);
+        body.Controls.Add(ThemeManager.MakeLabel(Strings.KeyBackupPathLabel, subtle: true));
+        body.Controls.Add(backupRow);
         return card;
     }
 
