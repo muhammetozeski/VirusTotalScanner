@@ -7,7 +7,13 @@ internal static class AppConstants
 {
     public const string AppTitle = "VirusTotal Scanner";
     public const string AppFolderName = "VirusTotalScanner";
-    public const string Version = "1.0.0";
+
+    /// <summary>Read from the assembly rather than typed out again here: the hand-written copy had
+    /// drifted to 1.0.0 while the csproj said 1.1.0, so the About box and the User-Agent were lying.</summary>
+    public static readonly string Version =
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version is { } v
+            ? $"{v.Major}.{v.Minor}.{v.Build}"
+            : "0.0.0";
 
     /// <summary>Full path to the running executable. Not null for file-based exes.</summary>
     public static readonly string ThisExePath = Environment.ProcessPath ?? Application.ExecutablePath;
