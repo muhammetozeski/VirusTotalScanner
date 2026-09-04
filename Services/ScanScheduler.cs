@@ -356,7 +356,7 @@ internal sealed class ScanScheduler
         bool guiAvailable = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         VtFileReport? report = null;
         var failure = LookupFailure.LookupEmpty;
-        bool guiTried = false;
+        bool guiAnswered = false; // the browser actually ran the lookup (rather than being skipped as busy)
 
         await _lookupGate!.WaitAsync(ct);
         int slotHeld = 1;
@@ -368,13 +368,20 @@ internal sealed class ScanScheduler
                 // When a key can serve this file right now, don't queue behind the single browser —
                 // let the API take it and leave the browser for the workers that have no key room.
                 var guiWait = _rotator.HasImmediateRoom ? TimeSpan.Zero : Timeout.InfiniteTimeSpan;
-                guiTried = true;
+                guiAnswered = guiWait == Timeout.InfiniteTimeSpan; // a waited lookup always ran to an answer
                 report = await GuiScrapeService.LookupAsync(sha256, ct, guiWait).WaitAsync(ct);
             }
 
             if (report == null && !_rotator.HasUsableKeys) failure = LookupFailure.UnknownNoKey;
 
-            if (report == null && _rotator.HasUsableKeys)
+            // Every key parked until the daily reset? Then waiting 75 seconds per file to find that out
+            // again is pure delay — go straight to the keyless path, which costs no quota.
+            bool apiWorthTrying = _rotator.HasImmediateRoom
+                || _rotator.SoonestResetUtc is not { } reset
+                || reset - DateTime.UtcNow <= ApiWaitForKey
+                || !guiAvailable;
+
+            if (report == null && _rotator.HasUsableKeys && apiWorthTrying)
             {
                 var (gotKeySlot, existing) = await TryCallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ApiWaitForKey, ct);
                 report = existing;
@@ -403,12 +410,10 @@ internal sealed class ScanScheduler
             }
 
             // Last resort: the API was off, spent or refused -> take the keyless browser, waiting for it
-            // this time (there is nothing else left to try).
-            if (report == null && guiAvailable && !ct.IsCancellationRequested)
-            {
-                if (!guiTried || failure != LookupFailure.AnalysisTimedOut)
-                    report = await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
-            }
+            // this time (there is nothing else left to try). Skipped for a file that did reach VirusTotal
+            // and is still being analysed — asking again would only return the same "not finished".
+            if (report == null && guiAvailable && !guiAnswered && !ct.IsCancellationRequested && failure != LookupFailure.AnalysisTimedOut)
+                report = await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
         }
         finally { ReleaseSlot(); }
 
