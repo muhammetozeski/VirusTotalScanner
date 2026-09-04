@@ -133,7 +133,43 @@ internal sealed class KeyVault
     /// <summary>Force-write counters (e.g. on shutdown).</summary>
     public void Flush() => PersistToConfig();
 
-    public void RaiseCountersUpdated() { try { CountersUpdated?.Invoke(); } catch (Exception ex) { Log("CountersUpdated handler failed: " + ex.Message, LogLevel.Warning); } }
+    DateTime _lastCounterEventUtc = DateTime.MinValue;
+    int _counterEventPending;
+
+    /// <summary>
+    /// Tells the UI "the numbers moved". Coalesced to at most four a second: a running scan consumes
+    /// quota dozens of times a second and every raise used to become a BeginInvoke per subscriber, so
+    /// the message queue filled with quota refreshes — the window went sluggish and the Kotalar tab
+    /// could not even finish drawing its cards. Intermediate values carry no information here; only
+    /// the latest does, and a trailing raise makes sure that one is never the one that gets dropped.
+    /// </summary>
+    public void RaiseCountersUpdated()
+    {
+        var now = DateTime.UtcNow;
+        lock (_lock)
+        {
+            if (now - _lastCounterEventUtc < TimeSpan.FromMilliseconds(250))
+            {
+                // Already announced very recently: schedule one trailing announcement instead.
+                if (Interlocked.Exchange(ref _counterEventPending, 1) == 1) return;
+                _ = Task.Delay(250).ContinueWith(_ =>
+                {
+                    Interlocked.Exchange(ref _counterEventPending, 0);
+                    lock (_lock) _lastCounterEventUtc = DateTime.UtcNow;
+                    Fire();
+                }, TaskScheduler.Default);
+                return;
+            }
+            _lastCounterEventUtc = now;
+        }
+        Fire();
+    }
+
+    void Fire()
+    {
+        try { CountersUpdated?.Invoke(); }
+        catch (Exception ex) { Log("CountersUpdated handler failed: " + ex.Message, LogLevel.Warning); }
+    }
 
     /// <summary>Preserves the still-encrypted blob to a sidecar file so the keys stay recoverable
     /// (e.g. back on the right Windows account) instead of being lost to the next save. Tries the

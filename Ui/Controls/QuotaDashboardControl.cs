@@ -35,10 +35,11 @@ internal sealed class MeterBar : Panel
 /// </summary>
 internal sealed class QuotaDashboardControl : UserControl
 {
-    readonly Label _banner = new();
-    readonly FlowLayoutPanel _flow = new();
+    readonly Label _banner = new() { AccessibleName = TooltipCatalog.QuotaBanner };
+    readonly FlowLayoutPanel _flow = new() { AccessibleName = TooltipCatalog.QuotaFlow };
     readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
     readonly List<Action<DateTime>> _updaters = [];
+    readonly ToolTip _tips = new() { AutoPopDelay = 32000, InitialDelay = 350, ReshowDelay = 100 };
     DateTime? _resumeAtUtc;
 
     public QuotaDashboardControl()
@@ -65,34 +66,51 @@ internal sealed class QuotaDashboardControl : UserControl
         Controls.Add(top);
         Controls.Add(_banner);
 
+        // Rebuild only on a structural change (key added/removed/edited). The counter event fires
+        // constantly during a scan; the 1-second timer below is what keeps the numbers moving, so
+        // this handler only has to notice when the CARD SET itself is out of date.
         AppServices.Vault.Changed += () => SafeUi(BuildCards);
-        AppServices.Vault.CountersUpdated += () => SafeUi(() => Tick());
         AppServices.Rotator.OnAllExhausted += t => SafeUi(() => { _resumeAtUtc = t; });
         AppServices.Rotator.OnResumed += () => SafeUi(() => { _resumeAtUtc = null; _banner.Visible = false; });
 
-        _timer.Tick += (_, _) => Tick();
+        _timer.Tick += (_, _) => { if (Visible) Tick(); };
         _timer.Start();
 
         BuildCards();
     }
 
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        // Coming back to the tab: the cards were not being ticked while hidden, and a key may have
+        // been added from the settings tab in the meantime.
+        if (!Visible) return;
+        if (_updaters.Count != AppServices.Vault.Keys.Count) BuildCards();
+        else Tick();
+    }
+
     void BuildCards()
     {
         _flow.SuspendLayout();
-        _flow.Controls.Clear();
-        _updaters.Clear();
-
-        var keys = AppServices.Vault.Keys;
-        if (keys.Count == 0)
+        try
         {
-            var empty = ThemeManager.MakeLabel(Strings.QuotaNoKeysHint, subtle: true);
-            _flow.Controls.Add(empty);
-        }
-        foreach (var entry in keys)
-            _flow.Controls.Add(BuildCard(entry));
+            _flow.Controls.Clear();
+            _updaters.Clear();
 
-        _flow.ResumeLayout();
+            var keys = AppServices.Vault.Keys;
+            if (keys.Count == 0)
+            {
+                var empty = ThemeManager.MakeLabel(Strings.QuotaNoKeysHint, subtle: true);
+                _flow.Controls.Add(empty);
+            }
+            foreach (var entry in keys)
+                _flow.Controls.Add(BuildCard(entry));
+        }
+        catch (Exception ex) { Log("Quota cards build failed: " + ex, LogLevel.Error); }
+        finally { _flow.ResumeLayout(); }
+
         ThemeManager.Apply(this);
+        TooltipCatalog.Apply(_tips, this);
         Tick();
     }
 
