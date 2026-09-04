@@ -192,6 +192,7 @@ internal sealed class ScanQueueControl : UserControl
         AppServices.Rotator.OnAllExhausted += t => SafeUi(() => OnAllKeysExhausted(t));
         AppServices.Rotator.OnResumed += () => SafeUi(() => _exhaustPromptShown = false);
         AttachStaticTooltips();
+        TooltipCatalog.Apply(_tips, this); // catches anything the two lists above did not name
 
         // Repaint live progress, but do NOT re-sort here. Re-sorting the whole view 4×/sec while verdicts
         // streamed in was what made a sorted list "go crazy" during a scan (rows jumping, selection/scroll
@@ -514,7 +515,7 @@ internal sealed class ScanQueueControl : UserControl
 
     Panel BuildRecallBar()
     {
-        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand };
+        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand, AccessibleName = TooltipCatalog.CloseButton };
         close.FlatAppearance.BorderSize = 0;
         close.Click += (_, _) => _recallBar.Visible = false;
         // Fill label at index 0 (docked last); BringToFront on the button moved it to index 0 and
@@ -528,7 +529,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         var undo = ThemeManager.MakeButton(Strings.BtnUndo, (_, _) => DoUndoQuarantine());
         undo.Dock = DockStyle.Right;
-        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand };
+        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, TabStop = false, Cursor = Cursors.Hand, AccessibleName = TooltipCatalog.CloseButton };
         close.FlatAppearance.BorderSize = 0;
         close.Click += (_, _) => HideUndo();
         // Same index rule as the recall bar: Fill label first, edge buttons after (docked first).

@@ -1513,6 +1513,19 @@ internal static class Strings
     public static string TtTorPathBox = "tor.exe'nin tam yolu. Boş bırakırsan program PATH'i, scoop klasörünü ve Tor Browser kurulumlarını sırayla arar.";
     public static string TtTorFindExe = "tor.exe dosyasını elle seç.";
     public static string TtTorTest = "Tor'u başlatır, çıkış IP'sini ve ülkesini sorgular ve sonucu gösterir.";
+    public static string TtDrawerScan = "Dosya/klasör seçmenin dışındaki tarama yolları: elindeki hash'i sorgulama, bir dosyanın hash'ini doğrulama, çalışan süreçleri tarama, izlemeye aldığın dosyaların değişip değişmediğini denetleme. Sağdaki Tor satırı bu bölümün ayarıdır. Başlığa tıklayınca açılır/kapanır.";
+    public static string TtDrawerReports = "Sonuçları dışa aktarma yolları: CSV tablosu, HTML rapor ve klasör bazlı özet. Başlığa tıklayınca açılır/kapanır.";
+    public static string TtDrawerTools = "Karantina kasası, indirilenler triyajı, olay zaman çizelgesi, aile kümeleri, verdikt yeniden denetleme, önbellek yedeği, tüm komutlar ve yardım. Başlığa tıklayınca açılır/kapanır.";
+    public static string TtDetailCopy = "Seçili satırın hash'ini, yolunu veya verdikt satırını panoya kopyalar.";
+    public static string TtDetailShowAllEngines = "Sadece işaretleyen motorlar yerine bütün motorların sonucunu listeler.";
+    public static string TtDetailMajorOnly = "Listeyi 'büyük' sayılan motorlara indirger. Sadece küçük motorların işaretlediği bir dosya çoğunlukla yanlış pozitiftir.";
+    public static string TtDetailComments = "VirusTotal topluluk yorumlarını getirir (anahtarsız yoldan, kota harcamaz).";
+    public static string TtDetailBehaviour = "Dosyanın kum havuzu davranışını getirir: bağlandığı adresler, yazdığı dosyalar, kayıt defteri anahtarları, başlattığı süreçler.";
+    public static string TtActionGoSettings = "İlgili ayar kartına gider.";
+    public static string TtActionEnable = "Bu satırdaki özelliği açar.";
+    public static string TtDetailCopyValue = "Yanındaki değeri panoya kopyalar.";
+    public static string TtCloseStrip = "Bu şeridi kapatır.";
+    public static string TtOverviewStatusButton = "Bu durumla ilgili işleme götürür (ilgili sekme ya da düzeltme).";
 
     // ---- CacheBackupService / KeyPlaintextBackup ----
     public static string CacheBackupNoFolder = "Yedek klasörü seçilmemiş.";

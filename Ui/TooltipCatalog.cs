@@ -17,23 +17,43 @@ internal static class TooltipCatalog
     public static void Apply(ToolTip tips, Control root)
     {
         var map = Build();
-        int hit = 0, miss = 0;
-        void Walk(Control c)
+        int hit = 0;
+        var missed = new List<string>();
+        void Walk(Control c, string? inherited)
         {
+            string? mine = null;
             try
             {
-                string key = !string.IsNullOrEmpty(c.AccessibleName) ? c.AccessibleName : c.Text ?? "";
-                if (key.Length > 0)
+                // Three keys are tried, because a caption is not always what a control ends up carrying:
+                // ThemeManager stamps AccessibleName with the icon-stripped caption for screen readers,
+                // so "↻  Sunucudan kotayı yenile" becomes "Sunucudan kotayı yenile" behind our back.
+                foreach (var key in new[] { c.AccessibleName, c.Text, StripLeadingIcon(c.Text) })
                 {
-                    if (map.TryGetValue(key, out var text)) { tips.SetToolTip(c, text); hit++; }
-                    else if (c is Button or CheckBox or RadioButton) miss++;
+                    if (string.IsNullOrEmpty(key) || !map.TryGetValue(key, out var text)) continue;
+                    tips.SetToolTip(c, text);
+                    mine = text;
+                    hit++;
+                    break;
                 }
+
+                if (mine == null && inherited != null && string.IsNullOrEmpty(tips.GetToolTip(c)))
+                {
+                    // A composite control's inner parts (a NumericUpDown's edit box, a panel's ✕) have no
+                    // caption of their own; hovering them should still explain the thing they belong to.
+                    tips.SetToolTip(c, inherited);
+                    mine = inherited;
+                }
+
+                if (mine == null && c is Button or CheckBox or RadioButton or ComboBox or NumericUpDown or TextBox
+                    && string.IsNullOrEmpty(tips.GetToolTip(c)))
+                    missed.Add(string.IsNullOrEmpty(c.AccessibleName) ? c.Text ?? "" : c.AccessibleName);
             }
             catch (Exception ex) { Log("Tooltip attach failed: " + ex.Message, LogLevel.Warning); }
-            foreach (Control child in c.Controls) Walk(child);
+            foreach (Control child in c.Controls) Walk(child, mine ?? inherited);
         }
-        Walk(root);
-        Log($"Tooltips attached on {root.GetType().Name}: {hit} matched, {miss} interactive control(s) with no entry.", LogLevel.Debug);
+        Walk(root, null);
+        Log($"Tooltips attached on {root.GetType().Name}: {hit} matched"
+            + (missed.Count == 0 ? ", nothing left uncovered." : $", still uncovered: {string.Join(" | ", missed.Distinct())}"), LogLevel.Debug);
     }
 
     /// <summary>Marks a caption-less control (text box, grid, combo, numeric) so the walker can find
@@ -42,6 +62,17 @@ internal static class TooltipCatalog
     {
         c.AccessibleName = accessibleName;
         return c;
+    }
+
+    /// <summary>"🛡  Karantinaya al" -> "Karantinaya al". Mirrors what ThemeManager stamps into
+    /// AccessibleName, so a key written with its icon still matches a stamped control.</summary>
+    static string StripLeadingIcon(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        int i = 0;
+        while (i < text.Length && !char.IsLetterOrDigit(text[i])) i++;
+        string name = text[i..].Trim();
+        return name.Length > 0 ? name : text.Trim();
     }
 
     // Keys for controls that have no caption of their own.
@@ -269,5 +300,29 @@ internal static class TooltipCatalog
         [Strings.DetailActionRescanFirst] = Strings.TtDetailRescan,
         [Strings.DetailActionVtReport] = Strings.TtDetailVtReport,
         [Strings.MenuMarkClean] = Strings.TtDetailMarkClean,
+        [Strings.MenuCopy] = Strings.TtDetailCopy,
+        [Strings.ShowAllEngines] = Strings.TtDetailShowAllEngines,
+        [Strings.DetailMajorOnlyCheck] = Strings.TtDetailMajorOnly,
+        [Strings.BtnComments] = Strings.TtDetailComments,
+        [Strings.BtnBehaviour] = Strings.TtDetailBehaviour,
+
+        // ---- drawer headers (their caption carries a live action count) ----
+        ["tt.drawer.scan"] = Strings.TtDrawerScan,
+        ["tt.drawer.reports"] = Strings.TtDrawerReports,
+        ["tt.drawer.tools"] = Strings.TtDrawerTools,
+
+        // ---- overview cards ----
+        [Strings.ActionGoSettings] = Strings.TtActionGoSettings,
+        [Strings.ActionEnable] = Strings.TtActionEnable,
+        [Strings.ActionScanDownloads] = Strings.TtScanDownloads,
+        [Strings.BannerMuteTip] = Strings.BannerMuteTip,
+        [Strings.BtnCopy] = Strings.TtDetailCopyValue,
+        [CloseButton] = Strings.TtCloseStrip,
+        [StatusBannerButton] = Strings.TtOverviewStatusButton,
     };
+
+    /// <summary>Small ✕ buttons that dismiss a strip, and the overview banner's action button, whose
+    /// captions are set at runtime.</summary>
+    public const string CloseButton = "tt.closeStrip";
+    public const string StatusBannerButton = "tt.statusBannerButton";
 }

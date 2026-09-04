@@ -12,8 +12,8 @@ internal sealed class ScanOverviewControl : UserControl
 {
     readonly Panel _statusBanner = new() { Dock = DockStyle.Top, Height = 56, Margin = new Padding(8, 8, 8, 2) };
     readonly Label _statusLabel = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Padding = new Padding(14, 0, 0, 0), Font = new Font("Segoe UI", 11f, FontStyle.Bold) };
-    readonly Button _statusBtn = new() { Dock = DockStyle.Right, Width = 160, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Visible = false };
-    readonly Button _statusMute = new() { Dock = DockStyle.Right, Width = 44, Text = "✕", FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Visible = false };
+    readonly Button _statusBtn = new() { Dock = DockStyle.Right, Width = 160, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Visible = false, AccessibleName = TooltipCatalog.StatusBannerButton };
+    readonly Button _statusMute = new() { Dock = DockStyle.Right, Width = 44, Text = "✕", FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Visible = false, AccessibleName = TooltipCatalog.CloseButton };
     Action? _statusAction;
     Action? _statusMuteAction;
     readonly Panel _attention = new() { Dock = DockStyle.Top, Height = 40, Visible = false, Padding = new Padding(12, 0, 8, 0) };
