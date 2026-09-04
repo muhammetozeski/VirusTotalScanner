@@ -174,6 +174,10 @@ internal sealed partial class MainForm : Form
         _processGuard.ThreatFound += item => SafeUi(() => OnThreatFound(item, background: true));
         if (Settings.WatchProcessLaunches) _processGuard.Start();
         StartDownloadsWatchIfEnabled();
+        CacheBackupService.Reschedule();
+        StartTorIfEnabled();
+        NetworkBlockMonitor.TorAutoEnabled += () => SafeUi(UpdateStatusBar);
+        TorService.StateChanged += () => SafeUi(UpdateStatusBar);
 
         AppServices.Scheduler.Started += () => SafeUi(() =>
         {
@@ -220,18 +224,19 @@ internal sealed partial class MainForm : Form
     void BuildTabs()
     {
         _tabs.Appearance = TabAppearance.Normal;
-        AddTab(Strings.TabOverview, _overview);
-        AddTab(Strings.TabScan, _scan);
-        AddTab(Strings.TabQuota, _quota);
-        AddTab(Strings.TabLogs, _logs);
-        AddTab(Strings.TabHistory, _history);
-        AddTab(Strings.TabSettings, _settings);
+        _tabs.ShowToolTips = true;
+        AddTab(Strings.TabOverview, _overview, Strings.TtTabOverview);
+        AddTab(Strings.TabScan, _scan, Strings.TtTabScan);
+        AddTab(Strings.TabQuota, _quota, Strings.TtTabQuota);
+        AddTab(Strings.TabLogs, _logs, Strings.TtTabLogs);
+        AddTab(Strings.TabHistory, _history, Strings.TtTabHistory);
+        AddTab(Strings.TabSettings, _settings, Strings.TtTabSettings);
         _tabs.SelectedIndex = 1; // land on Tarama: the tab the user actually came to use
     }
 
-    void AddTab(string text, Control content)
+    void AddTab(string text, Control content, string tip)
     {
-        var page = new TabPage(text) { Padding = new Padding(2) };
+        var page = new TabPage(text) { Padding = new Padding(2), ToolTipText = tip };
         content.Dock = DockStyle.Fill;
         page.Controls.Add(content);
         _tabs.TabPages.Add(page);
@@ -733,8 +738,38 @@ internal sealed partial class MainForm : Form
         int usable = AppServices.Vault.UsableKeyCount;
         // The config path moved to the tooltip: inline it ate the whole bar and squeezed the live
         // activity line (the bar's main job) down to a few letters.
-        _statusKeys.Text = string.Format(Strings.StatusBarKeysFormat, usable, total);
-        _statusKeys.ToolTipText = Strings.AboutConfigFilePrefix + ConfigPathResolver.ConfigPath;
+        _statusKeys.Text = string.Format(Strings.StatusBarKeysFormat, usable, total)
+            + (TorService.IsActive ? "  ·  " + Strings.StatusBarTorOn : "");
+        _statusKeys.ToolTipText = Strings.TtStatusKeys + "\n" + Strings.AboutConfigFilePrefix + ConfigPathResolver.ConfigPath
+            + "\n" + TorService.StatusLine();
+        _statusActivity.ToolTipText = Strings.TtStatusActivity;
+    }
+
+    /// <summary>Brings Tor back up when the setting says it was on. Runs in the background so a slow
+    /// bootstrap never delays the window appearing; the scan tab's row shows the progress.</summary>
+    void StartTorIfEnabled()
+    {
+        if (!Settings.UseTor) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                UiStatusHub.Report(Strings.StatusSourceTor, Strings.TorStatusStarting);
+                bool ok = await TorService.EnableAsync();
+                VtHttpClientFactory.Invalidate();
+                GuiScrapeService.InvalidateSession("startup");
+                UiStatusHub.Report(Strings.StatusSourceTor,
+                    ok ? TorService.StatusLine() : string.Format(Strings.TorAutoEnableFailedFormat, TorService.LastError ?? "?"),
+                    ok ? StatusSeverity.Info : StatusSeverity.Warning);
+                if (!ok)
+                {
+                    // Don't leave the setting claiming something that is not true.
+                    Settings.UseTor.Value = false;
+                    SettingsManager.SaveSettings();
+                }
+            }
+            catch (Exception ex) { Log("Tor startup failed: " + ex, LogLevel.Error); }
+        });
     }
 
     void SafeUi(Action a) { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } }
