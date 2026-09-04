@@ -432,13 +432,15 @@ internal sealed class SettingsControl : UserControl
     {
         var card = Card(Strings.CardScan, out var body);
 
-        var concurrency = LabeledNumeric(Strings.ScanConcurrencyLabel, Settings.MaxConcurrentScans, 1, 16,
+        // No 16 ceiling any more: the number is the user's call, and since the analysis wait no longer
+        // holds a slot (see ScanScheduler), a high value costs pending sockets, not stalled workers.
+        var concurrency = LabeledNumeric(Strings.ScanConcurrencyLabel, Settings.MaxConcurrentScans, 1, 1024,
             v => { Settings.MaxConcurrentScans.Value = v; SettingsManager.SaveSettings(); });
         var maxSize = LabeledNumeric(Strings.ScanMaxSizeLabel, Settings.MaxFileSizeMB, 0, 100000,
             v => { Settings.MaxFileSizeMB.Value = v; SettingsManager.SaveSettings(); });
         var recheckDays = LabeledNumeric(Strings.ScanRecheckDaysLabel, Settings.RecheckPeriodDays, 1, 365,
             v => { Settings.RecheckPeriodDays.Value = v; SettingsManager.SaveSettings(); });
-        var uploads = LabeledNumeric(Strings.ScanUploadsLabel, Settings.MaxConcurrentUploads, 1, 16,
+        var uploads = LabeledNumeric(Strings.ScanUploadsLabel, Settings.MaxConcurrentUploads, 1, 1024,
             v => { Settings.MaxConcurrentUploads.Value = v; SettingsManager.SaveSettings(); });
         var cache = new CheckBox { Text = Strings.ScanUseCacheLabel, AutoSize = true, Checked = Settings.UseLocalHashCache };
         cache.CheckedChanged += (_, _) => { Settings.UseLocalHashCache.Value = cache.Checked; SettingsManager.SaveSettings(); };
