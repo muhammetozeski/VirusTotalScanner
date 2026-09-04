@@ -23,9 +23,11 @@ internal sealed class ScanScheduler
     readonly PauseTokenSource _pause = new();
 
     CancellationTokenSource? _cts;
-    SemaphoreSlim? _uploadGate; // limits how many files upload to VT in parallel (set per run)
-    SemaphoreSlim? _lookupGate; // limits concurrent VT network lookups to the conservative MaxConcurrency;
-                                // the local pipeline (hash/trust/cache) runs wider so all-local sweeps aren't throttled
+    SemaphoreSlim? _uploadGate; // MaxUploads: how many files may be SENDING bytes at once (bandwidth)
+    SemaphoreSlim? _lookupGate; // MaxConcurrency: how many files may be in the VT network stage at once.
+                                // Released before the analysis poll — waiting for VirusTotal to finish is
+                                // not work, and holding a slot through it serialized the whole scan.
+                                // The local pipeline (hash/trust/cache) runs wider, at core count.
     ConcurrentDictionary<string, SemaphoreSlim>? _md5Gates; // per-run: one lookup per identical content
 
     /// <summary>Marshals an action to the UI thread (set by the GUI; direct call by default/CLI).</summary>
@@ -288,13 +290,7 @@ internal sealed class ScanScheduler
             {
                 var dup = (opts.UseCache && !opts.BypassTrust) ? _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays) : null;
                 if (dup != null) { UiPost(() => item.FromCache = true); report = dup; }
-                else
-                {
-                    // Only the actual VT network call is gated to MaxConcurrency; everything above ran wide.
-                    await _lookupGate!.WaitAsync(ct);
-                    try { (report, failure) = await DoLookupAsync(item, md5, sha256, opts, ct); }
-                    finally { _lookupGate.Release(); }
-                }
+                else (report, failure) = await DoLookupAsync(item, md5, sha256, opts, ct);
             }
             finally { dedupGate.Release(); }
 
@@ -341,54 +337,91 @@ internal sealed class ScanScheduler
         }
     }
 
-    /// <summary>The resilient lookup chain for one file (GUI first, then API + upload, GUI last
-    /// resort), caching the result. Held under a per-md5 gate so duplicates in a run share it.
-    /// Returns the report, or null plus the reason there is none.</summary>
+    /// <summary>The resilient lookup chain for one file (keyless GUI when it is free, API + upload
+    /// otherwise, GUI again as the last resort), caching the result. Held under a per-md5 gate so
+    /// duplicates in a run share it. Returns the report, or null plus the reason there is none.
+    ///
+    /// Two things here decide the real throughput of a big scan:
+    ///  * The keyless browser can only serve ONE lookup at a time. Queueing every worker behind it
+    ///    turned a 16-way scan into a 1-way scan and left the API keys idle, so when a key has room
+    ///    right now the browser is skipped instead of waited for.
+    ///  * The concurrency slot is released before the analysis poll. Polling is waiting, not working;
+    ///    holding a slot through a 15-minute wait is what made uploads run one-after-another.
+    /// </summary>
     async Task<(VtFileReport? Report, LookupFailure Failure)> DoLookupAsync(ScanItem item, string md5, string sha256, ScanOptions opts, CancellationToken ct)
     {
         await _pause.WaitWhilePausedAsync(ct);
         SetStatus(item, ScanStatus.LookingUp);
 
-        bool preferGui = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
+        bool guiAvailable = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         VtFileReport? report = null;
         var failure = LookupFailure.LookupEmpty;
+        bool guiTried = false;
 
-        if (preferGui)
-            report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
-
-        if (report == null && !_rotator.HasUsableKeys) failure = LookupFailure.UnknownNoKey;
-
-        if (report == null && _rotator.HasUsableKeys)
+        await _lookupGate!.WaitAsync(ct);
+        int slotHeld = 1;
+        void ReleaseSlot() { if (Interlocked.Exchange(ref slotHeld, 0) == 1) _lookupGate!.Release(); }
+        try
         {
-            report = await CallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ct);
-            if (report == null)
+            if (guiAvailable)
             {
-                await _pause.WaitWhilePausedAsync(ct);
-                SetStatus(item, ScanStatus.Uploading);
-                var progress = new ActionProgress<UploadProgress>(p => UiPost(() =>
+                // When a key can serve this file right now, don't queue behind the single browser —
+                // let the API take it and leave the browser for the workers that have no key room.
+                var guiWait = _rotator.HasImmediateRoom ? TimeSpan.Zero : Timeout.InfiniteTimeSpan;
+                guiTried = true;
+                report = await GuiScrapeService.LookupAsync(sha256, ct, guiWait).WaitAsync(ct);
+            }
+
+            if (report == null && !_rotator.HasUsableKeys) failure = LookupFailure.UnknownNoKey;
+
+            if (report == null && _rotator.HasUsableKeys)
+            {
+                var (gotKeySlot, existing) = await TryCallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ApiWaitForKey, ct);
+                report = existing;
+                if (report == null && gotKeySlot)
                 {
-                    item.Progress = (int)Math.Round(p.Percent);
-                    item.Detail = string.Format(Strings.UploadProgressDetailFormat, p.Percent, FormatBytes(p.BytesSent), FormatBytes(p.TotalBytes), FormatBytes(p.BytesPerSecond));
-                }));
-                await _uploadGate!.WaitAsync(ct);
-                string analysisId;
-                try { analysisId = await CallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ct); }
-                finally { _uploadGate.Release(); }
-                SetStatus(item, ScanStatus.Polling);
-                report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
-                if (report == null) failure = LookupFailure.AnalysisTimedOut;
+                    await _pause.WaitWhilePausedAsync(ct);
+                    SetStatus(item, ScanStatus.Uploading);
+                    var progress = new ActionProgress<UploadProgress>(p => UiPost(() =>
+                    {
+                        item.Progress = (int)Math.Round(p.Percent);
+                        item.Detail = string.Format(Strings.UploadProgressDetailFormat, p.Percent, FormatBytes(p.BytesSent), FormatBytes(p.TotalBytes), FormatBytes(p.BytesPerSecond));
+                    }));
+                    await _uploadGate!.WaitAsync(ct);
+                    (bool uploaded, string? analysisId) = (false, null);
+                    try { (uploaded, analysisId) = await TryCallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ApiWaitForKey, ct); }
+                    finally { _uploadGate.Release(); }
+
+                    if (uploaded && analysisId != null)
+                    {
+                        SetStatus(item, ScanStatus.Polling);
+                        ReleaseSlot(); // waiting for VirusTotal to finish must not block another file's lookup
+                        report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
+                        if (report == null) failure = LookupFailure.AnalysisTimedOut;
+                    }
+                }
+            }
+
+            // Last resort: the API was off, spent or refused -> take the keyless browser, waiting for it
+            // this time (there is nothing else left to try).
+            if (report == null && guiAvailable && !ct.IsCancellationRequested)
+            {
+                if (!guiTried || failure != LookupFailure.AnalysisTimedOut)
+                    report = await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
             }
         }
-
-        // Last resort: API was off/exhausted -> try the GUI engine once.
-        if (report == null && !preferGui && GuiScrapeService.IsRuntimeAvailable)
-            report = await GuiScrapeService.LookupAsync(sha256, ct).WaitAsync(ct);
+        finally { ReleaseSlot(); }
 
         if (report != null && opts.UseCache && report.TotalEngines > 0)
             _cache.Put(md5, report, item.FilePath);
 
         return (report, report != null ? LookupFailure.None : failure);
     }
+
+    /// <summary>How long one file waits for a free API key before the keyless path is tried instead.
+    /// Long enough to ride out the 4-per-minute window, short enough that a day-long quota block does
+    /// not park the whole scan.</summary>
+    static readonly TimeSpan ApiWaitForKey = TimeSpan.FromSeconds(75);
 
     const int PollIntervalSeconds = 15;
     const int MaxPolls = 60;
@@ -405,32 +438,64 @@ internal sealed class ScanScheduler
             await _pause.WaitWhilePausedAsync(ct);
             await Task.Delay(TimeSpan.FromSeconds(PollIntervalSeconds), ct);
 
-            var info = await CallWithRotation(key => _api.GetAnalysisAsync(analysisId, key, ct), ct);
+            var (gotKey, info) = await TryCallWithRotation(key => _api.GetAnalysisAsync(analysisId, key, ct), ApiWaitForKey, ct);
+            if (!gotKey || info == null)
+            {
+                // No key free for the status check — keep the analysis alive and try again next tick
+                // instead of throwing the whole upload away.
+                UiPost(() => item.Detail = Strings.PollWaitingForQuota);
+                continue;
+            }
             UiPost(() => item.Detail = string.Format(Strings.PollProgressDetailFormat, info.Status, i + 1));
             if (info.IsCompleted)
-                return await CallWithRotation(key => _api.GetFileReportAsync(sha256, key, ct), ct);
+            {
+                var (gotReportKey, finished) = await TryCallWithRotation(key => _api.GetFileReportAsync(sha256, key, ct), ApiWaitForKey, ct);
+                if (finished != null) return finished;
+                if (!gotReportKey && GuiScrapeService.IsRuntimeAvailable)
+                    return await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
+                return null;
+            }
         }
         Log($"Analysis {analysisId} for {item.FileName} still unfinished after {PollWindowMinutes} min; giving up.", LogLevel.Warning);
         return null;
     }
 
-    /// <summary>Runs a VT call, rotating keys on 429/auth failures and waiting when exhausted.</summary>
-    async Task<T> CallWithRotation<T>(Func<string, Task<T>> call, CancellationToken ct)
+    /// <summary>
+    /// Runs a VirusTotal call, rotating keys on 429/auth failures. Returns
+    /// (false, default) when no key could be obtained within <paramref name="maxWait"/> or every key
+    /// refused the request — the caller then falls back to the keyless path instead of an exception.
+    /// This is what stops a scan sitting still: the old version kept re-acquiring keys and throwing,
+    /// which turned a spent daily quota into hours of 429 traffic and zero progress.
+    /// </summary>
+    async Task<(bool Served, T? Value)> TryCallWithRotation<T>(Func<string, Task<T>> call, TimeSpan maxWait, CancellationToken ct)
     {
-        int maxAttempts = Math.Max(2, _rotator.UsableKeyCount * 2 + 3);
-        VtApiException? last = null;
+        int maxAttempts = Math.Max(2, Math.Min(_rotator.UsableKeyCount + 2, 8));
+        var deadline = DateTime.UtcNow + maxWait;
         for (int attempt = 0; attempt < maxAttempts; attempt++)
         {
-            string key = await _rotator.AcquireAsync(ct);
+            var left = deadline - DateTime.UtcNow;
+            if (left <= TimeSpan.Zero) return (false, default);
+
+            string? key = await _rotator.AcquireAsync(left, ct);
+            if (key == null) return (false, default);
             try
             {
                 // WaitAsync guarantees cancellation wins on time even if a slow HTTP path honors the token late (principle 43).
-                return await call(key).WaitAsync(ct);
+                var value = await call(key).WaitAsync(ct);
+                _rotator.ReportSuccess(key);
+                return (true, value);
             }
-            catch (VtRateLimitException ex) { last = ex; _rotator.ReportRateLimited(key, ex.RetryAfter); }
-            catch (VtAuthException ex) { last = ex; _rotator.ReportAuthError(key); }
+            catch (VtRateLimitException ex) { _rotator.ReportRateLimited(key, ex.RetryAfter); }
+            catch (VtAuthException) { _rotator.ReportAuthError(key); }
+            catch (HttpRequestException ex)
+            {
+                // A transport failure while Tor is carrying the traffic usually means a bad exit node.
+                NetworkBlockMonitor.ReportTorPathFailure("api:" + ex.HttpRequestError);
+                Log("VirusTotal API transport failure: " + ex.Message, LogLevel.Warning);
+                return (false, default);
+            }
         }
-        throw last ?? new VtApiException("All keys failed for the request.");
+        return (false, default);
     }
 
     // ---- progress bookkeeping ----
