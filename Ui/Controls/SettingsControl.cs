@@ -971,8 +971,17 @@ internal sealed class SettingsControl : UserControl
     void AddKey()
     {
         using var dlg = new ApiKeyDialog();
-        if (dlg.ShowDialog(this) == DialogResult.OK)
-            AppServices.Vault.Add(dlg.KeyLabel, dlg.KeyValue);
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        // A key added twice is not twice the quota: VirusTotal counts per key, so the second row just
+        // makes the app believe it has room it does not have, and the extra requests come back 429.
+        string key = (dlg.KeyValue ?? "").Trim();
+        if (AppServices.Vault.Keys.Any(k => string.Equals(k.Key, key, StringComparison.OrdinalIgnoreCase)))
+        {
+            NativeMessageBox.Warn(Strings.KeyDuplicateWarn);
+            return;
+        }
+        AppServices.Vault.Add(dlg.KeyLabel, key);
     }
 
     void EditKey()
@@ -998,14 +1007,27 @@ internal sealed class SettingsControl : UserControl
     void RefreshKeys()
     {
         var now = DateTime.UtcNow;
-        var rows = AppServices.Vault.Keys.Select(k => new KeyRow
+        var all = AppServices.Vault.Keys;
+        // Same key listed twice = one VirusTotal allowance split across two local counters, so the
+        // rotator hands out requests the server has already spent. Say so on the row.
+        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var k in all)
+        {
+            string key = k.Key ?? "";
+            seen[key] = seen.TryGetValue(key, out int n) ? n + 1 : 1;
+        }
+        var rows = all.Select(k => new KeyRow
         {
             Id = k.Id,
             Label = string.IsNullOrWhiteSpace(k.Label) ? Strings.KeyRowDefaultLabel : k.Label,
             Anahtar = k.Masked,
-            Durum = k.Disabled ? Strings.KeyStatusDisabled : k.IsExhausted(now) ? Strings.KeyStatusExhausted : Strings.KeyStatusActive,
+            Durum = (k.Disabled ? Strings.KeyStatusDisabled : k.IsExhausted(now) ? Strings.KeyStatusExhausted : Strings.KeyStatusActive)
+                    + (seen.TryGetValue(k.Key ?? "", out int c) && c > 1 ? Strings.KeyStatusDuplicateSuffix : ""),
         }).ToList();
         _keysGrid.DataSource = rows;
+
+        int dupes = seen.Values.Where(v => v > 1).Sum(v => v - 1);
+        if (dupes > 0) Log($"Key vault holds {dupes} duplicate key row(s); each duplicate shares one VirusTotal allowance.", LogLevel.Warning);
     }
 
     void InstallMenu()

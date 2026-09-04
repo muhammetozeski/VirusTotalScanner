@@ -78,6 +78,8 @@ internal static class Strings
     public static string KeyStatusDisabled = "Devre dışı";
     public static string KeyStatusExhausted = "Dolu";
     public static string KeyStatusActive = "Aktif";
+    public static string KeyStatusDuplicateSuffix = "  ⚠ AYNI ANAHTAR İKİ KEZ EKLİ";
+    public static string KeyDuplicateWarn = "Bu anahtar zaten listede.\n\nAynı anahtarı iki kez eklemek kotayı ikiye katlamaz: VirusTotal kotayı anahtar başına sayar. İkinci kayıt sadece programın olmayan bir kotayı varmış gibi görmesine ve fazladan isteklerin 429 dönmesine yol açar.";
 
     // ---- settings: context-menu card ----
     public static string CardContextMenu = "Sağ Tuş Menüsü";
