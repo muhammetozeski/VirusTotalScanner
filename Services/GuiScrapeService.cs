@@ -8,12 +8,16 @@ namespace VirusTotalScanner;
 /// <summary>
 /// Keyless VirusTotal lookup: drives a hidden WebView2 (real Chromium) to the public GUI page
 /// and captures the page's own internal /ui/files/&lt;hash&gt; response — the same data the API
-/// returns, with NO API key and NO quota. If VirusTotal demands a reCAPTCHA, the hidden browser
-/// is brought to the foreground so the user can solve it, then it hides again and the lookup
-/// continues. A reCAPTCHA is only acted on when it actually blocks us: the data call returns
-/// 429/403, or a genuinely VISIBLE challenge is in the DOM. (The page uses invisible reCAPTCHA, so
-/// the mere loading of recaptcha resources is ignored — otherwise the window would pop up on every
-/// clean lookup.) Lookup-only: it cannot upload unknown files.
+/// returns, with NO API key and NO quota. If VirusTotal demands a reCAPTCHA the app first tries the
+/// single "I am not a robot" click by itself; only when a picture puzzle actually follows is the
+/// hidden browser brought to the foreground for the user. A reCAPTCHA is only acted on when it
+/// really blocks us: the data call returns 429/403, or a genuinely VISIBLE challenge is in the DOM.
+/// (The page uses invisible reCAPTCHA, so the mere loading of recaptcha resources is ignored.)
+///
+/// The public UI is rate-limited per SOURCE IP, so the browser can be pointed at
+/// <see cref="TorService"/>'s SOCKS proxy; changing the proxy (or the circuit) rebuilds the browser
+/// with a clean profile, because VirusTotal ties its session cookie to the address that got it.
+/// Lookup-only: it cannot upload unknown files.
 /// </summary>
 internal static class GuiScrapeService
 {
@@ -24,28 +28,48 @@ internal static class GuiScrapeService
     static Form? _form;
     static WebView2? _web;
     static Panel? _bar;
+    static Button? _torBtn;
+    static Label? _barLabel;
     static TaskCompletionSource<bool>? _initTcs;
     static volatile bool _initFailed;
-    static bool _shuttingDown;
+    static volatile bool _shuttingDown;
+    static volatile bool _restartRequested;
+    static string? _activeProxy;                  // the proxy the live browser was created with
 
     static string _targetHash = "";
     static string _targetSuffix = ""; // "" = the file report; "/comments" = community comments
     static string _currentUrl = "";
     static TaskCompletionSource<string?>? _pending;
+    static TaskCompletionSource<bool>? _navDone;
     static CancellationTokenSource? _timeoutCts;
     static volatile bool _captchaShown;
+    static volatile bool _autoSolving;
+    static volatile bool _autoSolveTried;
+    static volatile bool _blockReported; // one IP-block strike per lookup, not per retry
+    static readonly List<CoreWebView2Frame> _frames = [];
 
     public static bool IsRuntimeAvailable
     {
         get { try { return !string.IsNullOrEmpty(CoreWebView2Environment.GetAvailableBrowserVersionString()); } catch { return false; } }
     }
 
+    /// <summary>Drop the current browser (profile + cookies included) before the next lookup. Called
+    /// when Tor is switched on/off or the circuit changes: the old VirusTotal session cookie belongs
+    /// to the old exit address and would carry the old block straight over to the new one.</summary>
+    public static void InvalidateSession(string why)
+    {
+        _restartRequested = true;
+        Log("Keyless browser session invalidated: " + why, LogLevel.Info);
+    }
+
     /// <summary>The one navigate-and-capture round trip all three fetches share: opens the GUI page,
     /// waits for the page's own /ui/files/&lt;hash&gt;&lt;suffix&gt; response (captcha flow included)
-    /// and returns the captured JSON, or null on miss / timeout / cancel. Serialized by the gate.</summary>
-    static async Task<string?> FetchJsonAsync(string hash, string suffix, string pageUrl, string logLabel, CancellationToken ct)
+    /// and returns the captured JSON, or null on miss / timeout / cancel / browser busy. Serialized by
+    /// the gate: only one lookup can drive the single browser at a time, so a caller that has another
+    /// option passes a short <paramref name="maxQueueWait"/> and takes null as "busy, use the API".</summary>
+    static async Task<string?> FetchJsonAsync(string hash, string suffix, string pageUrl, string logLabel, CancellationToken ct, TimeSpan maxQueueWait)
     {
-        await _gate.WaitAsync(ct);
+        if (!await _gate.WaitAsync(maxQueueWait, ct)) return null;
         try
         {
             if (!await EnsureReadyAsync()) return null;
@@ -56,6 +80,9 @@ internal static class GuiScrapeService
             _currentUrl = pageUrl;
             _pending = tcs;
             _captchaShown = false;
+            _autoSolveTried = false;
+            _autoSolving = false;
+            _blockReported = false;
 
             Log(logLabel + ": " + hash, LogLevel.Info);
 
@@ -63,11 +90,7 @@ internal static class GuiScrapeService
             _timeoutCts = timeout;
             timeout.CancelAfter(TimeSpan.FromSeconds(45)); // extended automatically while a captcha is up
 
-            _form!.BeginInvoke(() =>
-            {
-                try { _web!.CoreWebView2.Navigate(_currentUrl); }
-                catch (Exception ex) { tcs.TrySetResult(null); Log(logLabel + " navigate failed: " + ex.Message, LogLevel.Warning); }
-            });
+            Navigate(_currentUrl, logLabel, tcs);
 
             string? json;
             using (timeout.Token.Register(() => tcs.TrySetResult(null)))
@@ -81,13 +104,39 @@ internal static class GuiScrapeService
         finally { _targetSuffix = ""; _gate.Release(); }
     }
 
-    /// <summary>Looks up a hash (sha256 preferred) via the GUI. Returns null if not found / cancelled / timed out.</summary>
-    public static async Task<VtFileReport?> LookupAsync(string hash, CancellationToken ct = default)
+    static void Navigate(string url, string logLabel, TaskCompletionSource<string?>? failTo)
+    {
+        try
+        {
+            _navDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _form!.BeginInvoke(() =>
+            {
+                try { _web!.CoreWebView2.Navigate(url); }
+                catch (Exception ex)
+                {
+                    failTo?.TrySetResult(null);
+                    _navDone?.TrySetResult(false);
+                    Log(logLabel + " navigate failed: " + ex.Message, LogLevel.Warning);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            failTo?.TrySetResult(null);
+            _navDone?.TrySetResult(false);
+            Log(logLabel + " navigate dispatch failed: " + ex.Message, LogLevel.Warning);
+        }
+    }
+
+    /// <summary>Looks up a hash (sha256 preferred) via the GUI. Returns null if not found / cancelled /
+    /// timed out / the browser was busy and the caller was not willing to wait for it.</summary>
+    public static async Task<VtFileReport?> LookupAsync(string hash, CancellationToken ct = default, TimeSpan? maxQueueWait = null)
     {
         hash = hash.Trim().ToLowerInvariant();
         try
         {
-            string? json = await FetchJsonAsync(hash, "", AppConstants.VtGuiFile + hash, "Keyless GUI lookup", ct);
+            string? json = await FetchJsonAsync(hash, "", AppConstants.VtGuiFile + hash, "Keyless GUI lookup", ct,
+                maxQueueWait ?? Timeout.InfiniteTimeSpan);
             if (json == null) return null;
 
             var dto = JsonSerializer.Deserialize<VtResponse<VtFileData>>(json, JsonOpts);
@@ -105,7 +154,7 @@ internal static class GuiScrapeService
         var result = new List<VtComment>();
         try
         {
-            string? json = await FetchJsonAsync(hash, "/comments", AppConstants.VtGuiFile + hash + "/community", "Keyless GUI comments", ct);
+            string? json = await FetchJsonAsync(hash, "/comments", AppConstants.VtGuiFile + hash + "/community", "Keyless GUI comments", ct, Timeout.InfiniteTimeSpan);
             if (json == null) return result;
 
             var dto = JsonSerializer.Deserialize<VtResponse<List<VtCommentData>>>(json, JsonOpts);
@@ -133,7 +182,7 @@ internal static class GuiScrapeService
         try
         {
             // "/behaviours" is the per-sandbox reports list (the GUI does not call behaviour_summary).
-            string? json = await FetchJsonAsync(hash, "/behaviours", AppConstants.VtGuiFile + hash + "/behavior", "Keyless GUI behaviour", ct);
+            string? json = await FetchJsonAsync(hash, "/behaviours", AppConstants.VtGuiFile + hash + "/behavior", "Keyless GUI behaviour", ct, Timeout.InfiniteTimeSpan);
             if (json == null) return b;
 
             // /behaviours returns a list of per-sandbox reports; merge them all and dedup.
@@ -166,13 +215,53 @@ internal static class GuiScrapeService
         catch (Exception ex) { Log("WebView2 shutdown dispatch: " + ex.Message, LogLevel.Warning); }
     }
 
-    static Task<bool> EnsureReadyAsync()
-    {
-        if (_initFailed) return Task.FromResult(false);
-        if (_initTcs != null) return _initTcs.Task;
+    // ---- browser lifecycle ----
 
+    static async Task<bool> EnsureReadyAsync()
+    {
+        string? wantProxy = TorService.ProxyUrl;
+        if (_initTcs != null && (_restartRequested || _activeProxy != wantProxy))
+        {
+            Log($"Rebuilding the keyless browser (proxy '{_activeProxy ?? "direct"}' -> '{wantProxy ?? "direct"}').", LogLevel.Info);
+            TearDown();
+        }
+
+        if (_initFailed) return false;
+        if (_initTcs != null) return await _initTcs.Task;
+        return await StartBrowserAsync(wantProxy);
+    }
+
+    static void TearDown()
+    {
+        var form = _form;
+        var thread = _thread;
+        _shuttingDown = true;
+        try
+        {
+            form?.BeginInvoke(() =>
+            {
+                try { _web?.Dispose(); } catch (Exception ex) { Log("WebView dispose failed: " + ex.Message, LogLevel.Warning); }
+                try { form.Close(); } catch (Exception ex) { Log("Browser form close failed: " + ex.Message, LogLevel.Warning); }
+            });
+        }
+        catch (Exception ex) { Log("Browser teardown dispatch failed: " + ex.Message, LogLevel.Warning); }
+
+        try { thread?.Join(TimeSpan.FromSeconds(8)); }
+        catch (Exception ex) { Log("Browser thread join failed: " + ex.Message, LogLevel.Warning); }
+        finally
+        {
+            lock (_frames) _frames.Clear();
+            _form = null; _web = null; _bar = null; _torBtn = null; _barLabel = null;
+            _thread = null; _initTcs = null; _initFailed = false;
+            _shuttingDown = false; _restartRequested = false;
+        }
+    }
+
+    static Task<bool> StartBrowserAsync(string? proxyUrl)
+    {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _initTcs = tcs;
+        _activeProxy = proxyUrl;
 
         _thread = new Thread(() =>
         {
@@ -206,12 +295,33 @@ internal static class GuiScrapeService
                 {
                     try
                     {
-                        string userData = Path.Combine(ConfigPathResolver.DataFolder, "webview2");
+                        // A separate profile per route: a VirusTotal session cookie earned on the direct
+                        // address is worthless (and suspicious) on a Tor exit, and vice versa.
+                        string userData = Path.Combine(ConfigPathResolver.DataFolder,
+                            proxyUrl == null ? "webview2" : "webview2-tor");
                         Directory.CreateDirectory(userData);
-                        var env = await CoreWebView2Environment.CreateAsync(null, userData);
+
+                        CoreWebView2Environment env;
+                        try
+                        {
+                            var opts = new CoreWebView2EnvironmentOptions();
+                            if (proxyUrl != null)
+                                opts.AdditionalBrowserArguments = $"--proxy-server=\"{proxyUrl}\" --proxy-bypass-list=\"<-loopback>\"";
+                            env = await CoreWebView2Environment.CreateAsync(null, userData, opts);
+                        }
+                        catch (Exception exOpts)
+                        {
+                            // Never lose the keyless engine over a proxy-argument problem: fall back to a
+                            // plain environment and say so, rather than disabling the whole path.
+                            Log("WebView2 environment with proxy failed, retrying direct: " + exOpts.Message, LogLevel.Warning);
+                            _activeProxy = null;
+                            env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(ConfigPathResolver.DataFolder, "webview2"));
+                        }
+
                         await _web.EnsureCoreWebView2Async(env);
                         _web.CoreWebView2.WebResourceResponseReceived += OnResponse;
                         _web.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+                        _web.CoreWebView2.FrameCreated += OnFrameCreated;
                         tcs.TrySetResult(true);
                     }
                     catch (Exception ex)
@@ -237,10 +347,21 @@ internal static class GuiScrapeService
         return tcs.Task;
     }
 
+    static void OnFrameCreated(object? sender, CoreWebView2FrameCreatedEventArgs e)
+    {
+        try
+        {
+            var frame = e.Frame;
+            lock (_frames) _frames.Add(frame);
+            frame.Destroyed += (s, _) => { lock (_frames) _frames.Remove((CoreWebView2Frame)s!); };
+        }
+        catch (Exception ex) { Log("Frame tracking failed: " + ex.Message, LogLevel.Warning); }
+    }
+
     static void BuildCaptchaBar()
     {
         _bar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.FromArgb(0xE3, 0xB3, 0x41), Visible = false };
-        var lbl = new Label
+        _barLabel = new Label
         {
             Text = Strings.CaptchaBarPrompt,
             ForeColor = Color.Black,
@@ -248,30 +369,28 @@ internal static class GuiScrapeService
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", 10f, FontStyle.Bold),
         };
-        var btn = new Button
-        {
-            Text = Strings.CaptchaBtnSolved,
-            Dock = DockStyle.Right,
-            Width = 170,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Color.Black,
-        };
+        var btn = MakeBarButton(Strings.CaptchaBtnSolved, 170);
         btn.Click += (_, _) => OnSolvedClicked();
-        var apiBtn = new Button
-        {
-            Text = Strings.CaptchaBtnSwitchToApi,
-            Dock = DockStyle.Right,
-            Width = 160,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Color.Black,
-        };
+        var apiBtn = MakeBarButton(Strings.CaptchaBtnSwitchToApi, 160);
         apiBtn.Click += (_, _) => OnSwitchToApi();
-        _bar.Controls.Add(lbl);
+        _torBtn = MakeBarButton(Strings.CaptchaBtnUseTor, 190);
+        _torBtn.Click += (_, _) => OnTorButtonClicked();
+
+        _bar.Controls.Add(_barLabel);
         _bar.Controls.Add(btn);
         _bar.Controls.Add(apiBtn);
+        _bar.Controls.Add(_torBtn);
     }
+
+    static Button MakeBarButton(string text, int width) => new()
+    {
+        Text = text,
+        Dock = DockStyle.Right,
+        Width = width,
+        FlatStyle = FlatStyle.Flat,
+        BackColor = Color.White,
+        ForeColor = Color.Black,
+    };
 
     // ---- reCAPTCHA detection (three independent paths) ----
 
@@ -301,16 +420,22 @@ internal static class GuiScrapeService
                 return;
             }
 
-            // (2) the data call was blocked -> almost always reCAPTCHA on the keyless path
+            // (2) the data call was blocked -> reCAPTCHA, or this source IP is out of public-UI budget
             if (code is 429 or 403)
             {
                 string body = await SafeBody(e.Response);
-                if (code == 429 && !body.Contains("recaptcha", StringComparison.OrdinalIgnoreCase) && body.Length > 0)
+                bool captcha = body.Contains("captcha", StringComparison.OrdinalIgnoreCase);
+                // Whether VirusTotal words it as a reCAPTCHA demand or a bare 429, this is the SOURCE IP
+                // being told it has asked enough; a fresh exit address is the only thing that lifts it.
+                // Counted once per lookup, not once per retry, so one blocked file is one strike.
+                if (!_blockReported)
                 {
-                    // a non-captcha 429 (rare) — treat as temporarily blocked, not found
-                    Log("Keyless GUI 429 without recaptcha for " + _targetHash, LogLevel.Warning);
+                    _blockReported = true;
+                    NetworkBlockMonitor.ReportIpBlocked($"keyless-http-{code}" + (captcha ? "-recaptcha" : ""));
                 }
-                ShowCaptcha("http-" + code);
+                if (!captcha)
+                    Log($"Keyless GUI {code} without a captcha marker for {_targetHash} — source IP is blocked.", LogLevel.Warning);
+                HandleCaptcha("http-" + code);
                 return;
             }
 
@@ -326,22 +451,155 @@ internal static class GuiScrapeService
 
     static async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (_pending == null || _captchaShown || _web == null) return;
+        _navDone?.TrySetResult(e.IsSuccess);
+        if (_pending == null || _captchaShown || _autoSolving || _web == null) return;
         try
         {
-            // (3) DOM check for a VISIBLE challenge only. Invisible reCAPTCHA always injects a 0-sized
-            // anchor iframe, so we must require the challenge frame (api2/bframe) to be actually shown
-            // with real size, or an explicit challenge widget / page title — otherwise we'd false-fire.
-            string js = "(function(){try{" +
-                        "var f=document.querySelector('iframe[src*=\\\"api2/bframe\\\"]');" +
-                        "if(f){var r=f.getBoundingClientRect();if(r.width>100&&r.height>100)return true;}" +
-                        "if(document.querySelector('#rc-imageselect,.rc-imageselect,.g-recaptcha-bubble-arrow'))return true;" +
-                        "if(document.title&&/are you human|verify you are|complete the captcha/i.test(document.title))return true;" +
-                        "return false;}catch(e){return false;}})()";
-            string res = await _web.CoreWebView2.ExecuteScriptAsync(js);
-            if (res != null && res.Contains("true")) ShowCaptcha("dom-visible");
+            if (await HasVisibleChallengeAsync()) HandleCaptcha("dom-visible");
         }
         catch (Exception ex) { Log("Captcha DOM check failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>(3) DOM check for a VISIBLE challenge only. Invisible reCAPTCHA always injects a 0-sized
+    /// anchor iframe, so the challenge frame (api2/bframe) must be actually shown with real size, or an
+    /// explicit challenge widget / page title must be present — otherwise we'd false-fire.</summary>
+    static async Task<bool> HasVisibleChallengeAsync()
+    {
+        if (_web == null) return false;
+        const string js = "(function(){try{" +
+                          "var f=document.querySelector('iframe[src*=\\\"api2/bframe\\\"]');" +
+                          "if(f){var r=f.getBoundingClientRect();if(r.width>100&&r.height>100)return true;}" +
+                          "if(document.querySelector('#rc-imageselect,.rc-imageselect,.g-recaptcha-bubble-arrow'))return true;" +
+                          "if(document.title&&/are you human|verify you are|complete the captcha/i.test(document.title))return true;" +
+                          "return false;}catch(e){return false;}})()";
+        string res = await RunOnUiAsync(() => _web!.CoreWebView2.ExecuteScriptAsync(js));
+        return res != null && res.Contains("true");
+    }
+
+    // ---- captcha handling: try the one click ourselves before disturbing the user ----
+
+    static void HandleCaptcha(string via)
+    {
+        if (_captchaShown || _autoSolving) return;
+        if (!Settings.CaptchaAutoClick || _autoSolveTried) { ShowCaptcha(via); return; }
+        _autoSolveTried = true;
+        _autoSolving = true;
+        _timeoutCts?.CancelAfter(Timeout.InfiniteTimeSpan); // don't time out mid-attempt
+
+        _ = Task.Run(async () =>
+        {
+            bool solved = false;
+            try { solved = await TryAutoSolveAsync(); }
+            catch (Exception ex) { Log("Automatic captcha click failed: " + ex.Message, LogLevel.Warning); }
+            finally
+            {
+                _autoSolving = false;
+                if (solved)
+                {
+                    Log("reCAPTCHA passed with the single click — the user was not interrupted.", LogLevel.Info);
+                    _timeoutCts?.CancelAfter(TimeSpan.FromSeconds(45));
+                }
+                else if (_pending is { Task.IsCompleted: false })
+                {
+                    ShowCaptcha(via + "+autoclick-failed");
+                }
+            }
+        });
+    }
+
+    /// <summary>Loads the page, clicks the reCAPTCHA checkbox inside its own frame and waits to see
+    /// whether that alone satisfied it. Returns true when the checkbox went green with no picture
+    /// puzzle and the page was re-requested; false when a puzzle appeared or nothing worked.</summary>
+    static async Task<bool> TryAutoSolveAsync()
+    {
+        var pending = _pending;
+        if (pending == null || _web == null) return false;
+
+        // A 429 on the XHR does not necessarily paint the widget — reload so the checkbox exists.
+        Navigate(_currentUrl, "Captcha auto-click reload", null);
+        var nav = _navDone;
+        if (nav != null)
+        {
+            var done = await Task.WhenAny(nav.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+            if (done != nav.Task) { Log("Captcha auto-click: the page did not finish loading.", LogLevel.Warning); return false; }
+        }
+        if (pending.Task.IsCompleted) return true; // the reload alone was enough
+
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        bool clicked = false;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (pending.Task.IsCompleted) return true;
+
+            string state = await ClickAnchorInFramesAsync();
+            if (state == "already" || state == "checked") { clicked = true; break; }
+            if (state == "clicked") clicked = true;
+
+            if (clicked && await HasVisibleChallengeAsync())
+            {
+                Log("reCAPTCHA answered the click with a picture puzzle — handing it to the user.", LogLevel.Info);
+                return false;
+            }
+            await Task.Delay(600);
+        }
+
+        if (!clicked) { Log("Captcha auto-click: the checkbox was never reachable.", LogLevel.Warning); return false; }
+        if (await HasVisibleChallengeAsync()) return false;
+        if (pending.Task.IsCompleted) return true;
+
+        // Checkbox accepted with no puzzle: re-issue the data call with the now-valid token.
+        Navigate(_currentUrl, "Captcha auto-click retry", null);
+        var finish = await Task.WhenAny(pending.Task, Task.Delay(TimeSpan.FromSeconds(25)));
+        return finish == pending.Task && pending.Task.Result != null;
+    }
+
+    /// <summary>Runs the checkbox click inside every child frame; only the reCAPTCHA anchor frame
+    /// matches, which is why the script checks its own location first. Returns the frame's answer:
+    /// "clicked", "checked", "already", or "none".</summary>
+    static async Task<string> ClickAnchorInFramesAsync()
+    {
+        const string js = "(function(){try{" +
+                          "if(location.href.indexOf('api2/anchor')<0)return 'skip';" +
+                          "var c=document.getElementById('recaptcha-anchor');" +
+                          "if(!c)return 'nochk';" +
+                          "if(c.getAttribute('aria-checked')==='true')return 'already';" +
+                          "c.click();" +
+                          "return c.getAttribute('aria-checked')==='true'?'checked':'clicked';" +
+                          "}catch(e){return 'err';}})()";
+
+        List<CoreWebView2Frame> frames;
+        lock (_frames) frames = [.. _frames];
+        string best = "none";
+        foreach (var frame in frames)
+        {
+            try
+            {
+                string raw = await RunOnUiAsync(() => frame.ExecuteScriptAsync(js));
+                string val = (raw ?? "").Trim('"');
+                if (val is "already" or "checked") return val;
+                if (val == "clicked") best = "clicked";
+            }
+            catch (Exception ex) { Log("Frame click attempt failed: " + ex.Message, LogLevel.Warning); }
+        }
+        return best;
+    }
+
+    /// <summary>Marshals a WebView2 call onto the browser's own UI thread and awaits its result.</summary>
+    static Task<string> RunOnUiAsync(Func<Task<string>> action)
+    {
+        var form = _form;
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (form == null || !form.IsHandleCreated) { tcs.TrySetResult(""); return tcs.Task; }
+        try
+        {
+            form.BeginInvoke(async () =>
+            {
+                try { tcs.TrySetResult(await action() ?? ""); }
+                catch (Exception ex) { Log("Browser script call failed: " + ex.Message, LogLevel.Warning); tcs.TrySetResult(""); }
+            });
+        }
+        catch (Exception ex) { Log("Browser script dispatch failed: " + ex.Message, LogLevel.Warning); tcs.TrySetResult(""); }
+        return tcs.Task;
     }
 
     static void ShowCaptcha(string via)
@@ -357,6 +615,8 @@ internal static class GuiScrapeService
             {
                 try
                 {
+                    if (_barLabel != null) _barLabel.Text = Strings.CaptchaBarPrompt + "   " + TorService.StatusLine();
+                    if (_torBtn != null) _torBtn.Text = TorService.IsActive ? Strings.CaptchaBtnNewCircuit : Strings.CaptchaBtnUseTor;
                     _bar!.Visible = true;
                     _form.FormBorderStyle = FormBorderStyle.Sizable;
                     _form.ShowInTaskbar = true;
@@ -387,6 +647,60 @@ internal static class GuiScrapeService
             _web!.CoreWebView2.Navigate(_currentUrl); // re-fetch with the now-valid session
         }
         catch (Exception ex) { Log("Solve-retry failed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>The captcha bar's Tor button: switch Tor on when it is off, take a new exit address
+    /// when it is already on. Either way the lookup is dropped so it restarts on the new route.</summary>
+    static void OnTorButtonClicked()
+    {
+        var pending = _pending;
+        try { if (_torBtn != null) { _torBtn.Enabled = false; _torBtn.Text = Strings.CaptchaBtnTorWorking; } }
+        catch (Exception ex) { Log("Tor button state failed: " + ex.Message, LogLevel.Warning); }
+
+        _ = Task.Run(async () =>
+        {
+            bool ok;
+            try
+            {
+                if (TorService.IsActive)
+                {
+                    ok = await TorService.NewCircuitAsync();
+                }
+                else
+                {
+                    ok = await TorService.EnableAsync();
+                    if (ok)
+                    {
+                        Settings.UseTor.Value = true;
+                        SettingsManager.SaveSettings();
+                        VtHttpClientFactory.Invalidate();
+                    }
+                }
+                if (ok) InvalidateSession("captcha bar");
+                UiStatusHub.Report(Strings.StatusSourceTor,
+                    ok ? TorService.StatusLine() : string.Format(Strings.TorAutoEnableFailedFormat, TorService.LastError ?? "?"),
+                    ok ? StatusSeverity.Info : StatusSeverity.Warning);
+            }
+            catch (Exception ex) { Log("Captcha-bar Tor action failed: " + ex, LogLevel.Error); ok = false; }
+
+            try
+            {
+                _form?.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        if (_torBtn != null) { _torBtn.Enabled = true; _torBtn.Text = TorService.IsActive ? Strings.CaptchaBtnNewCircuit : Strings.CaptchaBtnUseTor; }
+                        if (_barLabel != null) _barLabel.Text = Strings.CaptchaBarPrompt + "   " + TorService.StatusLine();
+                    }
+                    catch (Exception ex) { Log("Tor button refresh failed: " + ex.Message, LogLevel.Warning); }
+                });
+            }
+            catch (Exception ex) { Log("Tor button refresh dispatch failed: " + ex.Message, LogLevel.Warning); }
+
+            // Give this lookup back to the caller: it will come round again on the new route, through a
+            // freshly built browser (the old profile still holds the blocked address' cookie).
+            if (ok) pending?.TrySetResult(null);
+        });
     }
 
     /// <summary>User chose to use an API key instead of solving the reCAPTCHA — give up the GUI
