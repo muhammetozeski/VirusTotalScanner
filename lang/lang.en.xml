@@ -1387,4 +1387,17 @@
   <s name="CacheBackupFellBackFormat">Could not write to the chosen folder ({0}). The backup went here instead: {1}</s>
   <s name="KeyBackupNoPath">The key backup file path is empty.</s>
   <s name="KeyBackupFellBackFormat">Could not write to the chosen file ({0}). The backup went here instead: {1}</s>
+  <s name="TtDrawerScan">Ways to start a scan other than picking files: look up a hash you already have, verify a file against an expected hash, scan the running processes, check whether the files you pinned have changed. The Tor row on the right belongs to this section. Click the header to fold it open or shut.</s>
+  <s name="TtDrawerReports">Ways to export the results: a CSV table, an HTML report and a per-folder summary. Click the header to fold it open or shut.</s>
+  <s name="TtDrawerTools">Quarantine vault, downloads triage, incident timeline, family clusters, re-check verdicts, cache backup, every command, and help. Click the header to fold it open or shut.</s>
+  <s name="TtDetailCopy">Copies the selected row's hash, path or verdict line to the clipboard.</s>
+  <s name="TtDetailShowAllEngines">Lists every engine's result instead of only the ones that flagged the file.</s>
+  <s name="TtDetailMajorOnly">Narrows the list to the engines counted as "major". A file only small engines flagged is usually a false positive.</s>
+  <s name="TtDetailComments">Fetches the VirusTotal community comments (over the keyless route, no quota spent).</s>
+  <s name="TtDetailBehaviour">Fetches the file's sandbox behaviour: addresses it contacted, files it wrote, registry keys it set, processes it started.</s>
+  <s name="TtActionGoSettings">Goes to the matching settings card.</s>
+  <s name="TtActionEnable">Turns on the feature named in this row.</s>
+  <s name="TtDetailCopyValue">Copies the value next to it to the clipboard.</s>
+  <s name="TtCloseStrip">Closes this strip.</s>
+  <s name="TtOverviewStatusButton">Takes you to the action for this status (the relevant tab, or the fix).</s>
 </strings>
