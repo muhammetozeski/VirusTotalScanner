@@ -25,6 +25,9 @@ internal static class AppServices
         ProductSignerRegistry.Load();
         ConfirmGateManager.Load();
         Vault.Load();
+        // Mirror the keys out on every start, not only when one is added: a vault restored from a
+        // config backup would otherwise never reach the plain-text safety net.
+        Vault.ExportPlaintext();
         Cache.Load();
         KnownGoodDb.Reload();
         Rotator = new KeyRotator(Vault);
