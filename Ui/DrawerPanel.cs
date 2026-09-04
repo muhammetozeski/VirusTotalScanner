@@ -15,11 +15,22 @@ internal sealed class DrawerPanel : FlowLayoutPanel
 {
     const char KeySeparator = ';';
 
-    readonly Panel _headerRow = new() { Height = 30, Margin = new Padding(0) };
+    // A TableLayoutPanel, not a plain Panel: the row has to grow to whatever the tallest thing in it
+    // needs (a checkbox and a button are taller than the fold button), and a fixed-height Panel simply
+    // clipped the drawers underneath it.
+    readonly TableLayoutPanel _headerRow = new()
+    {
+        ColumnCount = 2,
+        RowCount = 1,
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        Margin = new Padding(0),
+        Padding = new Padding(0),
+    };
     readonly Button _header;
     readonly FlowLayoutPanel _extras = new()
     {
-        Dock = DockStyle.Right,
+        Anchor = AnchorStyles.Right,
         AutoSize = true,
         AutoSizeMode = AutoSizeMode.GrowAndShrink,
         WrapContents = false,
@@ -55,11 +66,15 @@ internal sealed class DrawerPanel : FlowLayoutPanel
         _header.TextAlign = ContentAlignment.MiddleLeft;
         _header.Dock = DockStyle.Fill;
         _header.Margin = new Padding(0);
+        // A stable tooltip key: the caption carries a fold arrow and a live action count, so it is not
+        // something a lookup table can be written against.
+        _header.AccessibleName = "tt.drawer." + key;
 
-        // Index order matters: the Fill control must be added first so the docked-Right panel takes
-        // the edge and the button fills what is left (index 0 docks last).
-        _headerRow.Controls.Add(_header);
-        _headerRow.Controls.Add(_extras);
+        _headerRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // fold button takes the rest
+        _headerRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // extras keep their own width
+        _headerRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _headerRow.Controls.Add(_header, 0, 0);
+        _headerRow.Controls.Add(_extras, 1, 0);
 
         Controls.Add(_headerRow);
         Controls.Add(_body);
@@ -100,8 +115,9 @@ internal sealed class DrawerPanel : FlowLayoutPanel
     {
         if (width <= 0) return;
         _body.MaximumSize = new Size(width, 0);
-        _headerRow.Width = width;
-        _headerRow.Height = Math.Max(30, _extras.PreferredSize.Height + 4);
+        // MinimumSize, not Width: this panel auto-sizes to its content, so a plain Width assignment is
+        // thrown away and the header would hug the fold button instead of reaching the right edge.
+        _headerRow.MinimumSize = new Size(width, 0);
     }
 
     static HashSet<string> OpenKeys() =>
