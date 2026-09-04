@@ -33,11 +33,23 @@ internal static class Settings
     /// <summary>Use the local hash cache to avoid re-querying VirusTotal for known files.</summary>
     public static readonly Setting<bool> UseLocalHashCache = new(true);
 
-    /// <summary>How many days a cached clean verdict stays valid (clean can go stale).</summary>
-    public static readonly Setting<int> HashCacheDays = new(7);
+    /// <summary>How many days a cached clean verdict stays valid. 0 = never expires (the default):
+    /// VirusTotal is not an antivirus, so re-asking it about a file it already answered for only
+    /// burns quota. The periodic re-check sweep is what catches a verdict that changed later.</summary>
+    public static readonly Setting<int> HashCacheDays = new(0);
 
-    /// <summary>How many days a cached malicious verdict stays valid (rarely reverses → keep long).</summary>
-    public static readonly Setting<int> ThreatCacheDays = new(365);
+    /// <summary>How many days a cached malicious verdict stays valid. 0 = never expires.</summary>
+    public static readonly Setting<int> ThreatCacheDays = new(0);
+
+    /// <summary>Folder the hash cache is copied into on a timer (empty = no backups).</summary>
+    public static readonly Setting<string> CacheBackupFolder = new("");
+
+    /// <summary>Hours between hash-cache backups (0 = only when the button is pressed).</summary>
+    public static readonly Setting<int> CacheBackupHours = new(24);
+
+    /// <summary>How many timestamped cache backups to keep in the backup folder before the oldest
+    /// are removed (0 = keep every one).</summary>
+    public static readonly Setting<int> CacheBackupKeep = new(30);
 
     /// <summary>Skip files larger than this many MB before hashing (0 = no cap). VT's own upload
     /// ceiling is ~650 MB, so very large files cannot be analyzed anyway.</summary>
@@ -64,6 +76,27 @@ internal static class Settings
     /// <summary>Prefer the keyless GUI (WebView2) engine for lookups; the API is the fallback.
     /// Default ON: every lookup tries the GUI first (no key, no quota), then the API with Polly.</summary>
     public static readonly Setting<bool> KeylessGuiLookup = new(true);
+
+    // ---- Tor (source-IP rotation for the keyless path) ----
+
+    /// <summary>Route VirusTotal traffic (API + keyless browser) through a private Tor process.</summary>
+    public static readonly Setting<bool> UseTor = new(false);
+
+    /// <summary>Explicit path to tor.exe. Empty = search PATH, scoop and the Tor Browser folders.</summary>
+    public static readonly Setting<string> TorExePath = new("");
+
+    /// <summary>Turn Tor on by itself after the source IP has been blocked repeatedly in one day.</summary>
+    public static readonly Setting<bool> TorAutoEnable = new(true);
+
+    /// <summary>How many IP-level blocks within 24 h switch Tor on automatically.</summary>
+    public static readonly Setting<int> TorAutoEnableAfter = new(3);
+
+    /// <summary>While Tor is carrying the traffic, take a new circuit (new exit IP) after a failure.</summary>
+    public static readonly Setting<bool> TorNewCircuitOnError = new(true);
+
+    /// <summary>Let the app try the reCAPTCHA's single "I am not a robot" click by itself before it
+    /// interrupts the user. If a picture puzzle follows, the window is shown as usual.</summary>
+    public static readonly Setting<bool> CaptchaAutoClick = new(true);
 
     /// <summary>Minimize to the system tray instead of closing.</summary>
     public static readonly Setting<bool> MinimizeToTray = new(true);
@@ -161,6 +194,12 @@ internal static class Settings
 
     /// <summary>The API-key vault: Base64(DPAPI(JSON of all keys + quota counters)).</summary>
     public static readonly Setting<string> EncryptedKeyVault = new("");
+
+    /// <summary>Plain-text mirror of every API key ever held, so the DPAPI vault becoming unreadable
+    /// (reinstall, new Windows profile, restore onto another machine) does not lose them. Empty
+    /// disables the mirror.</summary>
+    public static readonly Setting<string> KeyPlaintextBackupPath =
+        new(@"D:\!Muhammet\PROGRAMLAR ve Bilgisayar Dökümanları\VirusTotalScanner - API Keys.txt");
 
     /// <summary>User-defined verdict categories (JSON list of {MinDetections, Name, ColorHex}).</summary>
     public static readonly Setting<string> VerdictCategoriesJson = new("");
