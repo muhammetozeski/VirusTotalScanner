@@ -27,6 +27,9 @@ internal enum LookupFailure
     UnknownNoKey,
     /// <summary>Uploaded successfully, but the analysis had not finished when the poll window ran out.</summary>
     AnalysisTimedOut,
+    /// <summary>VirusTotal has never seen it, and the upload policy did not submit it (it is not the
+    /// kind of file a verdict would change anything about).</summary>
+    NotSubmitted,
     /// <summary>Every channel that was tried came back empty.</summary>
     LookupEmpty,
 }
@@ -168,6 +171,9 @@ internal sealed class ScanOptions
     public int CacheDays { get; set; }        // retention for clean verdicts (0 = never expires)
     public int ThreatCacheDays { get; set; }  // retention for malicious verdicts (0 = never expires)
 
+    /// <summary>0 = never submit an unknown file, 1 = only code-shaped ones, 2 = anything.</summary>
+    public int UploadPolicy { get; set; } = 1;
+
     /// <summary>Skip VT for trusted-signed / known-good files (the keyless quota saver).</summary>
     public bool SkipTrusted { get; set; } = true;
     /// <summary>When true, force every file through VT even if trusted (re-scan ignoring trust).</summary>
@@ -183,6 +189,7 @@ internal sealed class ScanOptions
         UseCache = Settings.UseLocalHashCache,
         CacheDays = Math.Max(0, Settings.HashCacheDays.Value),
         ThreatCacheDays = Math.Max(0, Settings.ThreatCacheDays.Value),
+        UploadPolicy = Math.Clamp(Settings.UploadPolicy.Value, 0, 2),
         SkipTrusted = Settings.TrustSkipSigned,
     };
 }

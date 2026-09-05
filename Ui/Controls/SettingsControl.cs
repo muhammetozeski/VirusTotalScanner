@@ -480,6 +480,14 @@ internal sealed class SettingsControl : UserControl
         var skipSafe = new CheckBox { Text = Strings.ScanSkipSafeLabel, AutoSize = true, Checked = Settings.SkipSafeExtensionsOnScan };
         skipSafe.CheckedChanged += (_, _) => { Settings.SkipSafeExtensionsOnScan.Value = skipSafe.Checked; SettingsManager.SaveSettings(); };
 
+        var uploadRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+        uploadRow.Controls.Add(ThemeManager.MakeLabel(Strings.ScanUploadPolicyLabel));
+        var uploadCombo = TooltipCatalog.Name(new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320 }, TooltipCatalog.UploadPolicyCombo);
+        uploadCombo.Items.AddRange([Strings.UploadPolicyNever, Strings.UploadPolicyCodeOnly, Strings.UploadPolicyAlways]);
+        uploadCombo.SelectedIndex = Math.Clamp(Settings.UploadPolicy.Value, 0, 2);
+        uploadCombo.SelectedIndexChanged += (_, _) => { Settings.UploadPolicy.Value = uploadCombo.SelectedIndex; SettingsManager.SaveSettings(); };
+        uploadRow.Controls.Add(uploadCombo);
+
         var lbl = ThemeManager.MakeLabel(Strings.ScanSafeExtsLabel);
         var exts = TooltipCatalog.Name(new TextBox { Dock = DockStyle.Top, Text = Settings.SafeExtensions, Height = 24 }, TooltipCatalog.SafeExtsBox);
         var save = ThemeManager.MakeButton(Strings.BtnSaveExts, (_, _) => { Settings.SafeExtensions.Value = exts.Text.Trim(); SettingsManager.SaveSettings(); });
@@ -488,6 +496,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(lbl);
         body.Controls.Add(save);
         body.Controls.Add(skipSafe);
+        body.Controls.Add(uploadRow);
         body.Controls.Add(threatCacheDays);
         body.Controls.Add(cacheDays);
         body.Controls.Add(cache);

@@ -30,6 +30,12 @@ internal static class Settings
     /// this is throttled separately from lookups).</summary>
     public static readonly Setting<int> MaxConcurrentUploads = new(2);
 
+    /// <summary>What to do with a file VirusTotal has never seen.
+    /// 0 = never upload (hash lookups only), 1 = upload only code-shaped files (default),
+    /// 2 = upload anything. A submission costs a request and the analysis after it costs more, and a
+    /// disk holds tens of thousands of tiny resource payloads that can never be malware.</summary>
+    public static readonly Setting<int> UploadPolicy = new(1);
+
     /// <summary>Use the local hash cache to avoid re-querying VirusTotal for known files.</summary>
     public static readonly Setting<bool> UseLocalHashCache = new(true);
 

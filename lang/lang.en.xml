@@ -1403,4 +1403,10 @@
   <s name="KeyStatusDuplicateSuffix">  ⚠ THE SAME KEY IS LISTED TWICE</s>
   <s name="KeyDuplicateWarn">That key is already in the list.\n\nAdding the same key twice does not double the quota: VirusTotal counts it per key. The second row only makes the app believe it has quota it does not have, and the extra requests come back 429.</s>
   <s name="KeylessParkedFormat">A reCAPTCHA went unanswered - the keyless route is parked for {0} minutes; the scan carries on over the API.</s>
+  <s name="SkipReasonNotSubmitted">Not in VT, not submitted (not a code file)</s>
+  <s name="ScanUploadPolicyLabel">Submit a file VirusTotal has not seen:</s>
+  <s name="UploadPolicyNever">Never submit (hash lookups only)</s>
+  <s name="UploadPolicyCodeOnly">Only code files (default)</s>
+  <s name="UploadPolicyAlways">Submit every file</s>
+  <s name="TtUploadPolicy">What to do when VirusTotal has NEVER SEEN a file. The hash lookup happens for every file and is cheap; SUBMITTING one costs a request, and the analysis wait that follows costs more. A disk holds tens of thousands of tiny resource files that could never be malware (Store icons, .DATA fragments), so by default only code-shaped files are submitted: executables, scripts, installers, archives, macro-capable documents. If the extension does not say, the first bytes do, so a renamed executable is still caught. A file that is not submitted is marked skipped, not failed.</s>
 </strings>

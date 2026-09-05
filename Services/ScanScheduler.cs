@@ -294,7 +294,14 @@ internal sealed class ScanScheduler
             }
             finally { dedupGate.Release(); }
 
-            if (report == null)
+            if (report == null && failure == LookupFailure.NotSubmitted)
+            {
+                // Not a failure: VirusTotal has never seen it and it is not the kind of file a
+                // submission would be spent on. Saying "error" here would paint a disk sweep red.
+                UiPost(() => { item.SkipReason = Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
+                Bump(ref _skipped);
+            }
+            else if (report == null)
             {
                 string reason = failure switch
                 {
@@ -356,7 +363,8 @@ internal sealed class ScanScheduler
         bool guiAvailable = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         VtFileReport? report = null;
         var failure = LookupFailure.LookupEmpty;
-        bool guiAnswered = false; // the browser actually ran the lookup (rather than being skipped as busy)
+        bool guiAnswered = false;      // the browser actually ran the lookup (rather than being skipped as busy)
+        bool vtHasNeverSeenIt = false; // the API answered 404 — asking any other channel gets the same 404
 
         await _lookupGate!.WaitAsync(ct);
         int slotHeld = 1;
@@ -385,7 +393,13 @@ internal sealed class ScanScheduler
             {
                 var (gotKeySlot, existing) = await TryCallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ApiWaitForKey, ct);
                 report = existing;
-                if (report == null && gotKeySlot)
+                if (report == null && gotKeySlot) vtHasNeverSeenIt = true; // a served 404 is an answer
+                if (report == null && gotKeySlot && !ShouldUpload(item.FilePath, opts))
+                {
+                    failure = LookupFailure.NotSubmitted;
+                    Log($"Not in VirusTotal and not submitted (upload policy): {item.FileName}", LogLevel.Debug);
+                }
+                else if (report == null && gotKeySlot)
                 {
                     await _pause.WaitWhilePausedAsync(ct);
                     SetStatus(item, ScanStatus.Uploading);
@@ -410,9 +424,11 @@ internal sealed class ScanScheduler
             }
 
             // Last resort: the API was off, spent or refused -> take the keyless browser, waiting for it
-            // this time (there is nothing else left to try). Skipped for a file that did reach VirusTotal
-            // and is still being analysed — asking again would only return the same "not finished".
-            if (report == null && guiAvailable && !guiAnswered && !ct.IsCancellationRequested && failure != LookupFailure.AnalysisTimedOut)
+            // this time (there is nothing else left to try). Skipped when another channel already gave a
+            // definite answer: a file still being analysed, or one the API said outright it has never
+            // seen. Both would come back identical from the browser and cost a slot to learn nothing.
+            if (report == null && guiAvailable && !guiAnswered && !vtHasNeverSeenIt && !ct.IsCancellationRequested
+                && failure is not (LookupFailure.AnalysisTimedOut or LookupFailure.NotSubmitted))
                 report = await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
         }
         finally { ReleaseSlot(); }
@@ -427,6 +443,15 @@ internal sealed class ScanScheduler
     /// Long enough to ride out the 4-per-minute window, short enough that a day-long quota block does
     /// not park the whole scan.</summary>
     static readonly TimeSpan ApiWaitForKey = TimeSpan.FromSeconds(75);
+
+    /// <summary>Whether an unknown file should actually be submitted. Looking a hash up is cheap and
+    /// always happens; submitting is not, so by default only code-shaped files earn one.</summary>
+    static bool ShouldUpload(string path, ScanOptions opts) => opts.UploadPolicy switch
+    {
+        0 => false,
+        2 => true,
+        _ => FileClass.IsWorthUploading(path),
+    };
 
     const int PollIntervalSeconds = 15;
     const int MaxPolls = 60;
