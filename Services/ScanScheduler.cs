@@ -237,6 +237,7 @@ internal sealed class ScanScheduler
             int localDegree = Math.Max(1, opts.MaxConcurrency) + Math.Max(4, Environment.ProcessorCount);
             var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
             using var heartbeat = StartHeartbeat(items.Count, localDegree, ct);
+            using var quietList = SuspendItemNotifications();
 
             _netQueue = System.Threading.Channels.Channel.CreateUnbounded<NetworkJob>(
                 new System.Threading.Channels.UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
@@ -863,6 +864,36 @@ internal sealed class ScanScheduler
         UiPost(() => { item.SkipReason = reason; item.Publisher = publisher; item.Status = ScanStatus.TrustedSkipped; });
         Bump(ref _signedSkipped);
         Log($"VT skipped (trusted): {item.FileName} — {reason}", LogLevel.Info);
+    }
+
+    /// <summary>
+    /// Silences per-item ListChanged for the length of a run, and restores it with one reset at the end.
+    ///
+    /// <see cref="BindingList{T}"/> subscribes to every item's PropertyChanged and answers each one by
+    /// calling IndexOf to find the row — a linear walk of the whole list. On a 340,000-file sweep that
+    /// is a 340,000-element search per property set, on the UI thread, several hundred times a second:
+    /// the window stopped answering and Windows logged the scan as hung four minutes in. The grid is
+    /// repainted by the queue view's own timer while a scan runs, so these notifications buy nothing.
+    /// </summary>
+    IDisposable SuspendItemNotifications()
+    {
+        UiPost(() => Items.RaiseListChangedEvents = false);
+        return new Restore(() => UiPost(() =>
+        {
+            Items.RaiseListChangedEvents = true;
+            Items.ResetBindings();
+        }));
+    }
+
+    /// <summary>Runs an action when disposed.</summary>
+    sealed class Restore(Action onDispose) : IDisposable
+    {
+        int _done;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _done, 1) == 1) return;
+            try { onDispose(); } catch (Exception ex) { Log("Restore failed: " + ex.Message, LogLevel.Warning); }
+        }
     }
 
     /// <summary>Add many items to the grid-bound list in chunks, suppressing per-item ListChanged so the
