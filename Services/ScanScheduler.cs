@@ -115,6 +115,10 @@ internal sealed class ScanScheduler
     /// pending-queue loop in <see cref="RunAsync"/> owns that flag.</summary>
     async Task RunCoreAsync(IEnumerable<string> paths, ScanOptions opts, bool clearQueue, CancellationToken externalCt)
     {
+        using var runOp = OpLog.Begin("Scan run",
+            $"targets=[{string.Join(", ", paths.Take(4))}{(paths.Count() > 4 ? ", …" : "")}] recurse={opts.Recurse} "
+            + $"concurrency={opts.MaxConcurrency} uploads={opts.MaxUploads} uploadPolicy={opts.UploadPolicy} "
+            + $"cacheDays={opts.CacheDays}/{opts.ThreatCacheDays} clearQueue={clearQueue}");
         _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
         var ct = _cts.Token;
         ResetCounters();
@@ -189,10 +193,12 @@ internal sealed class ScanScheduler
         catch (OperationCanceledException)
         {
             Log("Scan cancelled.", LogLevel.Info);
+            runOp.Note("cancelled");
         }
         catch (Exception ex)
         {
             Log("Scan run failed: " + ex, LogLevel.Error);
+            runOp.Fail(ex.Message);
         }
         finally
         {
@@ -205,6 +211,8 @@ internal sealed class ScanScheduler
             Log($"Fingerprint cache: {FingerprintCache.Hits} reuse(s), {FingerprintCache.Misses} miss(es), {FingerprintCache.Count} entr(ies) held.", LogLevel.Info);
             try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
             Log("Scan finished.", LogLevel.Info);
+            runOp.Ok($"{_done}/{_total} done — malicious={_malicious} suspicious={_suspicious} clean={_clean} "
+                + $"unknown={_unknown} failed={_failed} skipped={_skipped} trustSkipped={_signedSkipped}");
         }
     }
 
