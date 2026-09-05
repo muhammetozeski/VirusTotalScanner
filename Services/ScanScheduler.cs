@@ -71,6 +71,9 @@ internal sealed class ScanScheduler
     readonly object _pendingLock = new();
     readonly List<string> _pendingPaths = [];
     ScanOptions? _pendingOpts;
+    /// <summary>Targets of the pass currently running, used to drop a queued request the running pass
+    /// already covers.</summary>
+    string[] _activeTargets = [];
 
     /// <summary>Raised (marshalled via <see cref="UiPost"/>) when a scan request arrives while a run
     /// is active and gets queued behind it. Carries the total pending path count.</summary>
@@ -82,7 +85,19 @@ internal sealed class ScanScheduler
         {
             if (IsRunning)
             {
-                _pendingPaths.AddRange(paths);
+                // Anything the running pass already walks is dropped, not queued. An auto-resumed
+                // session and the path on the command line are the same drive; queueing the second one
+                // scheduled a whole second sweep of C:\ to start the moment the first one ended.
+                // A forced re-check or a hand-picked file is never dropped: those mean "this one, now",
+                // and the running pass would answer them from the cache or not reach them for hours.
+                var (fresh, covered) = opts.BypassTrust || opts.ExplicitFileSelection
+                    ? (paths.ToList(), new List<string>())
+                    : SplitAlreadyCovered(paths);
+                if (covered.Count > 0)
+                    Log($"Scan request covered by the running pass; {covered.Count} path(s) dropped: {string.Join(", ", covered.Take(5))}", LogLevel.Info);
+                if (fresh.Count == 0) return;
+
+                _pendingPaths.AddRange(fresh);
                 _pendingOpts = opts;
                 int pending = _pendingPaths.Count;
                 Log($"Scan already running; queued {pending} path(s) for an automatic follow-up run.", LogLevel.Info);
@@ -90,6 +105,7 @@ internal sealed class ScanScheduler
                 return;
             }
             IsRunning = true; // reserved inside the lock, so two racing requests can't both start
+            _activeTargets = paths.ToArray();
         }
 
         var runPaths = paths;
@@ -101,14 +117,44 @@ internal sealed class ScanScheduler
             lock (_pendingLock)
             {
                 if (_cts?.IsCancellationRequested == true) { _pendingPaths.Clear(); _pendingOpts = null; } // Cancel covers the queued batch too
-                if (_pendingPaths.Count == 0) { IsRunning = false; return; }
-                runPaths = _pendingPaths.ToArray();
+                if (_pendingPaths.Count == 0) { IsRunning = false; _activeTargets = []; return; }
+                var next = _pendingPaths.ToArray();
+                runPaths = next;
+                _activeTargets = next;
                 _pendingPaths.Clear();
                 runOpts = _pendingOpts ?? runOpts;
                 _pendingOpts = null;
                 clearQueue = false;
             }
         }
+    }
+
+    /// <summary>Splits a request into the paths the running pass does not already cover and the ones it
+    /// does. A path is covered when it IS an active target or sits under one; the recursive walk of that
+    /// target will reach it anyway. Caller holds <see cref="_pendingLock"/>.</summary>
+    (List<string> Fresh, List<string> Covered) SplitAlreadyCovered(IEnumerable<string> paths)
+    {
+        var fresh = new List<string>();
+        var covered = new List<string>();
+        foreach (var p in paths)
+        {
+            if (string.IsNullOrWhiteSpace(p)) continue;
+            string full;
+            try { full = Path.GetFullPath(p); }
+            catch (Exception ex) { Log($"Queued path '{p}' could not be normalised ({ex.Message}); treating it as new.", LogLevel.Warning); fresh.Add(p); continue; }
+
+            bool inside = _activeTargets.Any(t =>
+            {
+                string tf;
+                try { tf = Path.GetFullPath(t); } catch { return false; }
+                if (string.Equals(tf, full, StringComparison.OrdinalIgnoreCase)) return true;
+                if (!tf.EndsWith(Path.DirectorySeparatorChar)) tf += Path.DirectorySeparatorChar;
+                return full.StartsWith(tf, StringComparison.OrdinalIgnoreCase);
+            });
+
+            (inside ? covered : fresh).Add(p);
+        }
+        return (fresh, covered);
     }
 
     /// <summary>One scan pass over one batch of paths. Never touches <see cref="IsRunning"/> — the
