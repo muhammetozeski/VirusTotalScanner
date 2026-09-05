@@ -128,10 +128,17 @@ internal static class TorService
     /// <see cref="LastError"/> set when the binary is missing or bootstrap fails.</summary>
     public static async Task<bool> EnableAsync(CancellationToken ct = default)
     {
+        using var op = OpLog.Begin("Tor enable", $"active={IsActive} pid={_proc?.Id.ToString() ?? "-"}");
+        op.Step("waiting for the Tor gate");
         await _gate.WaitAsync(ct);
+        op.Step("gate taken");
         try
         {
-            if (IsActive && _proc is { HasExited: false }) return true;
+            if (IsActive && _proc is { HasExited: false }) { op.Note("already running"); return true; }
+
+            // A live flag with a dead process means an earlier start half-failed; kill the orphan
+            // rather than leaving a second tor.exe behind (that is how two of them appeared once).
+            if (_proc != null) { op.Step("clearing a stale process handle"); KillProcess(); }
 
             IsBusy = true; LastError = null; Raise();
 
@@ -140,8 +147,10 @@ internal static class TorService
             {
                 LastError = Strings.TorErrExeNotFound;
                 Log("Tor could not be started: tor.exe not found. Looked at: " + string.Join(" | ", SearchedPaths().Take(8)), LogLevel.Error);
+                op.Fail("tor.exe not found");
                 return false;
             }
+            op.Step("binary: " + exe);
 
             _socksPort = FreePort();
             _controlPort = FreePort(_socksPort);
@@ -157,8 +166,10 @@ internal static class TorService
             {
                 LastError = string.Format(Strings.TorErrConfigWriteFormat, ex.Message);
                 Log("Tor config write failed: " + ex, LogLevel.Error);
+                op.Fail("config write: " + ex.Message);
                 return false;
             }
+            op.Step($"torrc written; socks={_socksPort} control={_controlPort} data={dataDir}");
 
             lock (_bootLog) _bootLog.Clear();
             try
@@ -177,6 +188,7 @@ internal static class TorService
                 {
                     LastError = Strings.TorErrStartFailed;
                     Log("Tor start returned no process.", LogLevel.Error);
+                    op.Fail("Process.Start returned null");
                     return false;
                 }
                 _proc.OutputDataReceived += (_, e) => OnTorLine(e.Data);
@@ -189,32 +201,38 @@ internal static class TorService
             {
                 LastError = string.Format(Strings.TorErrStartFailedFormat, ex.Message);
                 Log("Tor process start failed: " + ex, LogLevel.Error);
+                op.Fail("Process.Start: " + ex.Message);
                 return false;
             }
 
+            op.Step("waiting for bootstrap");
             bool up = await WaitForBootstrapAsync(ct);
             if (!up)
             {
                 LastError ??= Strings.TorErrBootstrapTimeout;
                 Log("Tor bootstrap did not complete. Last lines: " + LastBootLines(), LogLevel.Error);
                 KillProcess();
+                op.Fail("bootstrap did not complete");
                 return false;
             }
 
             IsActive = true;
             Log("Tor is ready; routing VirusTotal traffic through it.", LogLevel.Info);
+            op.Ok($"pid={_proc?.Id} socks={_socksPort}");
             return true;
         }
-        catch (OperationCanceledException) { return false; }
+        catch (OperationCanceledException) { op.Note("cancelled"); return false; }
         catch (Exception ex)
         {
             LastError = ex.Message;
             Log("Tor enable failed: " + ex, LogLevel.Error);
+            op.Fail(ex.Message);
             return false;
         }
         finally
         {
             IsBusy = false;
+            _gate.Release();
             Raise();
             if (IsActive) _ = RefreshExitInfoAsync();
         }
@@ -223,6 +241,7 @@ internal static class TorService
     /// <summary>Stops Tor and drops back to the direct connection.</summary>
     public static void Disable()
     {
+        using var op = OpLog.Begin("Tor disable", $"active={IsActive} pid={_proc?.Id.ToString() ?? "-"}");
         try
         {
             bool was = IsActive;
@@ -230,8 +249,9 @@ internal static class TorService
             ExitIp = null; ExitCountry = null;
             KillProcess();
             if (was) Log("Tor disabled; back to the direct connection.", LogLevel.Info);
+            op.Ok(was ? "stopped" : "was not running");
         }
-        catch (Exception ex) { Log("Tor disable failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Tor disable failed: " + ex.Message, LogLevel.Warning); op.Fail(ex.Message); }
         finally { Raise(); }
     }
 
@@ -338,33 +358,42 @@ internal static class TorService
     /// with <see cref="LastError"/> set when Tor is off or the control port refuses.</summary>
     public static async Task<bool> NewCircuitAsync(CancellationToken ct = default)
     {
-        if (!IsActive) { LastError = Strings.TorErrNotRunning; Raise(); return false; }
+        using var op = OpLog.Begin("Tor new circuit", $"control=127.0.0.1:{_controlPort} circuits so far={CircuitCount}");
+        if (!IsActive) { LastError = Strings.TorErrNotRunning; op.Fail("Tor is not running"); Raise(); return false; }
         try
         {
             string cookie = ReadControlCookieHex();
+            op.Step($"control cookie read ({cookie.Length / 2} bytes)");
             using var client = new TcpClient();
             await client.ConnectAsync(IPAddress.Loopback, _controlPort, ct);
+            op.Step("control port connected");
             using var stream = client.GetStream();
             using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, leaveOpen: true);
             using var writer = new StreamWriter(stream, Encoding.ASCII, 1024, leaveOpen: true) { AutoFlush = true, NewLine = "\r\n" };
 
+            op.Step("-> AUTHENTICATE <cookie>");
             await writer.WriteLineAsync("AUTHENTICATE " + cookie);
             string? authReply = await reader.ReadLineAsync(ct);
+            op.Step("<- " + (authReply ?? "(no reply)"));
             if (authReply == null || !authReply.StartsWith("250", StringComparison.Ordinal))
             {
                 LastError = string.Format(Strings.TorErrControlAuthFormat, authReply ?? "-");
                 Log("Tor control auth failed: " + (authReply ?? "(no reply)"), LogLevel.Warning);
+                op.Fail("control auth refused");
                 return false;
             }
 
+            op.Step("-> SIGNAL NEWNYM");
             await writer.WriteLineAsync("SIGNAL NEWNYM");
             string? sigReply = await reader.ReadLineAsync(ct);
+            op.Step("<- " + (sigReply ?? "(no reply)"));
             await writer.WriteLineAsync("QUIT");
 
             if (sigReply == null || !sigReply.StartsWith("250", StringComparison.Ordinal))
             {
                 LastError = string.Format(Strings.TorErrNewnymFormat, sigReply ?? "-");
                 Log("Tor NEWNYM refused: " + (sigReply ?? "(no reply)"), LogLevel.Warning);
+                op.Fail("NEWNYM refused");
                 return false;
             }
 
@@ -375,15 +404,18 @@ internal static class TorService
             Log($"Tor circuit changed (#{CircuitCount}).", LogLevel.Info);
 
             // Tor needs a moment to build the new circuit before the exit IP is meaningful.
+            op.Step("waiting 2.5 s for the circuit to settle");
             await Task.Delay(2500, ct);
             await RefreshExitInfoAsync(ct);
+            op.Ok($"circuit #{CircuitCount}, exit={ExitIp ?? "?"} ({ExitCountry ?? "?"})");
             return true;
         }
-        catch (OperationCanceledException) { return false; }
+        catch (OperationCanceledException) { op.Note("cancelled"); return false; }
         catch (Exception ex)
         {
             LastError = ex.Message;
             Log("Tor new-circuit failed: " + ex, LogLevel.Warning);
+            op.Fail(ex.Message);
             Raise();
             return false;
         }
@@ -402,7 +434,8 @@ internal static class TorService
     /// independent providers, then the Tor project's own endpoint for at least the address.</summary>
     public static async Task RefreshExitInfoAsync(CancellationToken ct = default)
     {
-        if (!IsActive) return;
+        using var op = OpLog.Begin("Tor exit lookup", $"socks=127.0.0.1:{_socksPort}");
+        if (!IsActive) { op.Note("Tor is not running"); return; }
         try
         {
             using var http = BuildProbeClient();
@@ -410,7 +443,9 @@ internal static class TorService
             // 1) one call that carries both address and country
             try
             {
+                op.Step("-> GET ip-api.com/json");
                 string json = await http.GetStringAsync("http://ip-api.com/json/?fields=status,query,country,countryCode", ct);
+                op.Step("<- " + Preview(json));
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
                 if (root.TryGetProperty("query", out var q) && q.GetString() is { Length: > 0 } ip)
@@ -421,15 +456,18 @@ internal static class TorService
                     ExitCountry = string.IsNullOrWhiteSpace(country) ? code
                         : string.IsNullOrWhiteSpace(code) ? country : $"{country} ({code})";
                     Raise();
+                    op.Ok($"{ExitIp} · {ExitCountry} (ip-api)");
                     return;
                 }
             }
-            catch (Exception ex) { Log("Tor exit lookup (ip-api) failed: " + ex.Message, LogLevel.Warning); }
+            catch (Exception ex) { Log("Tor exit lookup (ip-api) failed: " + ex.Message, LogLevel.Warning); op.Step("ip-api failed: " + ex.Message); }
 
             // 2) a TLS provider that also returns the country
             try
             {
+                op.Step("-> GET ipinfo.io/json");
                 string json = await http.GetStringAsync("https://ipinfo.io/json", ct);
+                op.Step("<- " + Preview(json));
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
                 if (root.TryGetProperty("ip", out var ipEl) && ipEl.GetString() is { Length: > 0 } ip2)
@@ -437,27 +475,41 @@ internal static class TorService
                     ExitIp = ip2;
                     ExitCountry = root.TryGetProperty("country", out var c2) ? c2.GetString() : null;
                     Raise();
+                    op.Ok($"{ExitIp} · {ExitCountry ?? "?"} (ipinfo)");
                     return;
                 }
             }
-            catch (Exception ex) { Log("Tor exit lookup (ipinfo) failed: " + ex.Message, LogLevel.Warning); }
+            catch (Exception ex) { Log("Tor exit lookup (ipinfo) failed: " + ex.Message, LogLevel.Warning); op.Step("ipinfo failed: " + ex.Message); }
 
             // 3) last resort: address only, straight from the Tor project
             try
             {
+                op.Step("-> GET check.torproject.org/api/ip");
                 string json = await http.GetStringAsync("https://check.torproject.org/api/ip", ct);
+                op.Step("<- " + Preview(json));
                 using var doc = JsonDocument.Parse(json);
                 if (doc.RootElement.TryGetProperty("IP", out var ipEl) && ipEl.GetString() is { Length: > 0 } ip3)
                 {
                     ExitIp = ip3;
                     ExitCountry = null;
                     Raise();
+                    op.Ok($"{ExitIp} (check.torproject.org)");
+                    return;
                 }
             }
-            catch (Exception ex) { Log("Tor exit lookup (check.torproject.org) failed: " + ex.Message, LogLevel.Warning); }
+            catch (Exception ex) { Log("Tor exit lookup (check.torproject.org) failed: " + ex.Message, LogLevel.Warning); op.Step("torproject failed: " + ex.Message); }
+            op.Fail("no provider answered");
         }
-        catch (Exception ex) { Log("Tor exit info refresh failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Tor exit info refresh failed: " + ex.Message, LogLevel.Warning); op.Fail(ex.Message); }
         finally { Raise(); }
+    }
+
+    /// <summary>A single-line, length-capped view of a payload for the log.</summary>
+    static string Preview(string? s, int max = 300)
+    {
+        if (string.IsNullOrEmpty(s)) return "(empty)";
+        string one = s.Replace("\r", " ").Replace("\n", " ").Trim();
+        return one.Length <= max ? one : one[..max] + $"… ({s.Length} chars)";
     }
 
     static HttpClient BuildProbeClient()
