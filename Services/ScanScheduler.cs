@@ -526,9 +526,15 @@ internal sealed class ScanScheduler
             {
                 // When a key can serve this file right now, don't queue behind the single browser —
                 // let the API take it and leave the browser for the workers that have no key room.
-                var guiWait = _rotator.HasImmediateRoom ? TimeSpan.Zero : Timeout.InfiniteTimeSpan;
-                guiAnswered = guiWait == Timeout.InfiniteTimeSpan; // a waited lookup always ran to an answer
+                //
+                // The wait is bounded even when no key has room. The browser serves one lookup at a
+                // time; waiting on it forever meant every network worker queued behind that one
+                // instance while the per-minute key windows rolled over unused, and the measured rate
+                // was 15 lookups a minute against the 56 the keys allow. A worker that does not get
+                // the browser quickly falls through to the API below and waits for a key instead.
+                var guiWait = _rotator.HasImmediateRoom ? TimeSpan.Zero : GuiWaitWhenKeysBusy;
                 report = await GuiScrapeService.LookupAsync(sha256, ct, guiWait).WaitAsync(ct);
+                guiAnswered = report != null;
             }
 
             if (report == null && !_rotator.HasUsableKeys) failure = LookupFailure.UnknownNoKey;
@@ -747,6 +753,11 @@ internal sealed class ScanScheduler
     /// Long enough to ride out the 4-per-minute window, short enough that a day-long quota block does
     /// not park the whole scan.</summary>
     static readonly TimeSpan ApiWaitForKey = TimeSpan.FromSeconds(75);
+
+    /// <summary>How long one file waits for the single keyless browser before falling through to the
+    /// API. Short: the browser answers one lookup at a time, so a queue on it is dead time for every
+    /// worker in it, while a key window rolls over every minute.</summary>
+    static readonly TimeSpan GuiWaitWhenKeysBusy = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Whether an unknown file should actually be submitted.
