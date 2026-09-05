@@ -181,7 +181,14 @@ internal sealed class ScanQueueControl : UserControl
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
         _scheduler.ProgressChanged += OnProgress;
         _scheduler.ItemFinished += OnItemFinished;
-        _scheduler.Started += () => SafeUi(() => { _exhaustPromptShown = false; UpdateRunningState(true); _emptyCard.Visible = false; _grid.Visible = true; });
+        _scheduler.Started += () => SafeUi(() =>
+        {
+            _exhaustPromptShown = false;
+            UpdateRunningState(true);
+            _emptyCard.Visible = false;
+            _grid.Visible = true;
+            BindLiveView();
+        });
         _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); UpdateEmptyState(); });
         _scheduler.PendingQueued += n => _summary.Text = string.Format(Strings.PendingQueuedFormat, n); // already on the UI thread via UiPost
         _scheduler.Items.ListChanged += (_, e) =>
@@ -198,7 +205,7 @@ internal sealed class ScanQueueControl : UserControl
         // streamed in was what made a sorted list "go crazy" during a scan (rows jumping, selection/scroll
         // thrash). New finished rows are appended in place by OnFilterItemFinished; a full re-sort happens
         // only on a header click and once when the scan finishes (Finished → ApplyFilter → ApplySort).
-        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { _grid.Invalidate(); UpdateChipCounts(); } };
+        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { FlushPendingRows(); _grid.Invalidate(); UpdateChipCounts(); } };
 
         UpdateRunningState(false);
     }
@@ -337,11 +344,21 @@ internal sealed class ScanQueueControl : UserControl
             _grid.Columns[c].HeaderText = c == _sortCol ? _colHeaders[c] + (_sortAsc ? "  ▲" : "  ▼") : _colHeaders[c];
     }
 
+    /// <summary>
+    /// How many rows the grid is ever given. A bound DataGridView builds a row object for every record,
+    /// so handing it a whole-drive sweep — 346,000 files — froze the window before the first file was
+    /// even hashed. Past this many the grid shows a window onto the queue instead: every threat, plus
+    /// the most recent rows. The full set stays in the scheduler, and search still runs over all of it.
+    /// </summary>
+    const int GridRowBudget = 5000;
+
     void ApplyFilter()
     {
         if (_sortCol >= 0) { ApplySort(); return; } // an active sort owns _view (it already filters too)
         var keep = SelectedItem();
-        if (!FilterActive)
+        bool capped = _scheduler.Items.Count > GridRowBudget;
+
+        if (!FilterActive && !capped)
         {
             if (!ReferenceEquals(_grid.DataSource, _scheduler.Items)) _grid.DataSource = _scheduler.Items;
             _lastFilterQuery = ""; _lastFilterBucket = Bucket.All;
@@ -352,7 +369,7 @@ internal sealed class ScanQueueControl : UserControl
             string q = _search.Text.Trim();
             // Incremental narrowing: if the query only grew within the same bucket and the grid already
             // shows _view, drop the now-excluded rows in place instead of rebuilding from all of Items.
-            bool canNarrow = ReferenceEquals(_grid.DataSource, _view) && _bucket == _lastFilterBucket
+            bool canNarrow = !capped && ReferenceEquals(_grid.DataSource, _view) && _bucket == _lastFilterBucket
                 && _lastFilterQuery.Length > 0 && q.StartsWith(_lastFilterQuery, StringComparison.OrdinalIgnoreCase);
             _view.RaiseListChangedEvents = false;
             if (canNarrow)
@@ -362,7 +379,7 @@ internal sealed class ScanQueueControl : UserControl
             else
             {
                 _view.Clear();
-                foreach (var it in _scheduler.Items) if (Passes(it)) _view.Add(it);
+                FillWithinBudget(_view, _scheduler.Items.Where(Passes));
             }
             _view.RaiseListChangedEvents = true;
             _view.ResetBindings();
@@ -372,6 +389,35 @@ internal sealed class ScanQueueControl : UserControl
         }
         Reselect(keep);
         UpdateChipCounts();
+    }
+
+    /// <summary>Fills the grid's view with at most <see cref="GridRowBudget"/> rows: every threat-shaped
+    /// row is kept whatever else has to go, and the remaining room goes to the most recent rows — the two
+    /// things anyone looks at during a sweep. Scan order is preserved.</summary>
+    void FillWithinBudget(System.ComponentModel.BindingList<ScanItem> target, IEnumerable<ScanItem> source)
+    {
+        var all = source as IList<ScanItem> ?? source.ToList();
+        if (all.Count <= GridRowBudget)
+        {
+            foreach (var it in all) target.Add(it);
+            return;
+        }
+
+        var threats = new HashSet<ScanItem>();
+        foreach (var it in all)
+        {
+            if (!IsThreatish(it)) continue;
+            threats.Add(it);
+            if (threats.Count >= GridRowBudget) break;
+        }
+
+        int room = Math.Max(0, GridRowBudget - threats.Count);
+        var recent = new HashSet<ScanItem>();
+        for (int i = all.Count - 1; i >= 0 && recent.Count < room; i--)
+            if (!threats.Contains(all[i])) recent.Add(all[i]);
+
+        foreach (var it in all)
+            if (threats.Contains(it) || recent.Contains(it)) target.Add(it);
     }
 
     void Reselect(ScanItem? item)
@@ -436,8 +482,63 @@ internal sealed class ScanQueueControl : UserControl
         // O(1) via _viewSet instead of a linear _view.Contains.
         // Append (don't re-sort) so a newly-finished row shows up live whether a filter OR a sort owns the
         // view — the stable, no-thrash behaviour; the final ordered sort lands when the scan finishes.
-        if (_view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item) && _viewSet.Add(item))
-            _view.Add(item);
+        // The row is buffered, not added: a sweep finishes thousands of files a second, and one
+        // ListChanged per add is a grid rebuild per file. The repaint tick applies the batch.
+        if (_view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item))
+            _pendingRows.Add(item);
+    }
+
+    readonly List<ScanItem> _pendingRows = [];
+
+    /// <summary>
+    /// Points the grid at an empty live view for the length of a run.
+    ///
+    /// The scheduler fills its item list with the whole selection before the first file is hashed. While
+    /// the grid was bound straight to that list, a drive sweep asked the DataGridView to build 346,000
+    /// row objects in one go and the window stopped answering right there — the queue still looked empty
+    /// because the freeze happened before anything could be drawn. Rows now arrive through the repaint
+    /// tick as files finish, capped at <see cref="GridRowBudget"/>.
+    /// </summary>
+    void BindLiveView()
+    {
+        _view ??= [];
+        _view.RaiseListChangedEvents = false;
+        _view.Clear();
+        _view.RaiseListChangedEvents = true;
+        _view.ResetBindings();
+        _viewSet.Clear();
+        _pendingRows.Clear();
+        _grid.DataSource = _view;
+        _lastFilterQuery = ""; _lastFilterBucket = _bucket;
+    }
+
+    /// <summary>Adds the rows that finished since the last tick in one go, then drops the oldest
+    /// non-threat rows to stay inside <see cref="GridRowBudget"/>. One ResetBindings for the batch.</summary>
+    void FlushPendingRows()
+    {
+        if (_pendingRows.Count == 0 || _view == null || !ReferenceEquals(_grid.DataSource, _view)) { _pendingRows.Clear(); return; }
+
+        _view.RaiseListChangedEvents = false;
+        try
+        {
+            foreach (var it in _pendingRows)
+                if (_viewSet.Add(it)) _view.Add(it);
+            _pendingRows.Clear();
+
+            // Trim from the front, skipping anything worth keeping on screen.
+            int i = 0;
+            while (_view.Count > GridRowBudget && i < _view.Count)
+            {
+                if (IsThreatish(_view[i])) { i++; continue; }
+                _viewSet.Remove(_view[i]);
+                _view.RemoveAt(i);
+            }
+        }
+        finally
+        {
+            _view.RaiseListChangedEvents = true;
+            _view.ResetBindings();
+        }
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
