@@ -808,16 +808,52 @@ internal sealed class ScanQueueControl : UserControl
         var opts = ScanOptions.FromSettings(recurse);
         opts.BypassTrust = bypassTrust;
 
-        // Archive found? Ask once whether to scan the archive itself or expand and scan its members.
         var pathList = paths.ToList();
-        if (!_scheduler.IsRunning && HasArchives(pathList))
-            opts.ExpandArchives = NativeMessageBox.Confirm(Strings.ArchivePrompt, Strings.ArchiveFoundTitle);
+        opts.ExpandArchives = ShouldExpandArchives(pathList, background);
 
         _ = Task.Run(async () =>
         {
             try { await _scheduler.RunAsync(pathList, opts); }
             catch (Exception ex) { Log("Scan start failed: " + ex, LogLevel.Error); }
         });
+    }
+
+    /// <summary>
+    /// Whether this run should expand archives and scan their members. The question used to be a
+    /// blocking yes/no dialog raised on every scan that contained an archive — which meant a whole-disk
+    /// sweep froze at the starting line waiting for a click that nobody was there to give. Now:
+    ///
+    ///  * a whole-drive sweep, or any scan started by a watcher, never asks and never expands: at that
+    ///    scale expanding turns a big scan into an enormous one, and there is nobody to ask;
+    ///  * otherwise the question is a ConfirmGate, so answering it once with "don't ask again" sticks.
+    /// </summary>
+    bool ShouldExpandArchives(List<string> paths, bool background)
+    {
+        try
+        {
+            if (_scheduler.IsRunning) return false;   // follow-up batch: keep the running run's shape
+            if (background) { Log("Archive expansion skipped: unattended scan.", LogLevel.Info); return false; }
+
+            foreach (var p in paths)
+            {
+                string? root = null;
+                try { root = Path.GetPathRoot(p.TrimEnd('\\', '/') + "\\"); } catch { }
+                if (root != null && string.Equals(root.TrimEnd('\\'), p.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                {
+                    Log("Archive expansion skipped: the selection is a whole drive.", LogLevel.Info);
+                    return false;
+                }
+            }
+
+            if (!HasArchives(paths)) return false;
+            return ConfirmGates.ExpandArchives.Ask(FindForm(), Strings.ArchivePrompt);
+        }
+        catch (Exception ex)
+        {
+            // Never let this decision stop a scan from starting; not expanding is the safe default.
+            Log("Archive-expansion decision failed: " + ex.Message, LogLevel.Warning);
+            return false;
+        }
     }
 
     /// <summary>Quick bounded check for any archive among the selection (files + shallow folder walk).</summary>

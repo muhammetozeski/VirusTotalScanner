@@ -34,6 +34,9 @@ internal static class ConfirmGates
     public static readonly ConfirmGate ContextMenuInstall =
         new(Strings.GateContextMenuInstallTitle, Strings.GateContextMenuInstallQuestion);
 
+    public static readonly ConfirmGate ExpandArchives =
+        new(Strings.ArchiveFoundTitle, Strings.ArchivePrompt);
+
     public static readonly ConfirmGate DeleteKey =
         new(Strings.GateDeleteKeyTitle, Strings.GateDeleteKeyQuestion);
 }
