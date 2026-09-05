@@ -885,8 +885,8 @@ internal static class Strings
     public static string AutoActionHint = "İlk eşleşen kural uygulanır. Eylemler: ToastOnly (sadece bildir), MarkClean (beyaz listeye al), SuppressFolder (klasörü atla), Quarantine (karantinaya al). Boş liste = yerleşik davranış.";
     public static string ScanUseFingerprintLabel = "Değişmeyen dosyaların hash'ini yeniden hesaplama";
     public static string ScanLookupPolicyLabel = "Klasör taramasında sorgulanacak dosyalar:";
-    public static string LookupPolicyAll = "Her dosya sorgulansın";
-    public static string LookupPolicyCodeOnly = "Sadece kod dosyaları sorgulansın (varsayılan)";
+    public static string LookupPolicyAll = "Dışlanan uzantılar hariç her dosya sorgulansın (varsayılan)";
+    public static string LookupPolicyCodeOnly = "Sadece kod dosyaları sorgulansın";
     public static string ScanUploadPolicyLabel = "VT'de olmayan dosyayı gönder:";
     public static string UploadPolicyNever = "Hiç gönderme (sadece hash sorgusu)";
     public static string UploadPolicyCodeOnly = "Sadece kod dosyalarını gönder (varsayılan)";
@@ -1324,6 +1324,7 @@ internal static class Strings
     public static string SkipReasonKnownGoodList = "Bilinen temiz (yerel liste)";
     public static string SkipReasonDevFolder = "Geliştirme klasörü (kullanıcı onayı)";
     public static string ItemErrorNoReport = "Sorgu sonuç vermedi — hiçbir kanal bu dosya için yanıt döndürmedi.";
+    public static string SkipReasonNotAskedYet = "Henüz sorulamadı · kota/kanal yok, sonraki taramaya kaldı";
     public static string SkipReasonNotCodeFile = "Kod dosyası değil · sorgulanmadı";
     public static string SkipReasonFileLocked = "Başka bir işlem dosyayı açık tutuyor · okunamadı";
     public static string SkipReasonNoAccess = "Bu hesabın okuma izni yok";
@@ -1468,7 +1469,7 @@ internal static class Strings
     public static string TtCleanCacheDays = "Temiz çıkmış bir kaydın kaç gün geçerli sayılacağı. 0 = hiç eskimez (varsayılan). VirusTotal bir antivirüs değil; aynı dosyayı tekrar tekrar sormanın maliyeti kotadır. Sonradan zararlı çıkanları 'Verdikt yeniden denetle' yakalar.";
     public static string TtThreatCacheDays = "Zararlı çıkmış bir kaydın kaç gün geçerli sayılacağı. 0 = hiç eskimez (varsayılan). Zararlı bir verdikt neredeyse hiç tersine dönmez.";
     public static string TtSkipSafe = "Aşağıdaki 'güvenli uzantı' listesindeki dosyalar taramaya hiç alınmaz.";
-    public static string TtLookupPolicy = "Bir KLASÖR taramasında hangi dosyaların VirusTotal'e sorulacağı. Bir C: diski ölçümünde 338.603 dosyanın 195.833 tanesi ne çalıştırılabilir, ne betik, ne kurulum, ne arşiv, ne de makro taşıyabilen belgeydi: Store ikonları, .DATA parçaları, fontlar, loglar, .mui kaynakları. Bunları sormak her biri için bir kota harcar ve neredeyse her seferinde 'VirusTotal bunu hiç görmedi' cevabı gelir. Kalan 32.579 kod dosyası ise gerçekten sorulmaya değer. Elle SEÇTİĞİN dosyalar bu ayardan etkilenmez; onlara işaret etmiş olman 'bunu kontrol et' demektir.";
+    public static string TtLookupPolicy = "Bir KLASÖR taramasında hangi dosyaların VirusTotal'e sorulacağı. Varsayılan dışlamadır: aşağıdaki 'Güvenli uzantılar' listesinde olanlar taramaya hiç girmez, geri kalan her dosya sorulur. İkinci seçenek bunu beyaz listeye çevirir ve sadece çalıştırılabilir, betik, kurulum, arşiv ve makro taşıyabilen belgeleri sorar; bir C: diski ölçümünde 338.603 dosyanın 195.833'ü bu tanımın dışındaydı, yani tarama çok daha kısa sürer ama o dosyalar sorulmamış olur. Elle SEÇTİĞİN dosyalar bu ayardan etkilenmez; onlara işaret etmiş olman 'bunu kontrol et' demektir.";
     public static string TtUploadPolicy = "VirusTotal'in HİÇ GÖRMEDİĞİ bir dosya bulununca ne yapılacağı. Hash sorgusu her dosya için zaten yapılır ve ucuzdur; dosyayı GÖNDERMEK ise bir istek harcar, arkasından gelen analiz beklemesi de ayrıca istek harcar. Bir diskte asla zararlı olamayacak on binlerce küçük kaynak dosyası (Store ikonları, .DATA parçaları) vardır — varsayılan olarak sadece kod niteliğindeki dosyalar gönderilir: exe/dll/betik/kurulum/arşiv/makro taşıyabilen belge. Uzantı yetmezse ilk baytlara bakılır, yani adı değiştirilmiş bir exe de yakalanır. Gönderilmeyen dosya 'atlandı' olarak işaretlenir, hata olarak değil.";
     public static string TtSafeExts = "Noktalı virgülle ayrılmış uzantılar. Bunlar 'güvenli tip' sayılır: sağ tık menüsünde gizlenebilir ve üstteki ayar açıkken taramaya alınmaz.";
     public static string TtCacheBackupFolder = "Önbellek kopyalarının yazılacağı klasör. Boş bırakırsan otomatik yedek alınmaz.";
