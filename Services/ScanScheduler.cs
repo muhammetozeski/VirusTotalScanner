@@ -239,6 +239,7 @@ internal sealed class ScanScheduler
             using var heartbeat = StartHeartbeat(items.Count, localDegree, ct);
             using var quietList = SuspendItemNotifications();
             using var finishedFlush = StartFinishedFlush();
+            using var politeCpu = YieldToTheRestOfTheMachine(items.Count);
 
             _netQueue = System.Threading.Channels.Channel.CreateUnbounded<NetworkJob>(
                 new System.Threading.Channels.UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
@@ -486,6 +487,38 @@ internal sealed class ScanScheduler
             Complete(item, report);
             op.Ok($"{report.DetectionCount}/{report.TotalEngines} detections" + (item.FromCache ? " (cache)" : ""));
         }
+    }
+
+    /// <summary>A sweep large enough that the machine has to keep being usable while it runs.</summary>
+    const int SweepSizeThatNeedsToBePolite = 5000;
+
+    /// <summary>
+    /// Drops the process to below-normal priority for the length of a large sweep, and puts it back
+    /// afterwards. Two dozen workers reading the disk flat out at normal priority make the whole machine
+    /// lag — windows stop coming to the front, everything else waits behind the scan. Below-normal keeps
+    /// every bit of idle capacity for the sweep while whatever the user is doing goes first.
+    /// </summary>
+    IDisposable? YieldToTheRestOfTheMachine(int fileCount)
+    {
+        if (fileCount < SweepSizeThatNeedsToBePolite) return null;
+        try
+        {
+            var me = System.Diagnostics.Process.GetCurrentProcess();
+            var previous = me.PriorityClass;
+            if (previous != System.Diagnostics.ProcessPriorityClass.Normal) return null; // the user set it; leave it
+            me.PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
+            Log($"Sweep of {fileCount} file(s): process priority lowered to BelowNormal so the machine stays usable.", LogLevel.Info);
+            return new Restore(() =>
+            {
+                try
+                {
+                    System.Diagnostics.Process.GetCurrentProcess().PriorityClass = previous;
+                    Log("Sweep finished: process priority restored to " + previous + ".", LogLevel.Info);
+                }
+                catch (Exception ex) { Log("Could not restore process priority: " + ex.Message, LogLevel.Warning); }
+            });
+        }
+        catch (Exception ex) { Log("Could not lower process priority: " + ex.Message, LogLevel.Warning); return null; }
     }
 
     readonly List<ScanItem> _finished = [];
