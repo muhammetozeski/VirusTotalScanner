@@ -17,14 +17,21 @@ internal sealed class VtApiClient
     /// <summary>Looks up an existing report by hash (md5/sha1/sha256). Returns null on 404.</summary>
     public async Task<VtFileReport?> GetFileReportAsync(string hash, string apiKey, CancellationToken ct = default)
     {
-        Log($"VT lookup {hash}", LogLevel.Info);
+        using var op = OpLog.Begin("VT file report", $"GET /files/{hash} key={Mask(apiKey)}");
         using var resp = await ExecuteAsync(() => Build(HttpMethod.Get, $"/files/{hash}", apiKey), ct);
-        if (resp.StatusCode == HttpStatusCode.NotFound) { Log($"VT 404 (unknown file): {hash}"); return null; }
+        op.Step($"<- HTTP {(int)resp.StatusCode} {resp.StatusCode}");
+        if (resp.StatusCode == HttpStatusCode.NotFound) { op.Ok("404 — VirusTotal has never seen it"); return null; }
         await ThrowIfError(resp);
 
         var dto = await resp.Content.ReadFromJsonAsync<VtResponse<VtFileData>>(JsonOpts, ct);
-        return MapReport(dto?.Data?.Attributes);
+        var report = MapReport(dto?.Data?.Attributes);
+        op.Ok(report == null ? "empty body" : $"{report.DetectionCount}/{report.TotalEngines} detections");
+        return report;
     }
+
+    /// <summary>First and last four characters of a key — enough to tell rows apart in a log, not
+    /// enough to be a key.</summary>
+    static string Mask(string? key) => string.IsNullOrEmpty(key) || key.Length <= 10 ? "••••" : key[..4] + "…" + key[^4..];
 
     /// <summary>Requests an upload URL for files larger than the direct-upload limit.</summary>
     public async Task<string> GetUploadUrlAsync(string apiKey, CancellationToken ct = default)
@@ -39,11 +46,11 @@ internal sealed class VtApiClient
     public async Task<string> UploadFileAsync(string path, string apiKey, IProgress<UploadProgress>? progress, CancellationToken ct = default)
     {
         var fi = new FileInfo(path);
+        using var op = OpLog.Begin("VT upload", $"{fi.Name} ({FormatBytes(fi.Length)}) key={Mask(apiKey)}");
         string url = fi.Length > AppConstants.DirectUploadLimitBytes
             ? await GetUploadUrlAsync(apiKey, ct)
             : AppConstants.VtApiBase + "/files";
-
-        Log($"VT upload {fi.Name} ({FormatBytes(fi.Length)}) -> {url}", LogLevel.Info);
+        op.Step("-> POST " + url);
 
         using var fs = File.OpenRead(path);
         var streamContent = new ProgressableStreamContent(fs, fi.Length, progress);
@@ -55,36 +62,47 @@ internal sealed class VtApiClient
         req.Headers.Accept.ParseAdd("application/json");
 
         using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        op.Step($"<- HTTP {(int)resp.StatusCode} {resp.StatusCode}");
         await ThrowIfError(resp);
 
         var dto = await resp.Content.ReadFromJsonAsync<VtResponse<VtUploadData>>(JsonOpts, ct);
-        return dto?.Data?.Id ?? throw new VtApiException("Upload returned no analysis id.", resp.StatusCode);
+        string id = dto?.Data?.Id ?? throw new VtApiException("Upload returned no analysis id.", resp.StatusCode);
+        op.Ok("analysis " + id);
+        return id;
     }
 
     /// <summary>Gets the status of a submitted analysis.</summary>
     public async Task<VtAnalysisInfo> GetAnalysisAsync(string analysisId, string apiKey, CancellationToken ct = default)
     {
+        using var op = OpLog.Begin("VT analysis status", $"GET /analyses/{analysisId} key={Mask(apiKey)}");
         using var resp = await ExecuteAsync(() => Build(HttpMethod.Get, $"/analyses/{analysisId}", apiKey), ct);
+        op.Step($"<- HTTP {(int)resp.StatusCode} {resp.StatusCode}");
         await ThrowIfError(resp);
         var dto = await resp.Content.ReadFromJsonAsync<VtResponse<VtAnalysisData>>(JsonOpts, ct);
-        return new VtAnalysisInfo { Status = dto?.Data?.Attributes?.Status ?? "" };
+        var info = new VtAnalysisInfo { Status = dto?.Data?.Attributes?.Status ?? "" };
+        op.Ok("status=" + (info.Status.Length == 0 ? "(none)" : info.Status));
+        return info;
     }
 
     /// <summary>Reads the per-key quota usage (hourly/daily/monthly).</summary>
     public async Task<VtQuotas?> GetUserQuotaAsync(string apiKey, CancellationToken ct = default)
     {
+        using var op = OpLog.Begin("VT quota read", $"GET /users/<key> key={Mask(apiKey)}");
         using var resp = await ExecuteAsync(() => Build(HttpMethod.Get, $"/users/{apiKey}", apiKey), ct);
-        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden) return null;
+        op.Step($"<- HTTP {(int)resp.StatusCode} {resp.StatusCode}");
+        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden) { op.Note("not readable for this key"); return null; }
         await ThrowIfError(resp);
         var dto = await resp.Content.ReadFromJsonAsync<VtResponse<VtUserData>>(JsonOpts, ct);
         var q = dto?.Data?.Attributes?.Quotas;
-        if (q == null) return null;
-        return new VtQuotas
+        if (q == null) { op.Note("no quota block in the answer"); return null; }
+        var quotas = new VtQuotas
         {
             Hourly = Slot(q.Hourly),
             Daily = Slot(q.Daily),
             Monthly = Slot(q.Monthly),
         };
+        op.Ok($"daily {quotas.Daily.Used}/{quotas.Daily.Allowed}, monthly {quotas.Monthly.Used}/{quotas.Monthly.Allowed}");
+        return quotas;
         static VtQuotaSlot Slot(VtQuotaSlotDto? s) => new() { Used = s?.Used ?? 0, Allowed = s?.Allowed ?? 0 };
     }
 
@@ -111,6 +129,10 @@ internal sealed class VtApiClient
     {
         if (resp.IsSuccessStatusCode) return;
         string body = await SafeReadBody(resp);
+        // The body is the only place VirusTotal says WHY, and the difference between a minute-rate 429
+        // and a spent daily allowance is decided from it.
+        Log($"VT error {(int)resp.StatusCode} {resp.StatusCode} on {resp.RequestMessage?.RequestUri?.AbsolutePath}: "
+            + (body.Length == 0 ? "(empty body)" : body.Length > 400 ? body[..400] + "…" : body), LogLevel.Warning);
         switch ((int)resp.StatusCode)
         {
             case 429:
