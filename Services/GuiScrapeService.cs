@@ -174,6 +174,13 @@ internal static class GuiScrapeService
             _pending = null;
             _timeoutCts = null;
             HideBrowser();
+
+            // A route probe showed exit addresses behaving very differently: one answers, the next
+            // times out every time. While Tor is carrying the traffic, a lookup that got nowhere is a
+            // reason to take a different exit rather than to keep paying the same timeout per file.
+            if (!ProbeMode && TorService.IsActive && LastOutcome is KeylessOutcome.TimedOut or KeylessOutcome.Challenged)
+                NetworkBlockMonitor.ReportTorPathFailure("keyless:" + LastOutcome);
+
             if (gaveUpOnChallenge && !ProbeMode) ParkChannel("a challenge went unanswered");
             else if (!string.IsNullOrEmpty(json)) OpenChannel("a lookup succeeded");
             return string.IsNullOrEmpty(json) ? null : json;
