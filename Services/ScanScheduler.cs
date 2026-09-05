@@ -190,6 +190,7 @@ internal sealed class ScanScheduler
             // those cheap decisions flowing at disk speed while the gated ones wait.
             int localDegree = Math.Max(1, opts.MaxConcurrency) + Math.Max(4, Environment.ProcessorCount);
             var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
+            using var heartbeat = StartHeartbeat(items.Count, localDegree, ct);
             await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
 
             // Uploaded files whose analysis is still running finish on the background watcher; the run
@@ -528,6 +529,39 @@ internal sealed class ScanScheduler
             _cache.Put(md5, report, item.FilePath);
 
         return (report, report != null ? LookupFailure.None : failure);
+    }
+
+    /// <summary>
+    /// Writes one line a minute saying where the sweep actually is: how many files are done out of how
+    /// many, what the free paths absorbed, how many are waiting on VirusTotal, and the rate. Without it
+    /// a 340k-file run leaves nothing in the log between "started" and "finished" but a per-file trace
+    /// nobody can add up, and a stall looks exactly like slow progress.
+    /// </summary>
+    IDisposable StartHeartbeat(int total, int workers, CancellationToken ct)
+    {
+        var started = DateTime.UtcNow;
+        int lastDone = 0;
+        var timer = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                int done = Volatile.Read(ref _done);
+                var elapsed = DateTime.UtcNow - started;
+                double perMin = elapsed.TotalMinutes > 0 ? done / elapsed.TotalMinutes : 0;
+                string eta = perMin > 0.01 ? TimeSpan.FromMinutes((total - done) / perMin).ToString(@"d\g\ hh\:mm") : "?";
+                Log($"Sweep progress: {done}/{total} ({(total > 0 ? done * 100.0 / total : 0):0.0}%), "
+                    + $"+{done - lastDone} in the last minute, {perMin:0.0}/min, ETA {eta} — "
+                    + $"clean={_clean} malicious={_malicious} suspicious={_suspicious} unknown={_unknown} "
+                    + $"skipped={_skipped} signed={_signedSkipped} failed={_failed}; "
+                    + $"waiting on VirusTotal={_pendingAnalyses.Count}, workers={workers}, "
+                    + $"keys usable={_rotator.UsableKeyCount} immediateRoom={_rotator.HasImmediateRoom}",
+                    LogLevel.Info);
+                lastDone = done;
+            }
+            catch (Exception ex) { Log("Heartbeat failed: " + ex.Message, LogLevel.Warning); }
+        }, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        ct.Register(() => { try { timer.Change(Timeout.Infinite, Timeout.Infinite); } catch (Exception ex) { Log("Heartbeat stop failed: " + ex.Message, LogLevel.Warning); } });
+        return timer;
     }
 
     /// <summary>Analyses still being waited for. The run is not over until these drain, and the count is
