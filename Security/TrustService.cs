@@ -301,10 +301,46 @@ internal static class TrustService
 
             using var cert = new X509Certificate2(pCertContext);
             string cn = cert.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
-            bool isMs = (cert.Subject + " " + cert.Issuer).Contains("Microsoft", StringComparison.OrdinalIgnoreCase);
-            return (string.IsNullOrWhiteSpace(cn) ? null : cn, isMs);
+            return (string.IsNullOrWhiteSpace(cn) ? null : cn, SignedByMicrosoft(cert));
         }
         catch { return (null, false); }
+    }
+
+    const string OidCommonName = "2.5.4.3";
+    const string OidOrganization = "2.5.4.10";
+
+    /// <summary>
+    /// Whether the file's publisher IS Microsoft — the question "trust Microsoft only" actually asks.
+    ///
+    /// Only the subject's own name and organisation count. Two things this used to get wrong, both
+    /// measured on this machine:
+    ///  * the ISSUER is not the publisher. Microsoft's CAs sign other people's code — node.exe is issued
+    ///    by "Microsoft ID Verified CS AOC CA 04" and its publisher is the OpenJS Foundation.
+    ///  * a substring of the whole subject DN is not the publisher either. Internet Download Manager's
+    ///    certificate carries "Digital ID Class 3 - Microsoft Software Validation v2" in an OU, and the
+    ///    publisher is Tonec Inc.
+    /// Both were trust-skipped as Microsoft's own and never looked up, with "only Microsoft" turned on.
+    /// </summary>
+    static bool SignedByMicrosoft(X509Certificate2 cert)
+    {
+        try
+        {
+            foreach (var rdn in cert.SubjectName.EnumerateRelativeDistinguishedNames())
+            {
+                string? oid = rdn.GetSingleElementType()?.Value;
+                if (oid is not (OidCommonName or OidOrganization)) continue;
+                string? value = rdn.GetSingleElementValue();
+                if (value != null && value.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // A multi-valued or malformed RDN: fall back to the subject's own fields only, never the issuer.
+            Log("Subject name could not be read (" + ex.Message + "); falling back to a subject-only check.", LogLevel.Debug);
+            return cert.Subject.Contains("CN=Microsoft", StringComparison.OrdinalIgnoreCase)
+                || cert.Subject.Contains("O=Microsoft", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     static string ReasonFor(int hr) => (uint)hr switch
