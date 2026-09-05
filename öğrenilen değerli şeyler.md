@@ -134,3 +134,43 @@ Bu dosyaya, çözmesi zor olan sorunları ve çözümlerini kaydediyorum ki bir 
 ## `bildirim` and apostrophes
 - The `bildirim` PowerShell command wraps the message in single quotes internally, so an apostrophe in the
   body (`master'a`) breaks parsing. Keep notification titles/bodies ASCII and apostrophe-free.
+
+## VirusTotal has TWO independent limits, and a disk sweep hits both
+- **Per API key**: 4/min and 500/day (free), resetting at UTC midnight. The 429 for a spent DAILY
+  allowance carries **no `Retry-After` header**, so it is indistinguishable from a minute-window 429
+  by the response alone. Detect it by counting consecutive 429s with no success in between, then park
+  the key until the daily window rolls — otherwise the app retries it every minute forever. A six-hour
+  log once showed 4854 rate-limits against 5031 lookups with zero files finishing.
+- **Per source IP**: the keyless public UI (`/ui/files/<hash>`) has its own daily budget. Once spent,
+  every lookup returns 429 `RecaptchaRequiredError` no matter how much key quota is left.
+
+## A bare request to /ui/files ALWAYS returns RecaptchaRequiredError
+- Verified with and without Tor: curl/HttpClient always get 429 `RecaptchaRequiredError` on that
+  endpoint. It genuinely needs the browser session. Never "test" the keyless path with a raw HTTP
+  client and conclude the route is blocked.
+
+## WebView2 + SOCKS proxy: pass ONLY --proxy-server
+- `CoreWebView2EnvironmentOptions.AdditionalBrowserArguments = "--proxy-server=\"socks5://…\""` works.
+  Adding `--proxy-bypass-list="<-loopback>"` (meant to stop Chromium bypassing the proxy for loopback)
+  also pushes WebView2's own internal loopback traffic at the SOCKS port: every lookup then times out
+  with **no HTTP response at all**, not even a 429. Symptom looks like "the route is blocked".
+- Changing the proxy needs the whole environment rebuilt (and a separate user-data folder, or the old
+  VirusTotal session cookie — issued to the old address — comes along).
+- Log `NavigationCompleted` (`IsSuccess`, `WebErrorStatus`, `HttpStatusCode`). Without it a proxy/DNS
+  failure and a slow page look identical: both just time out.
+
+## Tor: cookie auth + NEWNYM, and release your own gate
+- Control port: read `<DataDirectory>\control_auth_cookie`, send `AUTHENTICATE <hex>` then
+  `SIGNAL NEWNYM`; both answer `250 OK`. A new exit takes ~3 s to settle.
+- A `SemaphoreSlim` taken in an `EnableAsync`-style method and never released is invisible until the
+  SECOND caller arrives, and then it hangs forever with the log showing only what started. This cost
+  an hour; `OpLog` (start/step/end with elapsed) exists so it cannot cost another one.
+- Tor adds seconds per round trip and the VirusTotal page is an SPA making several: a 45 s lookup
+  timeout that is fine directly is not enough over Tor. Make the timeout route-aware.
+
+## Log the START and the END of every operation, and every payload in and out
+- A hang is invisible when only the start is logged: the last line says what began and nothing says
+  what it was waiting for. `Core/OpLog.cs` is the one way to do it — `using var op = OpLog.Begin(...)`
+  plus `op.Step/Ok/Fail/Note`. Anything that blocks, talks to the network, or fails silently gets one.
+- The in-memory log buffers must be bounded. `Logger.AllLogs` grew without limit; a disk-wide scan
+  with per-operation logging writes millions of lines and every one was held in RAM.
