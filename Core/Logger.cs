@@ -65,6 +65,9 @@ public static class Logger
 
     static readonly BlockingCollection<(string Message, ManualResetEventSlim? Sync)> _logQueue = [];
     static bool _oldFilesCleaned;
+    static int _sinceFlush;
+    /// <summary>Upper bound on unflushed lines while the queue never goes quiet.</summary>
+    const int FlushEveryLines = 200;
 
     static Logger()
     {
@@ -73,6 +76,12 @@ public static class Logger
         // kill this thread (that would silently stop all future disk logging).
         new Thread(() =>
         {
+            // One open handle for the life of the process instead of an open/write/close per line.
+            // A disk sweep logs a couple of thousand lines a second; at that rate AppendAllText spent
+            // longer opening files than writing to them and the queue grew without ever draining.
+            StreamWriter? writer = null;
+            string? openPath = null;
+
             foreach (var (Message, Sync) in _logQueue.GetConsumingEnumerable())
             {
                 try
@@ -80,19 +89,37 @@ public static class Logger
                     string folder = ResolveLogsFolder();
                     if (!string.IsNullOrEmpty(folder))
                     {
-                        Directory.CreateDirectory(folder);
-                        if (!_oldFilesCleaned)
-                        {
-                            _oldFilesCleaned = true;
-                            try { HelperFunctions.DeleteOldestFiles(folder, DeleteOlderThanLastXFile, LogFileNamePrefix); } catch { }
-                        }
                         string file = Path.Combine(folder, LogFileNamePrefix + " " + startTime + ".txt");
-                        File.AppendAllText(file, Message + "\n");
+                        if (writer == null || !string.Equals(openPath, file, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { writer?.Dispose(); } catch { }
+                            Directory.CreateDirectory(folder);
+                            if (!_oldFilesCleaned)
+                            {
+                                _oldFilesCleaned = true;
+                                try { HelperFunctions.DeleteOldestFiles(folder, DeleteOlderThanLastXFile, LogFileNamePrefix); } catch { }
+                            }
+                            writer = new StreamWriter(new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 1 << 16));
+                            openPath = file;
+                        }
+                        writer.Write(Message);
+                        writer.Write('\n');
+
+                        // Flushed when the queue goes quiet, when a caller is waiting on this line, or
+                        // every so often under sustained load — so a crash never loses more than the
+                        // last moment, and the log stays readable while a scan is running.
+                        if (Sync != null || _logQueue.Count == 0 || ++_sinceFlush >= FlushEveryLines)
+                        {
+                            _sinceFlush = 0;
+                            writer.Flush();
+                        }
                     }
                 }
                 catch { /* skip this one line; keep the logging thread alive */ }
                 finally { try { Sync?.Set(); } catch { } }
             }
+
+            try { writer?.Flush(); writer?.Dispose(); } catch { }
         })
         { IsBackground = true, Name = "Logger.DiskWriter" }.Start();
     }
