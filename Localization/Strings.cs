@@ -213,6 +213,7 @@ internal static class Strings
         "      --repair        Sağ tuş menüsü kaydını (exe yolu) onar\n" +
         "      --addkey <KEY>  API anahtarı ekle (şifreli saklanır)\n" +
         "      --listkeys      Tanımlı anahtarları ve kotaları listele\n" +
+        "      --enable-keys   Devre dışı bırakılmış anahtarları geri aç\n" +
         "      --removekey <id|all>  Anahtar(ları) sil\n" +
         "      --lookup <hash>  Bir MD5/SHA-1/SHA-256 hash'ini sorgula\n" +
         "      --expect <hash>  Dosyayı beklenen hash ile doğrula (eşleşmezse çıkış kodu 4)\n" +
@@ -278,6 +279,8 @@ internal static class Strings
     public static string CliKeyActive = "aktif";
     public static string CliQuotaFormat = "gün {0}/{1}  ay {2}/{3}";
     public static string CliAllKeysDeleted = "Tüm anahtarlar silindi.";
+    public static string CliKeysReEnabledFormat = "{0} anahtar yeniden etkinleştirildi.";
+    public static string CliNoDisabledKeys = "Devre dışı anahtar yok.";
     public static string CliKeyRemovedPrefix = "Anahtar silindi (varsa): ";
     public static string CliSignedFormat = "[İMZALI] {0}  — {1} (VT atlandı)";
     public static string CliItemErrorPrefix = "      Hata: ";

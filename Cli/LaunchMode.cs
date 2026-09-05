@@ -36,6 +36,9 @@ internal sealed class CliOptions
     public bool UninstallMenu;
     public bool RepairMenu;
     public bool ListKeys;
+    /// <summary>Clears the disabled flag on every key, so an unattended run can recover from an
+    /// auto-disable without anyone opening the settings window.</summary>
+    public bool EnableKeys;
     public string? AddKeyValue;
     public string? RemoveKeyValue;
     public string? LookupHash;
@@ -85,6 +88,7 @@ internal static class ArgumentDef
     static readonly CmdArg Uninstall = new("--uninstall", "--uninstall");
     static readonly CmdArg Repair = new("--repair", "--repair");
     static readonly CmdArg ListKeys = new("--listkeys", "--listkeys");
+    static readonly CmdArg EnableKeys = new("--enable-keys", "--enablekeys");
     static readonly CmdArg AddKey = new("--addkey", "--addkey");
     static readonly CmdArg RemoveKey = new("--removekey", "--removekey");
     static readonly CmdArg Lookup = new("--lookup", "--lookup");
@@ -132,6 +136,7 @@ internal static class ArgumentDef
             else if (Uninstall.IsMatch(a)) o.UninstallMenu = true;
             else if (Repair.IsMatch(a)) o.RepairMenu = true;
             else if (ListKeys.IsMatch(a)) { o.ListKeys = true; o.NoGui = true; }
+            else if (EnableKeys.IsMatch(a)) { o.EnableKeys = true; o.NoGui = true; }
             else if (AddKey.IsMatch(a)) { if (i + 1 < args.Length) o.AddKeyValue = args[++i]; o.NoGui = true; }
             else if (RemoveKey.IsMatch(a)) { if (i + 1 < args.Length) o.RemoveKeyValue = args[++i]; o.NoGui = true; }
             else if (Lookup.IsMatch(a)) { if (i + 1 < args.Length) o.LookupHash = args[++i]; o.NoGui = true; }

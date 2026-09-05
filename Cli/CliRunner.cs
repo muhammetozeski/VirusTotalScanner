@@ -23,6 +23,7 @@ internal static class CliRunner
         if (opts.AddKeyValue != null) { AppServices.Vault.Add("CLI", opts.AddKeyValue); Console.WriteLine(Strings.CliKeyAdded); return 0; }
         if (opts.RemoveKeyValue != null) return RemoveKey(opts.RemoveKeyValue);
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
+        if (opts.EnableKeys) return EnableKeysCmd();
         if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
         if (opts.CommentsHash != null) return await CommentsCmd(opts.CommentsHash);
         if (opts.BehaviourHash != null) return await BehaviourCmd(opts.BehaviourHash);
@@ -328,6 +329,22 @@ internal static class CliRunner
             Console.WriteLine($"{k.Id}  {k.Masked}  [{(string.IsNullOrWhiteSpace(k.Label) ? "-" : k.Label)}]  " +
                 $"{(k.Disabled ? Strings.CliKeyDisabled : k.IsExhausted(now) ? Strings.CliKeyExhausted : Strings.CliKeyActive)}  " +
                 string.Format(Strings.CliQuotaFormat, k.Daily.Used, k.Daily.Allowed, k.Monthly.Used, k.Monthly.Allowed));
+    }
+
+    /// <summary>
+    /// Clears the disabled flag on every key. An auto-disable can be wrong — fourteen good keys were
+    /// once switched off in one morning by 403s that came from an edge, not from VirusTotal — and until
+    /// now the only way back was the settings window, which an unattended run cannot open.
+    /// </summary>
+    static int EnableKeysCmd()
+    {
+        using var op = OpLog.Begin("Re-enable API keys",
+            $"in: {AppServices.Vault.Keys.Count} key(s), {AppServices.Vault.Keys.Count(k => k.Disabled)} disabled");
+        int n = AppServices.Rotator.ReEnableAll();
+        op.Ok($"out: {n} re-enabled, {AppServices.Vault.UsableKeyCount} usable");
+        Console.WriteLine(n == 0 ? Strings.CliNoDisabledKeys : string.Format(Strings.CliKeysReEnabledFormat, n));
+        ListKeysCmd();
+        return 0;
     }
 
     static int RemoveKey(string idOrAll)
