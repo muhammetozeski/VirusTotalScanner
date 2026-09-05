@@ -453,20 +453,26 @@ internal sealed class ScanScheduler
         _ => FileClass.IsWorthUploading(path),
     };
 
-    const int PollIntervalSeconds = 15;
-    const int MaxPolls = 60;
-    public const int PollWindowMinutes = PollIntervalSeconds * MaxPolls / 60;
+    /// <summary>
+    /// How long to wait before each analysis status check. Every check spends one API request, and the
+    /// old schedule was sixty checks fifteen seconds apart — one uploaded file could cost sixty units
+    /// out of a 500-a-day key. Free-tier analyses usually finish inside a minute or two, so the first
+    /// few checks are close together and the rest back off. Eleven checks now cover a LONGER window
+    /// than sixty used to.
+    /// </summary>
+    static readonly int[] PollDelaysSeconds = [20, 20, 30, 45, 60, 90, 120, 150, 180, 210, 240];
+    public static readonly int PollWindowMinutes = PollDelaysSeconds.Sum() / 60;
 
     /// <summary>Waits for a submitted analysis to finish, then fetches the finished report. Returns null
     /// when the analysis is still running after the whole poll window, which the caller reports as its own
     /// outcome — the file did reach VirusTotal, so it must not be described as "not found".</summary>
     async Task<VtFileReport?> PollUntilCompleteAsync(string analysisId, string sha256, ScanItem item, CancellationToken ct)
     {
-        for (int i = 0; i < MaxPolls; i++)
+        for (int i = 0; i < PollDelaysSeconds.Length; i++)
         {
             ct.ThrowIfCancellationRequested();
             await _pause.WaitWhilePausedAsync(ct);
-            await Task.Delay(TimeSpan.FromSeconds(PollIntervalSeconds), ct);
+            await Task.Delay(TimeSpan.FromSeconds(PollDelaysSeconds[i]), ct);
 
             var (gotKey, info) = await TryCallWithRotation(key => _api.GetAnalysisAsync(analysisId, key, ct), ApiWaitForKey, ct);
             if (!gotKey || info == null)
