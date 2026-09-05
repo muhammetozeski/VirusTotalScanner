@@ -177,9 +177,12 @@ internal sealed class ScanScheduler
             _uploadGate = new SemaphoreSlim(Math.Max(1, opts.MaxUploads));
             _lookupGate = new SemaphoreSlim(Math.Max(1, opts.MaxConcurrency));
             _md5Gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
-            // Local stage (hash/trust/cache) is CPU/disk-bound — run it at core count; the VT network calls
-            // stay gated to the conservative MaxConcurrency by _lookupGate, so no added rate-limit risk.
-            int localDegree = Math.Max(Math.Max(1, opts.MaxConcurrency), Environment.ProcessorCount);
+            // Worker count has to EXCEED the network gate, or the scan grinds. Every worker that reaches
+            // VirusTotal holds a _lookupGate slot for seconds; with as many workers as slots, all of them
+            // end up waiting on the network and nothing local moves — even though most of a Windows disk
+            // is Microsoft-signed or already cached and needs no network at all. The extra workers keep
+            // those cheap decisions flowing at disk speed while the gated ones wait.
+            int localDegree = Math.Max(1, opts.MaxConcurrency) + Math.Max(4, Environment.ProcessorCount);
             var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
             await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
         }
