@@ -47,6 +47,8 @@ internal sealed class CliOptions
     public int ProbeRounds;
     /// <summary>How many lookups each probed route gets.</summary>
     public int ProbeLookups = 5;
+    /// <summary>Dry run: classify the selection locally and report how many files would need VirusTotal.</summary>
+    public bool Plan;
     public string? ReportPath;
     public string? SweepResultPath; // machine-readable sweep outcome for the GUI to pick up
     public int FailOn = -1; // -1 = use verdict categories; >=0 = fail when any file hits >= N detections
@@ -92,6 +94,7 @@ internal static class ArgumentDef
     static readonly CmdArg Snapshot = new("--snapshot", "--snapshot");
     static readonly CmdArg RouteProbe = new("--route-probe", "--iptest");
     static readonly CmdArg ProbeLookups = new("--probe-lookups", "--probe-lookups");
+    static readonly CmdArg Plan = new("--plan", "--dry-run");
     static readonly CmdArg Report = new("--report", "--report");
     static readonly CmdArg SweepResult = new("--sweep-result", "--sweep-result");
     static readonly CmdArg FailOn = new("--fail-on", "--failon");
@@ -138,6 +141,7 @@ internal static class ArgumentDef
             else if (Snapshot.IsMatch(a)) { if (i + 1 < args.Length) o.SnapshotPath = args[++i]; }
             else if (RouteProbe.IsMatch(a)) { o.ProbeRounds = 3; if (i + 1 < args.Length && int.TryParse(args[i + 1], out var pr)) { o.ProbeRounds = pr; i++; } o.NoGui = true; }
             else if (ProbeLookups.IsMatch(a)) { if (i + 1 < args.Length && int.TryParse(args[++i], out var pl)) o.ProbeLookups = pl; o.NoGui = true; }
+            else if (Plan.IsMatch(a)) { o.Plan = true; o.NoGui = true; }
             else if (Report.IsMatch(a)) { if (i + 1 < args.Length) o.ReportPath = args[++i]; o.NoGui = true; }
             else if (SweepResult.IsMatch(a)) { if (i + 1 < args.Length) o.SweepResultPath = args[++i]; o.NoGui = true; }
             else if (FailOn.IsMatch(a)) { if (i + 1 < args.Length && int.TryParse(args[++i], out var n)) o.FailOn = n; o.NoGui = true; }

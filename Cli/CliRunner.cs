@@ -35,6 +35,7 @@ internal static class CliRunner
         if (opts.TimelineDays != null) return await TimelineCmd(opts.TimelineDays.Value);
         if (opts.WatchCheck) return await WatchCheckCmd();
         if (opts.ProbeRounds > 0) return await NetworkProbeRunner.RunAsync(opts.ProbeRounds, opts.ProbeLookups);
+        if (opts.Plan) return await ScanPlanRunner.RunAsync(opts.Paths, opts.Recurse || opts.Paths.Any(Directory.Exists));
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;
