@@ -19,6 +19,13 @@ namespace VirusTotalScanner;
 /// </summary>
 internal sealed class OpLog : IDisposable
 {
+    /// <summary>Numbers the operations of this process, so a start line and its end line can be tied
+    /// together. Two dozen workers interleave their lines, and an end line on its own says only that
+    /// SOMETHING finished — pairing it by thread does not work either, because an async step resumes on
+    /// whatever thread is free. Unique within one log file, which is one process run.</summary>
+    static int _sequence;
+
+    readonly int _id;
     readonly string _name;
     readonly string _caller;
     readonly Stopwatch _sw = Stopwatch.StartNew();
@@ -26,11 +33,15 @@ internal sealed class OpLog : IDisposable
     Logger.LogLevel _level = LogLevel.Info;
     bool _disposed;
 
+    /// <summary>This operation's number, the one written on both of its lines.</summary>
+    public int Id => _id;
+
     OpLog(string name, string? detail, string caller)
     {
+        _id = Interlocked.Increment(ref _sequence);
         _name = name;
         _caller = caller;
-        Log($"▶ {name} started" + (string.IsNullOrEmpty(detail) ? "" : " — " + detail), LogLevel.Info, callerFunction: caller);
+        Log($"▶ [#{_id}] {name} started" + (string.IsNullOrEmpty(detail) ? "" : " — " + detail), LogLevel.Info, callerFunction: caller);
     }
 
     /// <summary>Logs the start of an operation and returns the handle that logs its end.</summary>
@@ -48,12 +59,12 @@ internal sealed class OpLog : IDisposable
     public void Note(string detail) { _outcome = detail; _level = LogLevel.Info; }
 
     /// <summary>A progress line inside a long operation, so a hang has a last-known position.</summary>
-    public void Step(string detail) => Log($"· {_name}: {detail} (+{_sw.ElapsedMilliseconds} ms)", LogLevel.Debug, callerFunction: _caller);
+    public void Step(string detail) => Log($"· [#{_id}] {_name}: {detail} (+{_sw.ElapsedMilliseconds} ms)", LogLevel.Debug, callerFunction: _caller);
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        Log($"◀ {_name} ended after {_sw.ElapsedMilliseconds} ms — {_outcome ?? "no outcome recorded"}", _level, callerFunction: _caller);
+        Log($"◀ [#{_id}] {_name} ended after {_sw.ElapsedMilliseconds} ms — {_outcome ?? "no outcome recorded"}", _level, callerFunction: _caller);
     }
 }
