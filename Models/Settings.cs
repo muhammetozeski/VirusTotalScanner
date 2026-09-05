@@ -39,6 +39,11 @@ internal static class Settings
     /// <summary>Use the local hash cache to avoid re-querying VirusTotal for known files.</summary>
     public static readonly Setting<bool> UseLocalHashCache = new(true);
 
+    /// <summary>Remember path + size + write-time -> hashes, so a repeat scan does not read the whole
+    /// disk again to arrive at the same digests. A file rewritten with an identical length AND an
+    /// unchanged timestamp would be missed; a re-scan that bypasses trust always hashes for real.</summary>
+    public static readonly Setting<bool> UseFingerprintCache = new(true);
+
     /// <summary>How many days a cached clean verdict stays valid. 0 = never expires (the default):
     /// VirusTotal is not an antivirus, so re-asking it about a file it already answered for only
     /// burns quota. The periodic re-check sweep is what catches a verdict that changed later.</summary>

@@ -201,6 +201,8 @@ internal sealed class ScanScheduler
             if (!ct.IsCancellationRequested) ScanSessionStore.Clear();
             foreach (var td in archiveTemps) ArchiveExpander.CleanupTemp(td);
             _cache.Flush();
+            FingerprintCache.Flush();
+            Log($"Fingerprint cache: {FingerprintCache.Hits} reuse(s), {FingerprintCache.Misses} miss(es), {FingerprintCache.Count} entr(ies) held.", LogLevel.Info);
             try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
             Log("Scan finished.", LogLevel.Info);
         }
@@ -248,7 +250,21 @@ internal sealed class ScanScheduler
             }
 
             SetStatus(item, ScanStatus.Hashing);
-            var (md5, sha256) = await HashService.ComputeAsync(item.FilePath, ct);
+            string md5, sha256;
+            // Reading the file end-to-end is the whole cost of the local stage, and on a repeat sweep
+            // the answer is almost always the one from last time. A deliberate re-check (BypassTrust)
+            // still hashes for real.
+            var known = (Settings.UseFingerprintCache && !opts.BypassTrust) ? FingerprintCache.TryGet(item.FilePath) : null;
+            if (known is { } fp)
+            {
+                (md5, sha256) = (fp.Md5, fp.Sha256);
+                op.Step("hashes reused from the fingerprint cache");
+            }
+            else
+            {
+                (md5, sha256) = await HashService.ComputeAsync(item.FilePath, ct);
+                if (Settings.UseFingerprintCache) FingerprintCache.Put(item.FilePath, md5, sha256);
+            }
             UiPost(() => { item.Md5 = md5; item.Sha256 = sha256; });
 
             // --no-trust (BypassTrust) forces a fresh scan: ignore the local cache too.
