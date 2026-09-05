@@ -11,6 +11,15 @@ internal sealed class LogViewerControl : UserControl
     int _lines;
     const int MaxLines = 3000;
 
+    /// <summary>Lines that have arrived since the last repaint, oldest first. Held under its own lock
+    /// because log lines arrive from every scan thread at once.</summary>
+    readonly Queue<string> _incoming = new();
+    readonly object _incomingLock = new();
+    readonly System.Windows.Forms.Timer _drain = new() { Interval = 250 };
+    /// <summary>Never hold more than one screenful-ish of backlog: during a disk sweep the log runs at
+    /// thousands of lines a second and nobody can read a tick's worth anyway.</summary>
+    const int MaxPendingLines = 400;
+
     public LogViewerControl()
     {
         Dock = DockStyle.Fill;
@@ -43,28 +52,64 @@ internal sealed class LogViewerControl : UserControl
         TooltipCatalog.Apply(_tips, this);
 
         LoggerHost.OnLogLine += OnLogLine;
+        _drain.Tick += (_, _) => Drain();
+        _drain.Start();
     }
 
+    /// <summary>
+    /// Buffers a line for the next repaint. It used to BeginInvoke straight onto the UI thread, which
+    /// is fine at a few lines a second and fatal at the couple of thousand a disk sweep produces: the
+    /// message pump filled with log appends and the window stopped answering. Now the lines pile up
+    /// here and one timer tick writes whatever arrived.
+    /// </summary>
     void OnLogLine(string line)
     {
-        if (!IsHandleCreated) return;
+        lock (_incomingLock)
+        {
+            _incoming.Enqueue(line);
+            while (_incoming.Count > MaxPendingLines) _incoming.Dequeue();
+        }
+    }
+
+    /// <summary>Writes the lines buffered since the last tick in one append. Skipped entirely while the
+    /// tab is not on screen — the complete log is on disk either way.</summary>
+    void Drain()
+    {
+        if (!IsHandleCreated || !Visible) return;
+
+        string[] batch;
+        lock (_incomingLock)
+        {
+            if (_incoming.Count == 0) return;
+            batch = _incoming.ToArray();
+            _incoming.Clear();
+        }
+
         try
         {
-            BeginInvoke(() =>
-            {
-                if (_lines >= MaxLines)
-                {
-                    _box.Clear();
-                    _lines = 0;
-                }
-                _box.AppendText(line.TrimEnd() + Environment.NewLine);
-                _lines++;
-                _box.SelectionStart = _box.TextLength;
-                _box.ScrollToCaret();
-            });
+            if (_lines >= MaxLines) { _box.Clear(); _lines = 0; }
+
+            var sb = new System.Text.StringBuilder();
+            foreach (var line in batch) sb.Append(line.TrimEnd()).Append(Environment.NewLine);
+            _box.AppendText(sb.ToString());
+            _lines += batch.Length;
+
+            _box.SelectionStart = _box.TextLength;
+            _box.ScrollToCaret();
         }
-        catch { }
+        catch (Exception ex) { Log("Log viewer append failed: " + ex.Message, LogLevel.Warning); }
     }
 
     public void RefreshState() => _enable.Checked = LoggerHost.IsEnabled;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            LoggerHost.OnLogLine -= OnLogLine;
+            _drain.Stop();
+            _drain.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }
