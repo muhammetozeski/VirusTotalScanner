@@ -16,6 +16,9 @@ internal sealed class ApiKeyEntry
     /// <summary>Disabled after an auth failure (401/403) so rotation skips it.</summary>
     public bool Disabled { get; set; }
     public string? LastError { get; set; }
+    /// <summary>When <see cref="Disabled"/> was last set by the program itself. Null for a key the user
+    /// switched off by hand — that one stays off. See <see cref="KeyVault.ReArmStaleDisables"/>.</summary>
+    public DateTime? AutoDisabledUtc { get; set; }
 
     public QuotaWindow Minute { get; set; } = new(WindowKind.Minute, AppConstants.RatePerMinute);
     public QuotaWindow Daily { get; set; } = new(WindowKind.Daily, AppConstants.QuotaPerDay);

@@ -37,7 +37,7 @@ internal sealed class KeyVault
                 string json = CryptoService.UnprotectFromBase64(enc);
                 var list = JsonSerializer.Deserialize<List<ApiKeyEntry>>(json, JsonOpts);
                 if (list != null) _keys.AddRange(list);
-                Log($"Key vault loaded: {_keys.Count} key(s)", LogLevel.Info);
+                Log($"Key vault loaded: {_keys.Count} key(s), {_keys.Count(k => k.Disabled)} disabled", LogLevel.Info);
             }
             catch (CryptographicException ex)
             {
@@ -52,6 +52,38 @@ internal sealed class KeyVault
                 Log("Key vault load failed: " + ex, LogLevel.Error);
             }
         }
+    }
+
+    /// <summary>How long an automatic disable stands before the key gets another chance.</summary>
+    static readonly TimeSpan AutoDisableCoolOff = TimeSpan.FromHours(12);
+
+    /// <summary>
+    /// Gives a key the program switched off by itself another chance once the cool-off has passed.
+    /// The judgement that disabled it can be wrong — a 403 from an edge in front of VirusTotal reads
+    /// exactly like a rejected credential — and a key parked on a wrong judgement never came back on
+    /// its own. A key that really is dead costs one request to find out again. A key the user turned
+    /// off by hand carries no <see cref="ApiKeyEntry.AutoDisabledUtc"/> and is left alone.
+    /// </summary>
+    public int ReArmStaleDisables()
+    {
+        var now = DateTime.UtcNow;
+        var freed = new List<string>();
+        lock (_lock)
+        {
+            foreach (var e in _keys)
+            {
+                if (!e.Disabled || e.AutoDisabledUtc is not { } since) continue;
+                if (now - since < AutoDisableCoolOff) continue;
+                e.Disabled = false;
+                e.AutoDisabledUtc = null;
+                e.LastError = null;
+                freed.Add(e.Masked);
+            }
+        }
+        if (freed.Count == 0) return 0;
+        Log($"{freed.Count} key(s) re-armed after the {AutoDisableCoolOff.TotalHours:0}h cool-off: {string.Join(", ", freed)}", LogLevel.Info);
+        Save();
+        return freed.Count;
     }
 
     public ApiKeyEntry Add(string label, string key)
@@ -79,6 +111,7 @@ internal sealed class KeyVault
             e.Label = label;
             e.Key = key;
             e.Disabled = false;
+            e.AutoDisabledUtc = null;
             e.LastError = null;
         }
         Save();

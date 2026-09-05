@@ -25,6 +25,8 @@ internal static class AppServices
         ProductSignerRegistry.Load();
         ConfirmGateManager.Load();
         Vault.Load();
+        // A key the program disabled by itself gets another chance once the cool-off has passed.
+        Vault.ReArmStaleDisables();
         // Mirror the keys out on every start, not only when one is added: a vault restored from a
         // config backup would otherwise never reach the plain-text safety net.
         Vault.ExportPlaintext();

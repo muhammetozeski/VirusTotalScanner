@@ -213,6 +213,7 @@ internal sealed class KeyRotator
             if (credential)
             {
                 e.Disabled = true;
+                e.AutoDisabledUtc = DateTime.UtcNow; // marks this as the program's own judgement, not the user's
                 e.LastError = $"Auth failed ({(int?)ex?.StatusCode ?? 401})";
             }
             else
@@ -247,6 +248,7 @@ internal sealed class KeyRotator
             foreach (var e in _vault.Keys.Where(k => k.Disabled))
             {
                 e.Disabled = false;
+                e.AutoDisabledUtc = null;
                 e.LastError = null;
                 n++;
             }
