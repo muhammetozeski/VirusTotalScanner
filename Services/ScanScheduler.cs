@@ -464,11 +464,20 @@ internal sealed class ScanScheduler
             Bump(ref _skipped);
             op.Ok("not in VirusTotal, not submitted");
         }
+        else if (report == null && failure is LookupFailure.LookupEmpty or LookupFailure.UnknownNoKey)
+        {
+            // Never asked, rather than asked and got a bad answer: the keys were spent and the keyless
+            // channel was blocked. Calling that a scan failure would report a file as broken when
+            // nothing about it was ever checked. It is queued for the next run instead.
+            ItemWrite(() => { item.SkipReason = Strings.SkipReasonNotAskedYet; item.Status = ScanStatus.Skipped; });
+            Bump(ref _skipped);
+            PendingOutbox.Add(item.FilePath);
+            op.Note("not asked yet — no channel could serve it; queued for the next run");
+        }
         else if (report == null)
         {
             string reason = failure switch
             {
-                LookupFailure.UnknownNoKey => Strings.ItemErrorUnknownNoKey,
                 LookupFailure.AnalysisTimedOut => string.Format(Strings.ItemErrorAnalysisTimedOutFormat, PollWindowMinutes),
                 _ => Strings.ItemErrorNoReport,
             };
@@ -709,7 +718,44 @@ internal sealed class ScanScheduler
     }
 
     /// <summary>One file that finished its local stage and now needs VirusTotal.</summary>
-    readonly record struct NetworkJob(ScanItem Item, string Md5, string Sha256, ScanOptions Options);
+    readonly record struct NetworkJob(ScanItem Item, string Md5, string Sha256, ScanOptions Options, int Attempt = 0);
+
+    /// <summary>How many times a file goes back to the queue before it is reported as unanswered. Each
+    /// retry waits for a channel first, so this is attempts, not a spin.</summary>
+    const int MaxLookupAttempts = 20;
+
+    long _channelsHeldUntilTicks;
+
+    /// <summary>Parks every network worker for a while after a lookup found no channel able to answer.
+    /// Without it the workers race through the whole queue against a wall — thousands of files a minute,
+    /// none of them actually asked about.</summary>
+    void HoldOffChannels(string why)
+    {
+        var until = DateTime.UtcNow + ChannelHoldOff;
+        if (_rotator.SoonestResetUtc is { } reset && reset > DateTime.UtcNow && reset < until) until = reset;
+
+        long ticks = until.Ticks;
+        long was = Interlocked.Read(ref _channelsHeldUntilTicks);
+        if (ticks > was)
+        {
+            Interlocked.Exchange(ref _channelsHeldUntilTicks, ticks);
+            Log($"Network stage holding until {until:HH:mm:ss} UTC — {why}.", LogLevel.Info);
+        }
+    }
+
+    static readonly TimeSpan ChannelHoldOff = TimeSpan.FromSeconds(30);
+
+    /// <summary>Waits out any hold-off before the next lookup.</summary>
+    async Task WaitForAChannelAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            long until = Interlocked.Read(ref _channelsHeldUntilTicks);
+            var left = new DateTime(until, DateTimeKind.Utc) - DateTime.UtcNow;
+            if (left <= TimeSpan.Zero) return;
+            await Task.Delay(left > ChannelHoldOff ? ChannelHoldOff : left, ct);
+        }
+    }
 
     /// <summary>Files handed over by the scan workers, waiting for the network stage. Unbounded on
     /// purpose: the entries are references to items that already exist, and a bounded channel would
@@ -731,6 +777,7 @@ internal sealed class ScanScheduler
         {
             await foreach (var job in _netQueue!.Reader.ReadAllAsync(ct))
             {
+                await WaitForAChannelAsync(ct);
                 handled++;
                 using var fileOp = OpLog.Begin("Lookup", $"in: {job.Item.FileName} md5={job.Md5}");
                 VtFileReport? report = null;
@@ -768,6 +815,22 @@ internal sealed class ScanScheduler
                     fileOp.Fail(ex.Message);
                     FinishItem(job.Item);
                     continue;
+                }
+
+                // "No channel could answer" is not a result about the file. Burning it as a failure
+                // consumed the queue at network speed and reported a third of the disk as errors, when
+                // nothing had actually been asked about those files. The job goes back to the queue and
+                // the workers hold until a key window or the keyless channel comes back.
+                if (report == null && failure == LookupFailure.LookupEmpty && !ct.IsCancellationRequested)
+                {
+                    var again = job with { Attempt = job.Attempt + 1 };
+                    if (again.Attempt <= MaxLookupAttempts && _netQueue.Writer.TryWrite(again))
+                    {
+                        HoldOffChannels("every channel came back empty");
+                        SetStatus(job.Item, ScanStatus.Queued);
+                        fileOp.Note($"out: no channel could answer — requeued (attempt {again.Attempt})");
+                        continue;
+                    }
                 }
 
                 RecordOutcome(job.Item, report, failure, fileOp);
