@@ -12,11 +12,30 @@ internal static class HashService
         text != null && System.Text.RegularExpressions.Regex.IsMatch(text.Trim().ToLowerInvariant(),
             "^[a-f0-9]{32}$|^[a-f0-9]{40}$|^[a-f0-9]{64}$");
 
+    /// <summary>Backoff between attempts on a file another process has open exclusively. A sweep walks
+    /// live temp files (browser caches, installer scratch, Windows' own AC\Temp) and most of those locks
+    /// are gone in under a second — failing on the first try painted a disk sweep red for nothing.</summary>
+    static readonly int[] LockRetryDelaysMs = [80, 250, 600];
+
+    /// <summary>Opens a file for reading, waiting out a short-lived exclusive lock. Rethrows the last
+    /// IOException when the lock outlives every attempt, so the caller can still report it.</summary>
+    static async Task<FileStream> OpenForReadAsync(string path, CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 20, useAsync: true); }
+            catch (IOException) when (attempt < LockRetryDelaysMs.Length)
+            {
+                await Task.Delay(LockRetryDelaysMs[attempt], ct);
+            }
+        }
+    }
+
     public static async Task<(string Md5, string Sha256)> ComputeAsync(string path, CancellationToken ct = default)
     {
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 20, useAsync: true);
+        using var fs = await OpenForReadAsync(path, ct);
 
         byte[] buffer = ArrayPool<byte>.Shared.Rent(1 << 20); // pooled: avoids a per-file LOH allocation
         try
