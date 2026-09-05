@@ -182,14 +182,22 @@ internal static class NetworkProbeRunner
         if (tor.Count > 0)
         {
             int okRoutes = tor.Count(r => r.Reports > 0);
-            int blockedRoutes = tor.Count(r => r.Reports == 0 && r.Challenged > 0);
-            sb.AppendLine($"tor: {tor.Count} exit address(es) tried — {okRoutes} answered at least once, {blockedRoutes} were challenged on every lookup.");
+            int challengedRoutes = tor.Count(r => r.Reports == 0 && r.Challenged > 0);
+            int silentRoutes = tor.Count(r => r.Reports == 0 && r.Challenged == 0);
+            sb.AppendLine($"tor: {tor.Count} exit address(es) tried — {okRoutes} answered, {challengedRoutes} were challenged throughout, {silentRoutes} never answered at all.");
             sb.AppendLine($"tor totals: {tor.Sum(r => r.Reports)} answered, {tor.Sum(r => r.Challenged)} challenged, {tor.Sum(r => r.TimedOut)} timed out.");
-            sb.AppendLine(okRoutes == 0
-                ? "=> On this evidence VirusTotal's keyless interface refuses Tor exits outright; rotating does not help."
-                : blockedRoutes == 0
-                    ? "=> Every Tor exit answered: rotating the circuit is a working way out of a challenge."
-                    : "=> Tor exits vary: some answer, some are challenged. Rotating is worth retrying a few times.");
+
+            // Challenged and silent are different findings and must not be blurred: the first says
+            // VirusTotal refused the address, the second says the exit was too slow or broken.
+            if (tor.Sum(r => r.Challenged) == 0 && okRoutes > 0)
+                sb.AppendLine("=> VirusTotal does NOT refuse Tor exits: not one challenge across every Tor lookup. "
+                    + (silentRoutes > 0
+                        ? $"{silentRoutes} exit(s) simply never answered, which is an exit-quality problem — rotate past them."
+                        : "Rotating the circuit is a working way out of a challenge."));
+            else if (okRoutes == 0 && challengedRoutes == tor.Count)
+                sb.AppendLine("=> Every Tor exit was challenged: on this evidence rotating does not help.");
+            else
+                sb.AppendLine("=> Tor exits vary: some answer, some are challenged or silent. Rotating is worth retrying a few times.");
         }
         return sb.ToString();
     }
