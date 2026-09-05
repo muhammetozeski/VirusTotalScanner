@@ -237,7 +237,22 @@ internal sealed class ScanScheduler
             int localDegree = Math.Max(1, opts.MaxConcurrency) + Math.Max(4, Environment.ProcessorCount);
             var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
             using var heartbeat = StartHeartbeat(items.Count, localDegree, ct);
+
+            _netQueue = System.Threading.Channels.Channel.CreateUnbounded<NetworkJob>(
+                new System.Threading.Channels.UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
+            int netWorkers = Math.Max(1, opts.MaxConcurrency);
+            var netTasks = Enumerable.Range(0, netWorkers).Select(i => NetworkWorkerAsync(i, ct)).ToArray();
+            Log($"Network stage started with {netWorkers} worker(s); disk stage runs {localDegree} wide.", LogLevel.Info);
+
             await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
+
+            // The disk is done; tell the network stage no more files are coming and let it finish.
+            using (var drainNet = OpLog.Begin("Drain network queue", $"in: {_netQueue.Reader.Count} file(s) still queued"))
+            {
+                _netQueue.Writer.TryComplete();
+                await Task.WhenAll(netTasks);
+                drainNet.Ok("out: network stage closed");
+            }
 
             // Uploaded files whose analysis is still running finish on the background watcher; the run
             // is not over until they land, or the whole sweep would report them as never answered.
@@ -385,31 +400,22 @@ internal sealed class ScanScheduler
                 return;
             }
 
-            // In-scan dedup: serialize lookups of identical content within one run so duplicate
-            // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
-            // lookup. The first item caches the report; the rest get the cache hit here.
-            var dedupGate = _md5Gates!.GetOrAdd(md5, _ => new SemaphoreSlim(1, 1));
-            await dedupGate.WaitAsync(ct);
-            VtFileReport? report;
-            var failure = LookupFailure.None;
-            try
+            // Everything above was local and costs milliseconds. What is left needs VirusTotal, which
+            // costs seconds to minutes and is rate-limited to about a lookup a second across every key.
+            // A worker that carries a file through that stage is a worker not hashing the next one, and
+            // there are only two dozen of them: the sweep dropped from 2,587 files a minute to 20 the
+            // moment they were all queued on the network. So the file is handed to the network stage,
+            // which runs on its own bounded set of tasks, and this worker goes back to the disk.
+            SetStatus(item, ScanStatus.Queued);
+            if (!_netQueue!.Writer.TryWrite(new NetworkJob(item, md5, sha256, opts)))
             {
-                var dup = (opts.UseCache && !opts.BypassTrust) ? _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays) : null;
-                if (dup != null) { UiPost(() => item.FromCache = true); report = dup; }
-                else (report, failure) = await DoLookupAsync(item, md5, sha256, opts, ct);
-            }
-            finally { dedupGate.Release(); }
-
-            if (failure == LookupFailure.AnalysisPending)
-            {
-                // Handed to the background watcher: it owns this item's ending now, so nothing here
-                // may count it done or announce it finished.
-                handedOff = true;
-                op.Note("uploaded — the analysis wait was handed to the background watcher");
+                // An unbounded channel only refuses after it is completed, i.e. the run is ending.
+                Log($"Network queue closed; {item.FileName} was not looked up.", LogLevel.Warning);
+                op.Note("network queue closed");
                 return;
             }
-
-            RecordOutcome(item, report, failure, op);
+            handedOff = true;
+            op.Note("local stage done — handed to the network queue");
         }
         catch (OperationCanceledException)
         {
@@ -610,7 +616,7 @@ internal sealed class ScanScheduler
                     + $"+{done - lastDone} in the last minute, {perMin:0.0}/min, ETA {eta} — "
                     + $"clean={_clean} malicious={_malicious} suspicious={_suspicious} unknown={_unknown} "
                     + $"skipped={_skipped} signed={_signedSkipped} failed={_failed}; "
-                    + $"waiting on VirusTotal={_pendingAnalyses.Count}, workers={workers}, "
+                    + $"queued for VirusTotal={NetworkQueueDepth}, waiting on analysis={_pendingAnalyses.Count}, workers={workers}, "
                     + $"keys usable={_rotator.UsableKeyCount} immediateRoom={_rotator.HasImmediateRoom}",
                     LogLevel.Info);
                 lastDone = done;
@@ -619,6 +625,77 @@ internal sealed class ScanScheduler
         }, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         ct.Register(() => { try { timer.Change(Timeout.Infinite, Timeout.Infinite); } catch (Exception ex) { Log("Heartbeat stop failed: " + ex.Message, LogLevel.Warning); } });
         return timer;
+    }
+
+    /// <summary>One file that finished its local stage and now needs VirusTotal.</summary>
+    readonly record struct NetworkJob(ScanItem Item, string Md5, string Sha256, ScanOptions Options);
+
+    /// <summary>Files handed over by the scan workers, waiting for the network stage. Unbounded on
+    /// purpose: the entries are references to items that already exist, and a bounded channel would
+    /// push the backpressure back onto the disk workers — which is exactly what this separates.</summary>
+    System.Threading.Channels.Channel<NetworkJob>? _netQueue;
+
+    /// <summary>How many files have finished hashing and are waiting their turn at VirusTotal.</summary>
+    public int NetworkQueueDepth => _netQueue?.Reader.Count ?? 0;
+
+    /// <summary>
+    /// Runs the VirusTotal stage for one file at a time, forever, until the queue is completed. As many
+    /// of these run as the concurrency setting allows; nothing else in the scan waits on them.
+    /// </summary>
+    async Task NetworkWorkerAsync(int index, CancellationToken ct)
+    {
+        using var op = OpLog.Begin($"Network worker {index}");
+        int handled = 0;
+        try
+        {
+            await foreach (var job in _netQueue!.Reader.ReadAllAsync(ct))
+            {
+                handled++;
+                using var fileOp = OpLog.Begin("Lookup", $"in: {job.Item.FileName} md5={job.Md5}");
+                VtFileReport? report = null;
+                var failure = LookupFailure.LookupEmpty;
+                try
+                {
+                    // In-scan dedup: serialize lookups of identical content within one run so duplicate
+                    // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
+                    // lookup. The first item caches the report; the rest get the cache hit here.
+                    var dedupGate = _md5Gates!.GetOrAdd(job.Md5, _ => new SemaphoreSlim(1, 1));
+                    await dedupGate.WaitAsync(ct);
+                    try
+                    {
+                        var dup = (job.Options.UseCache && !job.Options.BypassTrust)
+                            ? _cache.TryGet(job.Md5, job.Options.CacheDays, job.Options.ThreatCacheDays) : null;
+                        if (dup != null) { UiPost(() => job.Item.FromCache = true); report = dup; failure = LookupFailure.None; }
+                        else (report, failure) = await DoLookupAsync(job.Item, job.Md5, job.Sha256, job.Options, ct);
+                    }
+                    finally { dedupGate.Release(); }
+
+                    if (failure == LookupFailure.AnalysisPending)
+                    {
+                        // Uploaded: the background watcher owns this item's ending now.
+                        fileOp.Note("out: uploaded — the analysis watcher will finish it");
+                        continue;
+                    }
+                }
+                catch (OperationCanceledException) { SetStatus(job.Item, ScanStatus.Cancelled); fileOp.Note("cancelled"); throw; }
+                catch (Exception ex)
+                {
+                    UiPost(() => job.Item.Error = ex.Message);
+                    SetStatus(job.Item, ScanStatus.Failed);
+                    Bump(ref _failed);
+                    Log($"Lookup failed for {job.Item.FileName}: {ex}", LogLevel.Error);
+                    fileOp.Fail(ex.Message);
+                    FinishItem(job.Item);
+                    continue;
+                }
+
+                RecordOutcome(job.Item, report, failure, fileOp);
+                FinishItem(job.Item);
+            }
+            op.Ok($"out: {handled} file(s) looked up");
+        }
+        catch (OperationCanceledException) { op.Note($"cancelled after {handled} file(s)"); }
+        catch (Exception ex) { op.Fail($"{ex.Message} (after {handled} file(s))"); Log($"Network worker {index} died: {ex}", LogLevel.Error); }
     }
 
     /// <summary>Analyses still being waited for. The run is not over until these drain, and the count is
