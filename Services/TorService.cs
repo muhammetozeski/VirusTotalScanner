@@ -172,41 +172,24 @@ internal static class TorService
             op.Step($"torrc written; socks={_socksPort} control={_controlPort} data={dataDir}");
 
             lock (_bootLog) _bootLog.Clear();
-            try
-            {
-                var psi = new ProcessStartInfo(exe)
-                {
-                    Arguments = $"-f \"{torrc}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    WorkingDirectory = Path.GetDirectoryName(exe) ?? ConfigPathResolver.DataFolder,
-                };
-                _proc = Process.Start(psi);
-                if (_proc == null)
-                {
-                    LastError = Strings.TorErrStartFailed;
-                    Log("Tor start returned no process.", LogLevel.Error);
-                    op.Fail("Process.Start returned null");
-                    return false;
-                }
-                _proc.OutputDataReceived += (_, e) => OnTorLine(e.Data);
-                _proc.ErrorDataReceived += (_, e) => OnTorLine(e.Data);
-                _proc.BeginOutputReadLine();
-                _proc.BeginErrorReadLine();
-                Log($"Tor started (pid {_proc.Id}) socks={_socksPort} control={_controlPort} exe={exe}", LogLevel.Info);
-            }
-            catch (Exception ex)
-            {
-                LastError = string.Format(Strings.TorErrStartFailedFormat, ex.Message);
-                Log("Tor process start failed: " + ex, LogLevel.Error);
-                op.Fail("Process.Start: " + ex.Message);
-                return false;
-            }
+            _proc = StartTorProcess(exe, torrc, op);
+            if (_proc == null) { op.Fail(LastError ?? "process start failed"); return false; }
 
             op.Step("waiting for bootstrap");
             bool up = await WaitForBootstrapAsync(ct);
+
+            // A directory cache that went bad keeps tor at 0% forever ("Failed to find node for hop #1
+            // of our path"), and nothing in tor clears it. One retry on a cleared cache turns a dead
+            // install back into a working one; without it the feature stayed broken across restarts.
+            if (!up && DropCachedDirectory(dataDir, out string dropped))
+            {
+                op.Step("bootstrap failed; cleared the cached directory (" + dropped + ") and retrying once");
+                KillProcess();
+                lock (_bootLog) _bootLog.Clear();
+                _proc = StartTorProcess(exe, torrc, op);
+                if (_proc != null) up = await WaitForBootstrapAsync(ct);
+            }
+
             if (!up)
             {
                 LastError ??= Strings.TorErrBootstrapTimeout;
@@ -313,6 +296,75 @@ internal static class TorService
     static string LastBootLines()
     {
         lock (_bootLog) return string.Join(" | ", _bootLog.TakeLast(6));
+    }
+
+    /// <summary>Launches tor.exe against <paramref name="torrc"/> and wires its output into the boot log.
+    /// Returns null (with <see cref="LastError"/> set) when the process would not start.</summary>
+    static Process? StartTorProcess(string exe, string torrc, OpLog op)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(exe)
+            {
+                Arguments = $"-f \"{torrc}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(exe) ?? ConfigPathResolver.DataFolder,
+            };
+            var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                LastError = Strings.TorErrStartFailed;
+                Log("Tor start returned no process.", LogLevel.Error);
+                return null;
+            }
+            proc.OutputDataReceived += (_, e) => OnTorLine(e.Data);
+            proc.ErrorDataReceived += (_, e) => OnTorLine(e.Data);
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            Log($"Tor started (pid {proc.Id}) socks={_socksPort} control={_controlPort} exe={exe}", LogLevel.Info);
+            op.Step($"tor.exe running, pid {proc.Id}");
+            return proc;
+        }
+        catch (Exception ex)
+        {
+            LastError = string.Format(Strings.TorErrStartFailedFormat, ex.Message);
+            Log("Tor process start failed: " + ex, LogLevel.Error);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Deletes tor's cached directory documents (consensus, certs, microdescriptors) so the next start
+    /// fetches them fresh. Guard state is left alone. Returns false when there was nothing cached to
+    /// drop — that says the failure was not a stale cache and a retry would only repeat it.
+    /// </summary>
+    static bool DropCachedDirectory(string dataDir, out string dropped)
+    {
+        dropped = "";
+        try
+        {
+            var files = Directory.EnumerateFiles(dataDir, "cached-*").ToList();
+            if (files.Count == 0) return false;
+            int gone = 0;
+            long bytes = 0;
+            foreach (var f in files)
+            {
+                try { bytes += new FileInfo(f).Length; File.Delete(f); gone++; }
+                catch (Exception ex) { Log($"Tor cache file '{Path.GetFileName(f)}' could not be deleted: {ex.Message}", LogLevel.Warning); }
+            }
+            if (gone == 0) return false;
+            dropped = $"{gone} file(s), {bytes / 1024} KB";
+            Log($"Tor cached directory cleared: {dropped} under {dataDir}.", LogLevel.Info);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log("Tor cached directory could not be cleared: " + ex.Message, LogLevel.Warning);
+            return false;
+        }
     }
 
     /// <summary>Highest "Bootstrapped NN%" seen so far, or -1 before the first one.</summary>
