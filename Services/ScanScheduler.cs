@@ -238,6 +238,7 @@ internal sealed class ScanScheduler
             var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
             using var heartbeat = StartHeartbeat(items.Count, localDegree, ct);
             using var quietList = SuspendItemNotifications();
+            using var finishedFlush = StartFinishedFlush();
 
             _netQueue = System.Threading.Channels.Channel.CreateUnbounded<NetworkJob>(
                 new System.Threading.Channels.UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
@@ -487,12 +488,52 @@ internal sealed class ScanScheduler
         }
     }
 
-    /// <summary>Counts one item done and announces it. Marshalled to the UI thread like ProgressChanged:
-    /// subscribers mutate the grid/BindingList and several workers finish at once.</summary>
+    readonly List<ScanItem> _finished = [];
+    readonly object _finishedLock = new();
+
+    /// <summary>
+    /// Counts one item done and queues its announcement.
+    ///
+    /// <see cref="ItemFinished"/> is marshalled to the UI thread because subscribers mutate the grid,
+    /// but one post per file is 460 posts a second on a fast sweep and the message pump cannot answer
+    /// anything else. Finished items are collected here and announced in batches a few times a second
+    /// instead — same event, same order, one post per batch.
+    /// </summary>
     void FinishItem(ScanItem item)
     {
         DoneOne();
-        UiPost(() => { try { ItemFinished?.Invoke(item); } catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); } });
+        lock (_finishedLock) _finished.Add(item);
+    }
+
+    /// <summary>Announces everything finished since the last flush, in one trip to the UI thread.</summary>
+    void FlushFinished()
+    {
+        ScanItem[] batch;
+        lock (_finishedLock)
+        {
+            if (_finished.Count == 0) return;
+            batch = [.. _finished];
+            _finished.Clear();
+        }
+        UiPost(() =>
+        {
+            foreach (var it in batch)
+            {
+                try { ItemFinished?.Invoke(it); }
+                catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); }
+            }
+        });
+    }
+
+    /// <summary>Flushes finished items to the UI a few times a second for the length of a run.</summary>
+    IDisposable StartFinishedFlush()
+    {
+        var timer = new System.Threading.Timer(_ =>
+        {
+            try { FlushFinished(); }
+            catch (Exception ex) { Log("Finished flush failed: " + ex.Message, LogLevel.Warning); }
+        }, null, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250));
+        return new Restore(() => { try { timer.Dispose(); } catch { } FlushFinished(); });
     }
 
     /// <summary>The resilient lookup chain for one file (keyless GUI when it is free, API + upload
