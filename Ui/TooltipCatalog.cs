@@ -86,6 +86,7 @@ internal static class TooltipCatalog
     public const string AutoActionGrid = "tt.autoActionGrid";
     public const string SafeExtsBox = "tt.safeExtsBox";
     public const string UploadPolicyCombo = "tt.uploadPolicyCombo";
+    public const string LookupPolicyCombo = "tt.lookupPolicyCombo";
     public const string TrustAllowBox = "tt.trustAllowBox";
     public const string KnownGoodBox = "tt.knownGoodBox";
     public const string SweepFolderBox = "tt.sweepFolderBox";
@@ -217,6 +218,8 @@ internal static class TooltipCatalog
         [Strings.ScanSkipSafeLabel] = Strings.TtSkipSafe,
         [Strings.ScanUploadPolicyLabel] = Strings.TtUploadPolicy,
         [UploadPolicyCombo] = Strings.TtUploadPolicy,
+        [Strings.ScanLookupPolicyLabel] = Strings.TtLookupPolicy,
+        [LookupPolicyCombo] = Strings.TtLookupPolicy,
         [Strings.ScanSafeExtsLabel] = Strings.TtSafeExts,
         [SafeExtsBox] = Strings.TtSafeExts,
         [Strings.BtnSaveExts] = Strings.TtSafeExts,

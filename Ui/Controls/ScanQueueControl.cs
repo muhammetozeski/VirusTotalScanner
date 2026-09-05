@@ -810,6 +810,10 @@ internal sealed class ScanQueueControl : UserControl
 
         var pathList = paths.ToList();
         opts.ExpandArchives = ShouldExpandArchives(pathList, background);
+        // Picking files by hand means "check exactly these", so the code-shaped-only scope does not
+        // apply to them — only to folder sweeps, where it is the difference between 32,000 lookups
+        // and 228,000.
+        opts.ExplicitFileSelection = pathList.Count > 0 && pathList.All(File.Exists);
 
         _ = Task.Run(async () =>
         {

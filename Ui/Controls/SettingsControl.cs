@@ -482,6 +482,14 @@ internal sealed class SettingsControl : UserControl
         var skipSafe = new CheckBox { Text = Strings.ScanSkipSafeLabel, AutoSize = true, Checked = Settings.SkipSafeExtensionsOnScan };
         skipSafe.CheckedChanged += (_, _) => { Settings.SkipSafeExtensionsOnScan.Value = skipSafe.Checked; SettingsManager.SaveSettings(); };
 
+        var lookupRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
+        lookupRow.Controls.Add(ThemeManager.MakeLabel(Strings.ScanLookupPolicyLabel));
+        var lookupCombo = TooltipCatalog.Name(new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320 }, TooltipCatalog.LookupPolicyCombo);
+        lookupCombo.Items.AddRange([Strings.LookupPolicyAll, Strings.LookupPolicyCodeOnly]);
+        lookupCombo.SelectedIndex = Math.Clamp(Settings.LookupPolicy.Value, 0, 1);
+        lookupCombo.SelectedIndexChanged += (_, _) => { Settings.LookupPolicy.Value = lookupCombo.SelectedIndex; SettingsManager.SaveSettings(); };
+        lookupRow.Controls.Add(lookupCombo);
+
         var uploadRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
         uploadRow.Controls.Add(ThemeManager.MakeLabel(Strings.ScanUploadPolicyLabel));
         var uploadCombo = TooltipCatalog.Name(new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320 }, TooltipCatalog.UploadPolicyCombo);
@@ -498,6 +506,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(lbl);
         body.Controls.Add(save);
         body.Controls.Add(skipSafe);
+        body.Controls.Add(lookupRow);
         body.Controls.Add(uploadRow);
         body.Controls.Add(threatCacheDays);
         body.Controls.Add(cacheDays);

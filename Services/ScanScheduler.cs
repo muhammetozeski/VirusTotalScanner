@@ -314,6 +314,18 @@ internal sealed class ScanScheduler
                 return;
             }
 
+            // Scope: on a folder sweep set to code-shaped files only, a font or a Store icon does not
+            // get a lookup. It still went through hashing and the cache, so a KNOWN verdict above would
+            // already have been reported; this only stops spending quota to be told "never seen it".
+            if (opts.LookupPolicy == 1 && !opts.ExplicitFileSelection && !opts.BypassTrust
+                && !FileClass.IsWorthUploading(item.FilePath))
+            {
+                UiPost(() => { item.SkipReason = Strings.SkipReasonNotCodeFile; item.Status = ScanStatus.Skipped; });
+                Bump(ref _skipped);
+                op.Ok("not a code file — no lookup spent");
+                return;
+            }
+
             // In-scan dedup: serialize lookups of identical content within one run so duplicate
             // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
             // lookup. The first item caches the report; the rest get the cache hit here.

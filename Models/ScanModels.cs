@@ -30,6 +30,9 @@ internal enum LookupFailure
     /// <summary>VirusTotal has never seen it, and the upload policy did not submit it (it is not the
     /// kind of file a verdict would change anything about).</summary>
     NotSubmitted,
+    /// <summary>Not looked up at all: a folder sweep set to code-shaped files only, and this one is
+    /// not code-shaped.</summary>
+    NotApplicable,
     /// <summary>Every channel that was tried came back empty.</summary>
     LookupEmpty,
 }
@@ -195,6 +198,14 @@ internal sealed class ScanOptions
     /// <summary>0 = never submit an unknown file, 1 = only code-shaped ones, 2 = anything.</summary>
     public int UploadPolicy { get; set; } = 1;
 
+    /// <summary>0 = look every file up, 1 = only code-shaped ones. Ignored when the user picked the
+    /// files by hand: pointing at a file means "check this one".</summary>
+    public int LookupPolicy { get; set; } = 1;
+
+    /// <summary>True when the selection was individual FILES rather than folders — then the lookup
+    /// policy does not apply, because the user pointed at exactly what they want checked.</summary>
+    public bool ExplicitFileSelection { get; set; }
+
     /// <summary>Skip VT for trusted-signed / known-good files (the keyless quota saver).</summary>
     public bool SkipTrusted { get; set; } = true;
     /// <summary>When true, force every file through VT even if trusted (re-scan ignoring trust).</summary>
@@ -211,6 +222,7 @@ internal sealed class ScanOptions
         CacheDays = Math.Max(0, Settings.HashCacheDays.Value),
         ThreatCacheDays = Math.Max(0, Settings.ThreatCacheDays.Value),
         UploadPolicy = Math.Clamp(Settings.UploadPolicy.Value, 0, 2),
+        LookupPolicy = Math.Clamp(Settings.LookupPolicy.Value, 0, 1),
         SkipTrusted = Settings.TrustSkipSigned,
     };
 }

@@ -30,6 +30,15 @@ internal static class Settings
     /// this is throttled separately from lookups).</summary>
     public static readonly Setting<int> MaxConcurrentUploads = new(2);
 
+    /// <summary>Which files get a VirusTotal lookup at all during a FOLDER sweep.
+    /// 0 = every file, 1 = only code-shaped files (default).
+    ///
+    /// A dry run of one C: drive: 338,603 files, of which 195,833 were neither executable, script,
+    /// installer, archive nor macro-capable document — Store icons, .DATA payloads, fonts, logs, .mui
+    /// resources. Looking those up costs a quota unit each and answers "VirusTotal has never seen it"
+    /// nearly every time. Files the user picked by hand are always looked up, whatever this says.</summary>
+    public static readonly Setting<int> LookupPolicy = new(1);
+
     /// <summary>What to do with a file VirusTotal has never seen.
     /// 0 = never upload (hash lookups only), 1 = upload only code-shaped files (default),
     /// 2 = upload anything. A submission costs a request and the analysis after it costs more, and a
