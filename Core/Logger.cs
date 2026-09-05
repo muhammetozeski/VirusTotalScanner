@@ -38,6 +38,20 @@ public static class Logger
     public static readonly ConcurrentQueue<string> AllLogs = new();
     public static readonly ConcurrentQueue<string?> AllLogsUserFriendly = new();
 
+    /// <summary>How many lines the in-memory buffers keep. They exist for "copy the logs" and the live
+    /// viewer, both of which only ever want the recent past — but they used to grow without any bound.
+    /// A disk-wide scan logs millions of lines, and every one of them was held in RAM for the life of
+    /// the process. The files on disk are still complete; only the memory copy is trimmed.</summary>
+    const int MaxBufferedLines = 20000;
+
+    static void Enqueue(string formatted, string? friendly)
+    {
+        AllLogs.Enqueue(formatted);
+        AllLogsUserFriendly.Enqueue(friendly);
+        while (AllLogs.Count > MaxBufferedLines && AllLogs.TryDequeue(out _)) { }
+        while (AllLogsUserFriendly.Count > MaxBufferedLines && AllLogsUserFriendly.TryDequeue(out _)) { }
+    }
+
     /// <summary>Assembles every buffered log line into one string (for the "copy logs" button).</summary>
     public static string GetAllLogsText()
     {
@@ -193,8 +207,7 @@ public static class Logger
             catch { /* no console attached (GUI mode) */ }
         }
 
-        AllLogs.Enqueue(Message);
-        AllLogsUserFriendly.Enqueue(returnValue);
+        Enqueue(Message, returnValue);
         try { Sink?.Invoke(Message); } catch { }
 
         if (WriteToDisk)
