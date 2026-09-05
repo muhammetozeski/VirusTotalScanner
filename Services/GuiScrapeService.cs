@@ -146,6 +146,7 @@ internal static class GuiScrapeService
             _challengeSeen = false;
 
             Log(logLabel + ": " + hash, LogLevel.Info);
+            using var op = OpLog.Begin("Keyless lookup", $"{hash[..Math.Min(16, hash.Length)]}… route={(_activeProxy ?? "direct")} url={pageUrl}");
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             _timeoutCts = timeout;
@@ -162,6 +163,7 @@ internal static class GuiScrapeService
                         : gaveUpOnChallenge ? KeylessOutcome.Challenged
                         : timeout.IsCancellationRequested ? KeylessOutcome.TimedOut
                         : KeylessOutcome.NotFound;
+            op.Ok($"{LastOutcome}" + (json != null ? $", {json.Length} chars" : ""));
             _pending = null;
             _timeoutCts = null;
             HideBrowser();
@@ -288,19 +290,34 @@ internal static class GuiScrapeService
     static async Task<bool> EnsureReadyAsync()
     {
         string? wantProxy = TorService.ProxyUrl;
+        using var op = OpLog.Begin("Keyless browser ready-check",
+            $"proxy now='{_activeProxy ?? "direct"}' wanted='{wantProxy ?? "direct"}' restartRequested={_restartRequested} started={_initTcs != null}");
+
         if (_initTcs != null && (_restartRequested || _activeProxy != wantProxy))
         {
             Log($"Rebuilding the keyless browser (proxy '{_activeProxy ?? "direct"}' -> '{wantProxy ?? "direct"}').", LogLevel.Info);
+            op.Step("tearing the old browser down");
             TearDown();
         }
 
-        if (_initFailed) return false;
-        if (_initTcs != null) return await _initTcs.Task;
-        return await StartBrowserAsync(wantProxy);
+        if (_initFailed) { op.Fail("WebView2 init had already failed"); return false; }
+        if (_initTcs != null)
+        {
+            op.Step("waiting for an in-flight start");
+            bool alive = await _initTcs.Task;
+            if (alive) op.Ok("reused"); else op.Fail("the in-flight start failed");
+            return alive;
+        }
+
+        op.Step("starting a browser");
+        bool ok = await StartBrowserAsync(wantProxy);
+        if (ok) op.Ok("started"); else op.Fail("start failed");
+        return ok;
     }
 
     static void TearDown()
     {
+        using var op = OpLog.Begin("Keyless browser teardown", $"thread={_thread?.ManagedThreadId.ToString() ?? "-"}");
         var form = _form;
         var thread = _thread;
         _shuttingDown = true;
@@ -311,17 +328,20 @@ internal static class GuiScrapeService
                 try { _web?.Dispose(); } catch (Exception ex) { Log("WebView dispose failed: " + ex.Message, LogLevel.Warning); }
                 try { form.Close(); } catch (Exception ex) { Log("Browser form close failed: " + ex.Message, LogLevel.Warning); }
             });
+            op.Step("close dispatched to the browser thread");
         }
-        catch (Exception ex) { Log("Browser teardown dispatch failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Browser teardown dispatch failed: " + ex.Message, LogLevel.Warning); op.Step("dispatch failed: " + ex.Message); }
 
-        try { thread?.Join(TimeSpan.FromSeconds(8)); }
-        catch (Exception ex) { Log("Browser thread join failed: " + ex.Message, LogLevel.Warning); }
+        bool joined = false;
+        try { joined = thread?.Join(TimeSpan.FromSeconds(8)) ?? true; }
+        catch (Exception ex) { Log("Browser thread join failed: " + ex.Message, LogLevel.Warning); op.Step("join failed: " + ex.Message); }
         finally
         {
             lock (_frames) _frames.Clear();
             _form = null; _web = null; _bar = null; _torBtn = null; _barLabel = null;
             _thread = null; _initTcs = null; _initFailed = false;
             _shuttingDown = false; _restartRequested = false;
+            if (joined) op.Ok("thread ended"); else op.Fail("the browser thread did not end within 8 s; state reset anyway");
         }
     }
 
@@ -479,12 +499,21 @@ internal static class GuiScrapeService
             if (!path.EndsWith("/ui/files/" + _targetHash + _targetSuffix, StringComparison.OrdinalIgnoreCase)) return;
 
             int code = e.Response.StatusCode;
+            Log($"Keyless <- HTTP {code} {e.Response.ReasonPhrase} for {path}", LogLevel.Info);
             if (code == 200)
             {
                 var stream = await e.Response.GetContentAsync();
-                if (stream == null) { pending.TrySetResult(null); return; }
+                if (stream == null)
+                {
+                    // WebView2 hands the body over for a limited time; a miss here is not "not found".
+                    Log("Keyless: HTTP 200 but the body was no longer readable.", LogLevel.Warning);
+                    pending.TrySetResult(null);
+                    return;
+                }
                 using var r = new StreamReader(stream);
-                pending.TrySetResult(await r.ReadToEndAsync());
+                string body = await r.ReadToEndAsync();
+                Log($"Keyless <- body {body.Length} chars for {_targetHash}", LogLevel.Debug);
+                pending.TrySetResult(body);
                 return;
             }
 
@@ -508,11 +537,12 @@ internal static class GuiScrapeService
             }
 
             // 404 etc. -> genuinely not in VT
+            Log($"Keyless: HTTP {code} treated as 'VirusTotal does not have {_targetHash}'.", LogLevel.Debug);
             pending.TrySetResult(null);
         }
         catch (Exception ex)
         {
-            Log("Keyless GUI response handling failed: " + ex.Message, LogLevel.Warning);
+            Log($"Keyless GUI response handling failed for {_targetHash}: {ex.Message}", LogLevel.Warning);
             pending.TrySetResult(null);
         }
     }

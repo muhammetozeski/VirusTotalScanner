@@ -31,6 +31,14 @@ internal static class NetworkBlockMonitor
     /// <summary>Report one "the IP is blocked" answer. Safe to call from any thread, very often.</summary>
     public static void ReportIpBlocked(string source)
     {
+        if (GuiScrapeService.ProbeMode)
+        {
+            // A probe is measuring how each route is treated; it drives Tor itself. Reacting here would
+            // change the route mid-measurement and race the probe for control of the same process.
+            Log($"IP-level block from {source} noted but not acted on: a route probe is running.", LogLevel.Info);
+            return;
+        }
+
         int count;
         var now = DateTime.UtcNow;
         lock (_lock)
