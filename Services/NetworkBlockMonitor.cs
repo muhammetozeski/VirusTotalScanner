@@ -124,6 +124,24 @@ internal static class NetworkBlockMonitor
                     UiStatusHub.Report(Strings.StatusSourceTor, TorService.StatusLine());
                     try { CircuitAutoChanged?.Invoke(); } catch (Exception ex) { Log("CircuitAutoChanged handler failed: " + ex.Message, LogLevel.Warning); }
                 }
+                else if (!TorService.IsActive && Settings.UseTor)
+                {
+                    // The circuit change failed because Tor itself is gone. Bring it back rather than
+                    // silently falling back to the address that was blocked in the first place.
+                    Log("Circuit change found Tor stopped; restarting it.", LogLevel.Warning);
+                    if (await TorService.EnableAsync())
+                    {
+                        VtHttpClientFactory.Invalidate();
+                        GuiScrapeService.InvalidateSession("tor restarted");
+                        lock (_lock) _hits.Clear();
+                        UiStatusHub.Report(Strings.StatusSourceTor, TorService.StatusLine());
+                    }
+                    else
+                    {
+                        UiStatusHub.Report(Strings.StatusSourceTor,
+                            string.Format(Strings.TorAutoEnableFailedFormat, TorService.LastError ?? "?"), StatusSeverity.Warning);
+                    }
+                }
                 else
                 {
                     UiStatusHub.Report(Strings.StatusSourceTor,

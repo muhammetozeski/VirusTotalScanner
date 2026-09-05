@@ -416,6 +416,17 @@ internal static class TorService
             LastError = ex.Message;
             Log("Tor new-circuit failed: " + ex, LogLevel.Warning);
             op.Fail(ex.Message);
+            // The control port refusing the connection means the process is gone. Saying "active" after
+            // that leaves every later call talking to a socket nobody is listening on; dropping the flag
+            // lets the next EnableAsync start a fresh Tor instead.
+            if (ex is SocketException || _proc is null or { HasExited: true })
+            {
+                Log("Tor appears to have exited; marking the route inactive so it can be restarted.", LogLevel.Warning);
+                IsActive = false;
+                KillProcess();
+                VtHttpClientFactory.Invalidate();
+                GuiScrapeService.InvalidateSession("tor process gone");
+            }
             Raise();
             return false;
         }
