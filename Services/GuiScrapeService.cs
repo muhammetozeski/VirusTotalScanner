@@ -46,6 +46,7 @@ internal static class GuiScrapeService
     static volatile bool _autoSolving;
     static volatile bool _autoSolveTried;
     static volatile bool _blockReported; // one IP-block strike per lookup, not per retry
+    static volatile bool _challengeSeen; // this lookup ran into a challenge, whether or not it was shown
 
     /// <summary>How long a human is given to answer a challenge the app could not click through before
     /// the lookup gives up. It used to be forever, which is fine at a desk and fatal overnight: the
@@ -87,6 +88,16 @@ internal static class GuiScrapeService
         get { try { return !string.IsNullOrEmpty(CoreWebView2Environment.GetAvailableBrowserVersionString()); } catch { return false; } }
     }
 
+    /// <summary>How the most recent keyless lookup ended. Diagnostic only — the scan path just looks at
+    /// the returned report — but it is what lets the network probe say WHY an exit address failed
+    /// instead of only that it did.</summary>
+    public static KeylessOutcome LastOutcome { get; private set; } = KeylessOutcome.None;
+
+    /// <summary>Probe mode: never bring the window up and never try the checkbox — a challenge is
+    /// reported as a challenge and the lookup ends. Used by the network probe to measure how an exit
+    /// address is actually treated, with no human and no automation in the way.</summary>
+    public static bool ProbeMode { get; set; }
+
     /// <summary>Drop the current browser (profile + cookies included) before the next lookup. Called
     /// when Tor is switched on/off or the circuit changes: the old VirusTotal session cookie belongs
     /// to the old exit address and would carry the old block straight over to the new one.</summary>
@@ -105,8 +116,10 @@ internal static class GuiScrapeService
     /// option passes a short <paramref name="maxQueueWait"/> and takes null as "busy, use the API".</summary>
     static async Task<string?> FetchJsonAsync(string hash, string suffix, string pageUrl, string logLabel, CancellationToken ct, TimeSpan maxQueueWait)
     {
+        LastOutcome = KeylessOutcome.None;
         if (IsBlocked)
         {
+            LastOutcome = KeylessOutcome.Parked;
             // Rate-limit the log line: during a big scan this is hit once per file.
             long last = Interlocked.Read(ref _lastBlockedLogTicks);
             if (DateTime.UtcNow.Ticks - last > TimeSpan.FromSeconds(30).Ticks)
@@ -116,10 +129,10 @@ internal static class GuiScrapeService
             }
             return null;
         }
-        if (!await _gate.WaitAsync(maxQueueWait, ct)) return null;
+        if (!await _gate.WaitAsync(maxQueueWait, ct)) { LastOutcome = KeylessOutcome.Busy; return null; }
         try
         {
-            if (!await EnsureReadyAsync()) return null;
+            if (!await EnsureReadyAsync()) { LastOutcome = KeylessOutcome.NoRuntime; return null; }
 
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _targetHash = hash;
@@ -130,6 +143,7 @@ internal static class GuiScrapeService
             _autoSolveTried = false;
             _autoSolving = false;
             _blockReported = false;
+            _challengeSeen = false;
 
             Log(logLabel + ": " + hash, LogLevel.Info);
 
@@ -143,11 +157,15 @@ internal static class GuiScrapeService
             using (timeout.Token.Register(() => tcs.TrySetResult(null)))
                 json = await tcs.Task;
 
-            bool gaveUpOnChallenge = _captchaShown && string.IsNullOrEmpty(json);
+            bool gaveUpOnChallenge = (_captchaShown || _challengeSeen) && string.IsNullOrEmpty(json);
+            LastOutcome = !string.IsNullOrEmpty(json) ? KeylessOutcome.Report
+                        : gaveUpOnChallenge ? KeylessOutcome.Challenged
+                        : timeout.IsCancellationRequested ? KeylessOutcome.TimedOut
+                        : KeylessOutcome.NotFound;
             _pending = null;
             _timeoutCts = null;
             HideBrowser();
-            if (gaveUpOnChallenge) ParkChannel("a challenge went unanswered");
+            if (gaveUpOnChallenge && !ProbeMode) ParkChannel("a challenge went unanswered");
             else if (!string.IsNullOrEmpty(json)) OpenChannel("a lookup succeeded");
             return string.IsNullOrEmpty(json) ? null : json;
         }
@@ -531,6 +549,15 @@ internal static class GuiScrapeService
     static void HandleCaptcha(string via)
     {
         if (_captchaShown || _autoSolving) return;
+        _challengeSeen = true;
+        if (ProbeMode)
+        {
+            // Measuring, not scanning: report the challenge and end the lookup. No window, no clicking —
+            // the whole point is to see how this exit address is treated on its own.
+            Log("Probe: challenge on this route (" + via + ").", LogLevel.Info);
+            _pending?.TrySetResult(null);
+            return;
+        }
         if (!Settings.CaptchaAutoClick || _autoSolveTried) { ShowCaptcha(via); return; }
         _autoSolveTried = true;
         _autoSolving = true;

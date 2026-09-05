@@ -34,6 +34,7 @@ internal static class CliRunner
         if (opts.LedgerDiff != null) { var (nw, cf) = LedgerService.Diff(AppServices.Cache, opts.LedgerDiff); Console.WriteLine(string.Format(Strings.CliLedgerDiffFormat, nw.Count, cf.Count)); foreach (var x in nw.Take(20)) Console.WriteLine("  " + Strings.CliTagNew + " " + x); foreach (var x in cf.Take(20)) Console.WriteLine("  " + Strings.CliTagConflict + " " + x); return 0; }
         if (opts.TimelineDays != null) return await TimelineCmd(opts.TimelineDays.Value);
         if (opts.WatchCheck) return await WatchCheckCmd();
+        if (opts.ProbeRounds > 0) return await NetworkProbeRunner.RunAsync(opts.ProbeRounds, opts.ProbeLookups);
 
         // --running scans the on-disk image of every running process instead of given paths.
         List<string> scanPaths = opts.Paths;

@@ -34,6 +34,27 @@ internal enum LookupFailure
     LookupEmpty,
 }
 
+/// <summary>How a keyless (browser) lookup ended. Diagnostic detail the scan path does not need but
+/// the network probe does: "no report" can mean four very different things.</summary>
+internal enum KeylessOutcome
+{
+    None,
+    /// <summary>VirusTotal answered with the file report.</summary>
+    Report,
+    /// <summary>VirusTotal answered, and it has never seen this hash.</summary>
+    NotFound,
+    /// <summary>A reCAPTCHA stood in the way — this address is being challenged.</summary>
+    Challenged,
+    /// <summary>No answer inside the window.</summary>
+    TimedOut,
+    /// <summary>The single browser was busy and the caller was not willing to queue.</summary>
+    Busy,
+    /// <summary>The channel is parked after an earlier unanswered challenge.</summary>
+    Parked,
+    /// <summary>WebView2 is not installed / could not start.</summary>
+    NoRuntime,
+}
+
 /// <summary>One file in the scan queue. Bindable to a DataGridView via BindingList.</summary>
 internal sealed class ScanItem : INotifyPropertyChanged
 {
