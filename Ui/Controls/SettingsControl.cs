@@ -473,6 +473,8 @@ internal sealed class SettingsControl : UserControl
             v => { Settings.MaxConcurrentUploads.Value = v; SettingsManager.SaveSettings(); });
         var cache = new CheckBox { Text = Strings.ScanUseCacheLabel, AutoSize = true, Checked = Settings.UseLocalHashCache };
         cache.CheckedChanged += (_, _) => { Settings.UseLocalHashCache.Value = cache.Checked; SettingsManager.SaveSettings(); };
+        var fingerprint = new CheckBox { Text = Strings.ScanUseFingerprintLabel, AutoSize = true, Checked = Settings.UseFingerprintCache };
+        fingerprint.CheckedChanged += (_, _) => { Settings.UseFingerprintCache.Value = fingerprint.Checked; SettingsManager.SaveSettings(); };
         var cacheDays = LabeledNumeric(Strings.ScanCleanCacheDaysLabel, Settings.HashCacheDays, 0, 3650,
             v => { Settings.HashCacheDays.Value = v; SettingsManager.SaveSettings(); });
         var threatCacheDays = LabeledNumeric(Strings.ScanThreatCacheDaysLabel, Settings.ThreatCacheDays, 0, 3650,
@@ -499,6 +501,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(uploadRow);
         body.Controls.Add(threatCacheDays);
         body.Controls.Add(cacheDays);
+        body.Controls.Add(fingerprint);
         body.Controls.Add(cache);
         body.Controls.Add(recheckDays);
         body.Controls.Add(maxSize);
@@ -565,6 +568,9 @@ internal sealed class SettingsControl : UserControl
         var autoClick = new CheckBox { Text = Strings.CaptchaAutoClickLabel, AutoSize = true, Checked = Settings.CaptchaAutoClick };
         autoClick.CheckedChanged += (_, _) => { Settings.CaptchaAutoClick.Value = autoClick.Checked; SettingsManager.SaveSettings(); };
 
+        var routeApi = new CheckBox { Text = Strings.TorRouteApiLabel, AutoSize = true, Checked = Settings.TorRouteApi };
+        routeApi.CheckedChanged += (_, _) => { Settings.TorRouteApi.Value = routeApi.Checked; SettingsManager.SaveSettings(); VtHttpClientFactory.Invalidate(); };
+
         var pathRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Top };
         var pathBox = TooltipCatalog.Name(new TextBox { Width = 380, Text = Settings.TorExePath }, TooltipCatalog.TorPathBox);
         pathBox.Leave += (_, _) => { Settings.TorExePath.Value = pathBox.Text.Trim(); SettingsManager.SaveSettings(); RefreshTorCard(); };
@@ -602,6 +608,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(autoEnable);
         body.Controls.Add(afterRow);
         body.Controls.Add(onError);
+        body.Controls.Add(routeApi);
         body.Controls.Add(autoClick);
         body.Controls.Add(ThemeManager.MakeLabel(Strings.TorExePathLabel, subtle: true));
         body.Controls.Add(pathRow);

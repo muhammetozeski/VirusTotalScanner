@@ -25,7 +25,10 @@ internal static class VtHttpClientFactory
         {
             lock (_lock)
             {
-                string? want = TorService.ProxyUrl;
+                // The API is authenticated by key and is not limited by source address, so routing it
+                // through Tor buys nothing and costs latency plus the risk of an exit VirusTotal's edge
+                // refuses. Only the keyless browser needs a different address; this is opt-in.
+                string? want = Settings.TorRouteApi ? TorService.ProxyUrl : null;
                 if (_client != null && _clientProxy == want) { SweepRetired(); return _client; }
                 Rebuild(want);
                 return _client!;

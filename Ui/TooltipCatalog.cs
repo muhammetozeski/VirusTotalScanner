@@ -150,6 +150,8 @@ internal static class TooltipCatalog
         [Strings.TorAutoEnableLabel] = Strings.TtTorAutoEnable,
         [Strings.TorNewCircuitOnErrorLabel] = Strings.TtTorNewCircuitOnError,
         [Strings.CaptchaAutoClickLabel] = Strings.TtCaptchaAutoClick,
+        [Strings.TorRouteApiLabel] = Strings.TtTorRouteApi,
+        [Strings.ScanUseFingerprintLabel] = Strings.TtUseFingerprintCache,
         [Strings.BtnTorFindExe] = Strings.TtTorFindExe,
         [Strings.BtnTorTest] = Strings.TtTorTest,
         [TorPathBox] = Strings.TtTorPathBox,

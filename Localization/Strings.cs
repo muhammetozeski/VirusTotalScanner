@@ -877,6 +877,7 @@ internal static class Strings
     public static string ColAction = "Eylem";
     public static string AutoActionSaved = "Oto-eylem kuralları kaydedildi.";
     public static string AutoActionHint = "İlk eşleşen kural uygulanır. Eylemler: ToastOnly (sadece bildir), MarkClean (beyaz listeye al), SuppressFolder (klasörü atla), Quarantine (karantinaya al). Boş liste = yerleşik davranış.";
+    public static string ScanUseFingerprintLabel = "Değişmeyen dosyaların hash'ini yeniden hesaplama";
     public static string ScanUploadPolicyLabel = "VT'de olmayan dosyayı gönder:";
     public static string UploadPolicyNever = "Hiç gönderme (sadece hash sorgusu)";
     public static string UploadPolicyCodeOnly = "Sadece kod dosyalarını gönder (varsayılan)";
@@ -1382,6 +1383,7 @@ internal static class Strings
     public static string TorAutoEnableAfterLabel = "Kaç engelden sonra (24 saat içinde):";
     public static string TorNewCircuitOnErrorLabel = "Tor açıkken hata alınca devreyi (çıkış IP'sini) otomatik değiştir";
     public static string CaptchaAutoClickLabel = "reCAPTCHA'da tek tıklamayı önce program denesin";
+    public static string TorRouteApiLabel = "API isteklerini de Tor üzerinden gönder";
     public static string TorExePathLabel = "tor.exe yolu (boş = otomatik ara):";
     public static string BtnTorFindExe = "tor.exe seç…";
     public static string BtnTorTest = "Bağlantıyı sına";
@@ -1519,6 +1521,8 @@ internal static class Strings
     public static string TtTorThreshold = "24 saat içinde kaç IP engelinden sonra Tor otomatik açılsın. Her yeni devre sayacı sıfırlar.";
     public static string TtTorNewCircuitOnError = "Tor üzerinden giderken hata/engel alınırsa yeni bir devre (yeni çıkış IP'si) istenir. Art arda gelen hatalarda 20 saniyede birden fazla devre değişmez.";
     public static string TtCaptchaAutoClick = "reCAPTCHA çıktığında program önce 'ben robot değilim' kutusuna kendisi tıklar. Arkasından resim bulmacası gelmezse hiç rahatsız edilmezsin; bulmaca gelirse pencere her zamanki gibi açılır.";
+    public static string TtTorRouteApi = "Kapalıyken (varsayılan) Tor yalnızca anahtarsız tarayıcıyı taşır; API istekleri doğrudan gider. API anahtarla kimliklendirilir ve IP başına sınırlanmaz, dolayısıyla yeni bir çıkış IP'si ona bir şey kazandırmaz; buna karşılık gecikme ekler ve VirusTotal'in bazı Tor çıkışlarını reddetme ihtimalini işin içine sokar. Anahtarsız yol IP başına sınırlı olduğu için Tor açıkken her zaman Tor'u kullanır.";
+    public static string TtUseFingerprintCache = "Aynı yol, aynı boyut ve aynı değiştirilme zamanı olan dosyaların hash'i yeniden hesaplanmaz, önceki değer kullanılır. Hash hesaplamak dosyayı baştan sona okumak demektir; 340 bin dosyalık bir taramada bu yüzlerce gigabayttır ve her yeniden başlatmada tekrar ödenir. Uzunluğu ve zaman damgası hiç değişmeden içeriği değişen bir dosya gözden kaçar; 'güveni yok sayarak yeniden tara' her zaman gerçekten hash'ler.";
     public static string TtTorPathBox = "tor.exe'nin tam yolu. Boş bırakırsan program PATH'i, scoop klasörünü ve Tor Browser kurulumlarını sırayla arar.";
     public static string TtTorFindExe = "tor.exe dosyasını elle seç.";
     public static string TtTorTest = "Tor'u başlatır, çıkış IP'sini ve ülkesini sorgular ve sonucu gösterir.";

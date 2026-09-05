@@ -105,6 +105,12 @@ internal static class Settings
     /// <summary>While Tor is carrying the traffic, take a new circuit (new exit IP) after a failure.</summary>
     public static readonly Setting<bool> TorNewCircuitOnError = new(true);
 
+    /// <summary>Also send the API calls through Tor. Off by default: the API is authenticated by key
+    /// and is not limited by source address, so a new exit buys it nothing and costs it latency and
+    /// the risk of an exit VirusTotal's edge refuses. The keyless browser — which IS limited by source
+    /// address — always follows Tor when it is on.</summary>
+    public static readonly Setting<bool> TorRouteApi = new(false);
+
     /// <summary>Let the app try the reCAPTCHA's single "I am not a robot" click by itself before it
     /// interrupts the user. If a picture puzzle follows, the window is shown as usual.</summary>
     public static readonly Setting<bool> CaptchaAutoClick = new(true);

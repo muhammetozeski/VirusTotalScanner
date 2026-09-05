@@ -1409,4 +1409,8 @@
   <s name="UploadPolicyCodeOnly">Only code files (default)</s>
   <s name="UploadPolicyAlways">Submit every file</s>
   <s name="TtUploadPolicy">What to do when VirusTotal has NEVER SEEN a file. The hash lookup happens for every file and is cheap; SUBMITTING one costs a request, and the analysis wait that follows costs more. A disk holds tens of thousands of tiny resource files that could never be malware (Store icons, .DATA fragments), so by default only code-shaped files are submitted: executables, scripts, installers, archives, macro-capable documents. If the extension does not say, the first bytes do, so a renamed executable is still caught. A file that is not submitted is marked skipped, not failed.</s>
+  <s name="TorRouteApiLabel">Send the API requests through Tor as well</s>
+  <s name="TtTorRouteApi">While this is off (the default) Tor carries only the keyless browser; API requests go direct. The API is authenticated by key and is not limited per source address, so a new exit address buys it nothing while costing latency and adding the chance of an exit VirusTotal refuses. The keyless route IS limited per address, so it always follows Tor while Tor is on.</s>
+  <s name="ScanUseFingerprintLabel">Do not re-hash files whose size and write time are unchanged</s>
+  <s name="TtUseFingerprintCache">Files at the same path with the same length and the same last-write time reuse the hashes computed last time. Hashing means reading the file end to end; on a 340,000-file sweep that is hundreds of gigabytes, and it is paid again on every restart. A file whose content changed with an identical length AND an unchanged timestamp would be missed; "rescan ignoring trust" always hashes for real.</s>
 </strings>
