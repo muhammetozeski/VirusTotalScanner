@@ -74,6 +74,9 @@ internal static class Strings
     public static string BtnAdd = "Ekle…";
     public static string BtnEdit = "Düzenle…";
     public static string BtnDelete = "Sil";
+    public static string BtnReEnableKeys = "Devre dışı kalanları geri aç";
+    public static string KeysReEnabledFormat = "{0} anahtar yeniden etkinleştirildi.";
+    public static string KeysNoneDisabled = "Devre dışı anahtar yok.";
     public static string KeysHint = "Birden çok anahtar ekleyebilirsiniz; biri dolunca diğerine geçilir.";
     public static string KeyStatusDisabled = "Devre dışı";
     public static string KeyStatusExhausted = "Dolu";
@@ -1424,6 +1427,7 @@ internal static class Strings
     public static string TtCtxExcludeSafe = "Sağ tık menüsü sadece riskli sayılan uzantılarda görünür (metin, resim, video gibi 'güvenli' uzantılarda çıkmaz). Kapalıyken her dosyada görünür — daha güvenilir çalışır.";
     public static string TtMenuStatus = "Sağ tık menüsünün şu anki durumu: kurulu mu, yolu güncel mi.";
     public static string TtKeysGrid = "Eklediğin VirusTotal API anahtarları. Program bunları sırayla kullanır: birinin dakikalık/günlük kotası dolunca sıradakine geçer. Aynı anahtarı iki kez eklemek işe yaramaz — kota anahtar başınadır, kayıt başına değil.";
+    public static string TtReEnableKeys = "401/403 aldığı için devre dışı bırakılmış anahtarların hepsini yeniden açar. 403 tek başına 'anahtar bozuk' demek değildir: VirusTotal'in önündeki bir katman (Cloudflare, vekil sunucu, engellenmiş bir çıkış IP'si) de 403 döndürür. Anahtarlarında bir sorun olmadığını biliyorsan buradan hepsini geri açabilirsin.";
     public static string TtKeyAdd = "Yeni bir VirusTotal API anahtarı ekler. Anahtarı virustotal.com hesabının API sayfasından alırsın. Ücretsiz anahtar: dakikada 4, günde 500 istek.";
     public static string TtKeyEdit = "Seçili anahtarın etiketini/değerini değiştirir ve varsa 'devre dışı' işaretini kaldırır.";
     public static string TtDeleteRow = "Seçili satırı siler.";

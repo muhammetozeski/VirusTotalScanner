@@ -162,6 +162,7 @@ internal static class TooltipCatalog
         [KeysGrid] = Strings.TtKeysGrid,
         [Strings.BtnAdd] = Strings.TtKeyAdd,
         [Strings.BtnEdit] = Strings.TtKeyEdit,
+        [Strings.BtnReEnableKeys] = Strings.TtReEnableKeys,
         [Strings.BtnDelete] = Strings.TtDeleteRow,
         [KeyBackupPathBox] = Strings.TtKeyBackupPath,
         [Strings.BtnPickKeyBackupFile] = Strings.TtPickKeyBackupFile,

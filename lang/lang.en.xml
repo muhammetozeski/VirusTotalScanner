@@ -1418,4 +1418,8 @@
   <s name="LookupPolicyAll">Look every file up</s>
   <s name="LookupPolicyCodeOnly">Only code files (default)</s>
   <s name="TtLookupPolicy">Which files a FOLDER sweep asks VirusTotal about. Measured on one C: drive: of 338,603 files, 195,833 were neither executable, script, installer, archive nor macro-capable document - Store icons, .DATA fragments, fonts, logs, .mui resources. Asking about those spends a quota unit each and answers "VirusTotal has never seen it" nearly every time. The remaining 32,579 code files are worth asking about. Files you pick BY HAND are unaffected: pointing at a file means "check this one".</s>
+  <s name="BtnReEnableKeys">Re-enable disabled keys</s>
+  <s name="KeysReEnabledFormat">{0} key(s) re-enabled.</s>
+  <s name="KeysNoneDisabled">No key is disabled.</s>
+  <s name="TtReEnableKeys">Clears the disabled flag on every key that was switched off after a 401/403. A 403 on its own does not mean "bad key": a layer in front of VirusTotal (Cloudflare, a proxy, a blocked exit address) answers 403 too. If you know the keys themselves are fine, turn them all back on here.</s>
 </strings>

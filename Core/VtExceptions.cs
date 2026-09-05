@@ -27,9 +27,31 @@ internal sealed class VtRateLimitException : VtApiException
     }
 }
 
-/// <summary>HTTP 401/403 — the API key is wrong, disabled or lacks permission.</summary>
+/// <summary>HTTP 401/403 — the API key is wrong, disabled or lacks permission… or something in front
+/// of VirusTotal refused the connection.</summary>
 internal sealed class VtAuthException : VtApiException
 {
     public VtAuthException(HttpStatusCode status, string? body = null)
         : base("VirusTotal authentication failed (HTTP " + (int)status + "). Check the API key.", status, body) { }
+
+    /// <summary>
+    /// True only when VirusTotal itself says the CREDENTIAL is bad. A 403 is not proof of that: an
+    /// edge (Cloudflare, a proxy, a blocked exit address) answers 403 too, with HTML or nothing at
+    /// all. Fourteen working keys were once permanently disabled in one morning because API traffic
+    /// briefly went out through a Tor exit and every 403 was read as "bad key".
+    /// </summary>
+    public bool IsCredentialRejection
+    {
+        get
+        {
+            if (StatusCode == HttpStatusCode.Unauthorized) return true;         // 401 is unambiguous
+            if (StatusCode != HttpStatusCode.Forbidden) return false;
+            string b = Body ?? "";
+            // VirusTotal answers a real permission problem with its own JSON error code.
+            return b.Contains("WrongCredentialsError", StringComparison.OrdinalIgnoreCase)
+                || b.Contains("UserNotActiveError", StringComparison.OrdinalIgnoreCase)
+                || b.Contains("ForbiddenError", StringComparison.OrdinalIgnoreCase)
+                || b.Contains("NotAvailableYet", StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }

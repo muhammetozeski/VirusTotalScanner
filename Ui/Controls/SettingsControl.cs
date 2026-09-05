@@ -101,6 +101,12 @@ internal sealed class SettingsControl : UserControl
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnAdd, (_, _) => AddKey(), accent: true));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnEdit, (_, _) => EditKey()));
         buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnDelete, (_, _) => RemoveKey()));
+        buttons.Controls.Add(ThemeManager.MakeButton(Strings.BtnReEnableKeys, (_, _) =>
+        {
+            int n = AppServices.Rotator.ReEnableAll();
+            NativeMessageBox.Info(n > 0 ? string.Format(Strings.KeysReEnabledFormat, n) : Strings.KeysNoneDisabled);
+            RefreshKeys();
+        }));
         var hint = ThemeManager.MakeLabel(Strings.KeysHint, subtle: true);
 
         // Plain-text mirror of the keys: the encrypted vault is bound to this Windows account, so a

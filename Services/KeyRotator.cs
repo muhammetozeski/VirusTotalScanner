@@ -194,18 +194,65 @@ internal sealed class KeyRotator
         _vault.RaiseCountersUpdated();
     }
 
-    /// <summary>Disables a key after an auth failure.</summary>
-    public void ReportAuthError(string key)
+    /// <summary>
+    /// Handles a 401/403. Disabling a key is permanent until the user edits it, so it only happens
+    /// when VirusTotal itself says the credential is bad. A bare 403 is not that: an edge in front of
+    /// VirusTotal answers 403 too, and fourteen working keys were once disabled in one morning
+    /// because API traffic briefly went out through a Tor exit. An ambiguous 403 parks the key for a
+    /// minute instead, exactly like a rate limit.
+    /// </summary>
+    public void ReportAuthError(string key, VtAuthException? ex = null)
     {
+        bool credential = ex?.IsCredentialRejection ?? true;
+        string masked;
         lock (_lock)
         {
             var e = _vault.Keys.FirstOrDefault(k => k.Key == key);
             if (e == null) return;
-            e.Disabled = true;
-            e.LastError = "Auth failed (401/403)";
-            Log($"Key {e.Masked} disabled: auth failed.", LogLevel.Error);
+            masked = e.Masked;
+            if (credential)
+            {
+                e.Disabled = true;
+                e.LastError = $"Auth failed ({(int?)ex?.StatusCode ?? 401})";
+            }
+            else
+            {
+                e.Minute.WindowStartUtc = DateTime.UtcNow;
+                e.Minute.Used = e.Minute.Allowed;
+                e.LastError = "Blocked by an edge (403), not by VirusTotal";
+            }
         }
-        _vault.Save();
+
+        if (credential)
+        {
+            Log($"Key {masked} disabled: VirusTotal rejected the credential.", LogLevel.Error);
+            _vault.Save();
+        }
+        else
+        {
+            Log($"Key {masked} got a 403 that does not name a credential problem — something in front of "
+                + "VirusTotal refused it. Parked for a minute instead of disabled. Body: "
+                + (string.IsNullOrEmpty(ex?.Body) ? "(empty)" : ex!.Body!.Length > 200 ? ex.Body[..200] + "…" : ex.Body), LogLevel.Warning);
+            _vault.RaiseCountersUpdated();
+        }
+    }
+
+    /// <summary>Clears the disabled flag on every key. For the case above: once the real cause is
+    /// understood, the keys themselves were never the problem.</summary>
+    public int ReEnableAll()
+    {
+        int n = 0;
+        lock (_lock)
+        {
+            foreach (var e in _vault.Keys.Where(k => k.Disabled))
+            {
+                e.Disabled = false;
+                e.LastError = null;
+                n++;
+            }
+        }
+        if (n > 0) { Log($"{n} key(s) re-enabled.", LogLevel.Info); _vault.Save(); }
+        return n;
     }
 
     /// <summary>Reconciles daily/monthly counters from the authoritative server quota.</summary>

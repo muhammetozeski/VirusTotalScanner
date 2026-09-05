@@ -575,7 +575,7 @@ internal sealed class ScanScheduler
                 return (true, value);
             }
             catch (VtRateLimitException ex) { _rotator.ReportRateLimited(key, ex.RetryAfter); }
-            catch (VtAuthException) { _rotator.ReportAuthError(key); }
+            catch (VtAuthException ex) { _rotator.ReportAuthError(key, ex); }
             catch (HttpRequestException ex)
             {
                 // A transport failure while Tor is carrying the traffic usually means a bad exit node.
