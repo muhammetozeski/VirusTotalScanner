@@ -901,12 +901,17 @@ internal sealed class ScanScheduler
     /// no longer freezes the window for seconds at scan start. Runs on the UI thread (caller marshals).</summary>
     void BulkAdd(List<ScanItem> toAdd)
     {
-        const int chunk = 500;
-        for (int i = 0; i < toAdd.Count; i += chunk)
+        // One reset for the whole add, not one per chunk. ResetBindings makes the grid rebuild from
+        // scratch, so resetting every 500 rows over a 346,000-file selection was 693 rebuilds of a list
+        // that kept growing — quadratic work on the UI thread, and the window stopped answering before
+        // the first file was even hashed.
+        bool wasRaising = Items.RaiseListChangedEvents;
+        Items.RaiseListChangedEvents = false;
+        try { foreach (var item in toAdd) Items.Add(item); }
+        finally
         {
-            Items.RaiseListChangedEvents = false;
-            try { for (int j = i, end = Math.Min(i + chunk, toAdd.Count); j < end; j++) Items.Add(toAdd[j]); }
-            finally { Items.RaiseListChangedEvents = true; Items.ResetBindings(); }
+            Items.RaiseListChangedEvents = wasRaising;
+            if (wasRaising) Items.ResetBindings();
         }
     }
 
