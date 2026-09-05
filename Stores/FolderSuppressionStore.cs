@@ -39,6 +39,14 @@ internal static class FolderSuppressionStore
         }
     }
 
+    /// <summary>True if the FOLDER itself is registered, or lives under a registered one. Lets the
+    /// enumerator prune a whole subtree instead of walking it and then discarding every file.</summary>
+    public static bool ContainsFolder(string? folder)
+    {
+        if (string.IsNullOrEmpty(folder)) return false;
+        return Contains(WithSep(folder));
+    }
+
     static string WithSep(string folder) { folder = folder.Replace('/', '\\'); return folder.EndsWith('\\') ? folder : folder + "\\"; }
 
     public static bool Add(string? folder)

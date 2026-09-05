@@ -15,6 +15,7 @@ internal static class SelectionEnumerator
     {
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int prunedFolders = 0;
 
         foreach (var raw in paths)
         {
@@ -29,14 +30,7 @@ internal static class SelectionEnumerator
                 }
                 else if (Directory.Exists(path))
                 {
-                    var opts = new EnumerationOptions
-                    {
-                        RecurseSubdirectories = recurse,
-                        IgnoreInaccessible = true,
-                        AttributesToSkip = FileAttributes.ReparsePoint, // don't follow junctions/symlinks
-                    };
-                    foreach (var file in Directory.EnumerateFiles(path, "*", opts))
-                        AddFile(file);
+                    Walk(path, recurse, AddFile, ref prunedFolders);
                 }
                 else
                 {
@@ -51,7 +45,8 @@ internal static class SelectionEnumerator
             }
         }
 
-        Log($"Selection expanded to {result.Count} file(s).", LogLevel.Info);
+        Log($"Selection expanded to {result.Count} file(s)"
+            + (prunedFolders > 0 ? $"; {prunedFolders} suppressed folder subtree(s) never walked." : "."), LogLevel.Info);
         return result;
 
         void AddFile(string file)
@@ -73,6 +68,53 @@ internal static class SelectionEnumerator
             string full;
             try { full = Path.GetFullPath(file); } catch { full = file; }
             if (seen.Add(full)) result.Add(full);
+        }
+    }
+
+    /// <summary>
+    /// Manual directory walk instead of RecurseSubdirectories, so a suppressed folder can be PRUNED —
+    /// the framework enumerator has no way to say "don't descend into this one". On a whole-disk sweep
+    /// that is the difference between walking a suppressed tree and throwing every file away afterwards,
+    /// and never touching the disk there at all.
+    ///
+    /// The explicitly selected folder is never pruned: picking a suppressed folder on purpose has to
+    /// mean "scan it anyway". Only subfolders discovered during recursion are checked.
+    /// </summary>
+    static void Walk(string root, bool recurse, Action<string> onFile, ref int prunedFolders)
+    {
+        var stack = new Stack<string>();
+        stack.Push(root);
+
+        while (stack.Count > 0)
+        {
+            string dir = stack.Pop();
+
+            try { foreach (var file in Directory.EnumerateFiles(dir)) onFile(file); }
+            catch (Exception ex) { Log($"Cannot list files in '{dir}': {ex.Message}", LogLevel.Warning); }
+
+            // Only the root is ever pushed before this point, so a non-recursive walk ends right here.
+            if (!recurse) continue;
+
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(dir))
+                {
+                    try
+                    {
+                        // Junctions and symlinks would walk the same bytes twice (or loop forever).
+                        if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0) continue;
+                        if (FolderSuppressionStore.ContainsFolder(sub))
+                        {
+                            prunedFolders++;
+                            Log("Suppressed folder pruned from the walk: " + sub, LogLevel.Info);
+                            continue;
+                        }
+                        stack.Push(sub);
+                    }
+                    catch (Exception ex) { Log($"Cannot inspect '{sub}': {ex.Message}", LogLevel.Warning); }
+                }
+            }
+            catch (Exception ex) { Log($"Cannot list subfolders of '{dir}': {ex.Message}", LogLevel.Warning); }
         }
     }
 
