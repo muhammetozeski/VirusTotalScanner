@@ -350,7 +350,7 @@ internal sealed class ScanScheduler
                 (md5, sha256) = await HashService.ComputeAsync(item.FilePath, ct);
                 if (Settings.UseFingerprintCache) FingerprintCache.Put(item.FilePath, md5, sha256);
             }
-            UiPost(() => { item.Md5 = md5; item.Sha256 = sha256; });
+            ItemWrite(() => { item.Md5 = md5; item.Sha256 = sha256; });
 
             // --no-trust (BypassTrust) forces a fresh scan: ignore the local cache too.
             if (opts.UseCache && !opts.BypassTrust)
@@ -358,7 +358,7 @@ internal sealed class ScanScheduler
                 var cached = _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays);
                 if (cached != null)
                 {
-                    UiPost(() => { item.Report = cached; item.FromCache = true; });
+                    ItemWrite(() => { item.Report = cached; item.FromCache = true; });
                     Complete(item, cached);
                     op.Ok($"cache hit — {cached.DetectionCount}/{cached.TotalEngines}");
                     return;
@@ -397,7 +397,7 @@ internal sealed class ScanScheduler
             if (opts.LookupPolicy == 1 && !opts.ExplicitFileSelection && !opts.BypassTrust
                 && !FileClass.IsWorthUploading(item.FilePath))
             {
-                UiPost(() => { item.SkipReason = Strings.SkipReasonNotCodeFile; item.Status = ScanStatus.Skipped; });
+                ItemWrite(() => { item.SkipReason = Strings.SkipReasonNotCodeFile; item.Status = ScanStatus.Skipped; });
                 Bump(ref _skipped);
                 op.Ok("not a code file — no lookup spent");
                 return;
@@ -431,14 +431,14 @@ internal sealed class ScanScheduler
             // scan error, and reporting them as failures painted the whole run red. The row says which
             // one it was and the file is counted as not examined — it is not quietly called clean.
             string reason = ex is UnauthorizedAccessException ? Strings.SkipReasonNoAccess : Strings.SkipReasonFileLocked;
-            UiPost(() => { item.SkipReason = reason; item.Status = ScanStatus.Skipped; });
+            ItemWrite(() => { item.SkipReason = reason; item.Status = ScanStatus.Skipped; });
             Bump(ref _skipped);
             Log($"Not readable, skipped: {item.FilePath} — {ex.Message}", LogLevel.Warning);
             op.Note("not readable — " + reason);
         }
         catch (Exception ex)
         {
-            UiPost(() => item.Error = ex.Message);
+            ItemWrite(() => item.Error = ex.Message);
             SetStatus(item, ScanStatus.Failed);
             Bump(ref _failed);
             if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
@@ -460,7 +460,7 @@ internal sealed class ScanScheduler
         {
             // Not a failure: VirusTotal has never seen it and it is not the kind of file a
             // submission would be spent on. Saying "error" here would paint a disk sweep red.
-            UiPost(() => { item.SkipReason = Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
+            ItemWrite(() => { item.SkipReason = Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
             Bump(ref _skipped);
             op.Ok("not in VirusTotal, not submitted");
         }
@@ -472,7 +472,7 @@ internal sealed class ScanScheduler
                 LookupFailure.AnalysisTimedOut => string.Format(Strings.ItemErrorAnalysisTimedOutFormat, PollWindowMinutes),
                 _ => Strings.ItemErrorNoReport,
             };
-            UiPost(() => item.Error = reason);
+            ItemWrite(() => item.Error = reason);
             SetStatus(item, ScanStatus.Failed);
             Bump(ref _failed);
             Log($"No report for {item.FileName} ({failure}): {reason}", LogLevel.Warning);
@@ -483,7 +483,7 @@ internal sealed class ScanScheduler
         }
         else
         {
-            UiPost(() => item.Report = report);
+            ItemWrite(() => item.Report = report);
             Complete(item, report);
             op.Ok($"{report.DetectionCount}/{report.TotalEngines} detections" + (item.FromCache ? " (cache)" : ""));
         }
@@ -634,7 +634,7 @@ internal sealed class ScanScheduler
                 {
                     await _pause.WaitWhilePausedAsync(ct);
                     SetStatus(item, ScanStatus.Uploading);
-                    var progress = new ActionProgress<UploadProgress>(p => UiPost(() =>
+                    var progress = new ActionProgress<UploadProgress>(p => ItemWrite(() =>
                     {
                         item.Progress = (int)Math.Round(p.Percent);
                         item.Detail = string.Format(Strings.UploadProgressDetailFormat, p.Percent, FormatBytes(p.BytesSent), FormatBytes(p.TotalBytes), FormatBytes(p.BytesPerSecond));
@@ -746,7 +746,7 @@ internal sealed class ScanScheduler
                     {
                         var dup = (job.Options.UseCache && !job.Options.BypassTrust)
                             ? _cache.TryGet(job.Md5, job.Options.CacheDays, job.Options.ThreatCacheDays) : null;
-                        if (dup != null) { UiPost(() => job.Item.FromCache = true); report = dup; failure = LookupFailure.None; }
+                        if (dup != null) { ItemWrite(() => job.Item.FromCache = true); report = dup; failure = LookupFailure.None; }
                         else (report, failure) = await DoLookupAsync(job.Item, job.Md5, job.Sha256, job.Options, ct);
                     }
                     finally { dedupGate.Release(); }
@@ -761,7 +761,7 @@ internal sealed class ScanScheduler
                 catch (OperationCanceledException) { SetStatus(job.Item, ScanStatus.Cancelled); fileOp.Note("cancelled"); throw; }
                 catch (Exception ex)
                 {
-                    UiPost(() => job.Item.Error = ex.Message);
+                    ItemWrite(() => job.Item.Error = ex.Message);
                     SetStatus(job.Item, ScanStatus.Failed);
                     Bump(ref _failed);
                     Log($"Lookup failed for {job.Item.FileName}: {ex}", LogLevel.Error);
@@ -810,7 +810,7 @@ internal sealed class ScanScheduler
             catch (OperationCanceledException) { SetStatus(item, ScanStatus.Cancelled); op.Note("cancelled"); return; }
             catch (Exception ex)
             {
-                UiPost(() => item.Error = ex.Message);
+                ItemWrite(() => item.Error = ex.Message);
                 Log($"Analysis watch failed for {item.FileName}: {ex}", LogLevel.Error);
                 op.Fail(ex.Message);
             }
@@ -876,10 +876,10 @@ internal sealed class ScanScheduler
             {
                 // No key free for the status check — keep the analysis alive and try again next tick
                 // instead of throwing the whole upload away.
-                UiPost(() => item.Detail = Strings.PollWaitingForQuota);
+                ItemWrite(() => item.Detail = Strings.PollWaitingForQuota);
                 continue;
             }
-            UiPost(() => item.Detail = string.Format(Strings.PollProgressDetailFormat, info.Status, i + 1));
+            ItemWrite(() => item.Detail = string.Format(Strings.PollProgressDetailFormat, info.Status, i + 1));
             if (info.IsCompleted)
             {
                 var (gotReportKey, finished) = await TryCallWithRotation(key => _api.GetFileReportAsync(sha256, key, ct), ApiWaitForKey, ct);
@@ -933,7 +933,7 @@ internal sealed class ScanScheduler
 
     // ---- progress bookkeeping ----
 
-    void SetStatus(ScanItem item, ScanStatus status) => UiPost(() => item.Status = status);
+    void SetStatus(ScanItem item, ScanStatus status) => ItemWrite(() => item.Status = status);
 
     void Complete(ScanItem item, VtFileReport report)
     {
@@ -954,7 +954,7 @@ internal sealed class ScanScheduler
 
     void TrustSkip(ScanItem item, string reason, string? publisher)
     {
-        UiPost(() => { item.SkipReason = reason; item.Publisher = publisher; item.Status = ScanStatus.TrustedSkipped; });
+        ItemWrite(() => { item.SkipReason = reason; item.Publisher = publisher; item.Status = ScanStatus.TrustedSkipped; });
         Bump(ref _signedSkipped);
         Log($"VT skipped (trusted): {item.FileName} — {reason}", LogLevel.Info);
     }
@@ -971,11 +971,35 @@ internal sealed class ScanScheduler
     IDisposable SuspendItemNotifications()
     {
         UiPost(() => Items.RaiseListChangedEvents = false);
-        return new Restore(() => UiPost(() =>
+        Volatile.Write(ref _quietItems, 1);
+        return new Restore(() =>
         {
-            Items.RaiseListChangedEvents = true;
-            Items.ResetBindings();
-        }));
+            Volatile.Write(ref _quietItems, 0);
+            UiPost(() =>
+            {
+                Items.RaiseListChangedEvents = true;
+                Items.ResetBindings();
+            });
+        });
+    }
+
+    int _quietItems;
+
+    /// <summary>
+    /// Writes to one row's fields. Marshalled to the UI thread normally, because the binding list
+    /// answers a property change by touching the grid — but NOT while a run has those notifications
+    /// suspended. Then the write reaches nothing but the object's own fields, and marshalling it cost
+    /// one window message per property: at 30,000 files a minute that was over a thousand posts a
+    /// second and the message pump had nothing left for the user. The grid reads these fields when it
+    /// repaints on its own timer.
+    /// </summary>
+    void ItemWrite(Action write)
+    {
+        if (Volatile.Read(ref _quietItems) == 1)
+        {
+            try { write(); } catch (Exception ex) { Log("Item write failed: " + ex.Message, LogLevel.Warning); }
+        }
+        else UiPost(write);
     }
 
     /// <summary>Runs an action when disposed.</summary>
