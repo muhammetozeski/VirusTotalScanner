@@ -16,6 +16,7 @@ internal static class SelectionEnumerator
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int prunedFolders = 0;
+        int deniedFolders = 0;
 
         foreach (var raw in paths)
         {
@@ -30,7 +31,7 @@ internal static class SelectionEnumerator
                 }
                 else if (Directory.Exists(path))
                 {
-                    Walk(path, recurse, AddFile, ref prunedFolders);
+                    Walk(path, recurse, AddFile, ref prunedFolders, ref deniedFolders);
                 }
                 else
                 {
@@ -46,7 +47,9 @@ internal static class SelectionEnumerator
         }
 
         Log($"Selection expanded to {result.Count} file(s)"
-            + (prunedFolders > 0 ? $"; {prunedFolders} suppressed folder subtree(s) never walked." : "."), LogLevel.Info);
+            + (prunedFolders > 0 ? $"; {prunedFolders} suppressed folder subtree(s) never walked" : "")
+            + (deniedFolders > 0 ? $"; {deniedFolders} folder(s) not readable by this account" : "")
+            + ".", LogLevel.Info);
         return result;
 
         void AddFile(string file)
@@ -80,16 +83,18 @@ internal static class SelectionEnumerator
     /// The explicitly selected folder is never pruned: picking a suppressed folder on purpose has to
     /// mean "scan it anyway". Only subfolders discovered during recursion are checked.
     /// </summary>
-    static void Walk(string root, bool recurse, Action<string> onFile, ref int prunedFolders)
+    static void Walk(string root, bool recurse, Action<string> onFile, ref int prunedFolders, ref int deniedFolders)
     {
         var stack = new Stack<string>();
         stack.Push(root);
+        int denied = 0;
 
         while (stack.Count > 0)
         {
             string dir = stack.Pop();
 
             try { foreach (var file in Directory.EnumerateFiles(dir)) onFile(file); }
+            catch (UnauthorizedAccessException) { denied++; }
             catch (Exception ex) { Log($"Cannot list files in '{dir}': {ex.Message}", LogLevel.Warning); }
 
             // Only the root is ever pushed before this point, so a non-recursive walk ends right here.
@@ -111,11 +116,17 @@ internal static class SelectionEnumerator
                         }
                         stack.Push(sub);
                     }
+                    catch (UnauthorizedAccessException) { denied++; }
                     catch (Exception ex) { Log($"Cannot inspect '{sub}': {ex.Message}", LogLevel.Warning); }
                 }
             }
+            catch (UnauthorizedAccessException) { denied++; }
             catch (Exception ex) { Log($"Cannot list subfolders of '{dir}': {ex.Message}", LogLevel.Warning); }
         }
+
+        // A whole-disk walk hits hundreds of these (system folders, other users, the recycle bin) and
+        // they are all expected. One count at the end says as much as hundreds of warnings did.
+        deniedFolders += denied;
     }
 
     public static bool IsSafe(string file, ISet<string> safeExtensions)
