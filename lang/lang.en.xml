@@ -1402,4 +1402,5 @@
   <s name="TtOverviewStatusButton">Takes you to the action for this status (the relevant tab, or the fix).</s>
   <s name="KeyStatusDuplicateSuffix">  ⚠ THE SAME KEY IS LISTED TWICE</s>
   <s name="KeyDuplicateWarn">That key is already in the list.\n\nAdding the same key twice does not double the quota: VirusTotal counts it per key. The second row only makes the app believe it has quota it does not have, and the extra requests come back 429.</s>
+  <s name="KeylessParkedFormat">A reCAPTCHA went unanswered - the keyless route is parked for {0} minutes; the scan carries on over the API.</s>
 </strings>

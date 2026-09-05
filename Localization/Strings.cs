@@ -1324,6 +1324,7 @@ internal static class Strings
     public static string CaptchaBtnNewCircuit = "Devre değiştir (yeni IP)";
     public static string CaptchaBtnTorWorking = "Tor hazırlanıyor…";
     public static string PollWaitingForQuota = "Analiz yüklendi — kota açılınca durumu sorulacak…";
+    public static string KeylessParkedFormat = "reCAPTCHA yanıtsız kaldı — anahtarsız yol {0} dakika beklemeye alındı, tarama API üzerinden sürüyor.";
 
     // ---- Tor ----
     public static string StatusSourceTor = "Tor";

@@ -46,6 +46,40 @@ internal static class GuiScrapeService
     static volatile bool _autoSolving;
     static volatile bool _autoSolveTried;
     static volatile bool _blockReported; // one IP-block strike per lookup, not per retry
+
+    /// <summary>How long a human is given to answer a challenge the app could not click through before
+    /// the lookup gives up. It used to be forever, which is fine at a desk and fatal overnight: the
+    /// single browser is behind one gate, so one unanswered challenge froze every keyless lookup in the
+    /// whole scan. If somebody is there they still have two minutes; if not, the scan carries on.</summary>
+    static readonly TimeSpan CaptchaSolveWindow = TimeSpan.FromMinutes(2);
+
+    /// <summary>After an unanswered challenge the channel is parked for a while. Without this every
+    /// remaining file would pay the same two minutes to learn the same thing.</summary>
+    static readonly TimeSpan BlockedCooldown = TimeSpan.FromMinutes(3);
+    static long _blockedUntilTicks;      // DateTime.UtcNow.Ticks; 0 = open. Interlocked-accessed.
+    static long _lastBlockedLogTicks;
+
+    /// <summary>True while the keyless channel is parked after an unanswered challenge.</summary>
+    public static bool IsBlocked => Interlocked.Read(ref _blockedUntilTicks) > DateTime.UtcNow.Ticks;
+
+    /// <summary>When the channel reopens, or null when it is open now.</summary>
+    public static DateTime? BlockedUntilUtc
+    {
+        get { long t = Interlocked.Read(ref _blockedUntilTicks); return t > DateTime.UtcNow.Ticks ? new DateTime(t, DateTimeKind.Utc) : null; }
+    }
+
+    static void ParkChannel(string why)
+    {
+        Interlocked.Exchange(ref _blockedUntilTicks, DateTime.UtcNow.Add(BlockedCooldown).Ticks);
+        Log($"Keyless channel parked for {BlockedCooldown.TotalMinutes:F0} min ({why}). Lookups fall through to the API meanwhile.", LogLevel.Warning);
+        UiStatusHub.Report(Strings.StatusSourceScan, string.Format(Strings.KeylessParkedFormat, (int)BlockedCooldown.TotalMinutes), StatusSeverity.Warning);
+    }
+
+    static void OpenChannel(string why)
+    {
+        if (Interlocked.Exchange(ref _blockedUntilTicks, 0) == 0) return;
+        Log("Keyless channel reopened: " + why, LogLevel.Info);
+    }
     static readonly List<CoreWebView2Frame> _frames = [];
 
     public static bool IsRuntimeAvailable
@@ -59,6 +93,8 @@ internal static class GuiScrapeService
     public static void InvalidateSession(string why)
     {
         _restartRequested = true;
+        // A new route/profile is exactly the thing a parked channel was waiting for.
+        OpenChannel("session invalidated: " + why);
         Log("Keyless browser session invalidated: " + why, LogLevel.Info);
     }
 
@@ -69,6 +105,17 @@ internal static class GuiScrapeService
     /// option passes a short <paramref name="maxQueueWait"/> and takes null as "busy, use the API".</summary>
     static async Task<string?> FetchJsonAsync(string hash, string suffix, string pageUrl, string logLabel, CancellationToken ct, TimeSpan maxQueueWait)
     {
+        if (IsBlocked)
+        {
+            // Rate-limit the log line: during a big scan this is hit once per file.
+            long last = Interlocked.Read(ref _lastBlockedLogTicks);
+            if (DateTime.UtcNow.Ticks - last > TimeSpan.FromSeconds(30).Ticks)
+            {
+                Interlocked.Exchange(ref _lastBlockedLogTicks, DateTime.UtcNow.Ticks);
+                Log($"Keyless lookup skipped: channel parked until {BlockedUntilUtc:HH:mm:ss} UTC.", LogLevel.Info);
+            }
+            return null;
+        }
         if (!await _gate.WaitAsync(maxQueueWait, ct)) return null;
         try
         {
@@ -96,9 +143,12 @@ internal static class GuiScrapeService
             using (timeout.Token.Register(() => tcs.TrySetResult(null)))
                 json = await tcs.Task;
 
+            bool gaveUpOnChallenge = _captchaShown && string.IsNullOrEmpty(json);
             _pending = null;
             _timeoutCts = null;
             HideBrowser();
+            if (gaveUpOnChallenge) ParkChannel("a challenge went unanswered");
+            else if (!string.IsNullOrEmpty(json)) OpenChannel("a lookup succeeded");
             return string.IsNullOrEmpty(json) ? null : json;
         }
         finally { _targetSuffix = ""; _gate.Release(); }
@@ -610,7 +660,7 @@ internal static class GuiScrapeService
 
         try
         {
-            _timeoutCts?.CancelAfter(Timeout.InfiniteTimeSpan); // no timeout while the user is solving — only the button (or cancel) continues
+            _timeoutCts?.CancelAfter(CaptchaSolveWindow); // a human gets this long; nobody there = the scan moves on
             _form.BeginInvoke(() =>
             {
                 try
