@@ -223,6 +223,9 @@ internal sealed class ScanScheduler
 
     async Task ProcessAsync(ScanItem item, ScanOptions opts, CancellationToken ct)
     {
+        // Per file, at Debug: on a 300k-file sweep this is the only way to answer "what was it doing
+        // when it stopped?" — the aggregate counters cannot point at a single stuck file.
+        using var op = OpLog.Begin("File", $"{item.FileName} ({item.SizeText}) — {item.FilePath}");
         try
         {
             await _pause.WaitWhilePausedAsync(ct);
@@ -239,6 +242,7 @@ internal sealed class ScanScheduler
                 if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
                 {
                     TrustSkip(item, trust.Reason, trust.Publisher);
+                    op.Ok("trusted signature — " + trust.Reason);
                     return;
                 }
             }
@@ -255,6 +259,7 @@ internal sealed class ScanScheduler
                 {
                     UiPost(() => { item.Report = cached; item.FromCache = true; });
                     Complete(item, cached);
+                    op.Ok($"cache hit — {cached.DetectionCount}/{cached.TotalEngines}");
                     return;
                 }
             }
@@ -263,6 +268,7 @@ internal sealed class ScanScheduler
             if (opts.SkipTrusted && !opts.BypassTrust && KnownGoodDb.Contains(md5, sha256))
             {
                 TrustSkip(item, Strings.SkipReasonKnownGoodList, null);
+                op.Ok("known-good list");
                 return;
             }
 
@@ -271,6 +277,7 @@ internal sealed class ScanScheduler
             if (!opts.BypassTrust && AllowlistStore.Contains(md5, sha256))
             {
                 TrustSkip(item, Strings.SkipReasonUserSaidClean, null);
+                op.Ok("allowlisted by the user");
                 return;
             }
 
@@ -279,6 +286,7 @@ internal sealed class ScanScheduler
             if (!opts.BypassTrust && FolderSuppressionStore.Contains(item.FilePath))
             {
                 TrustSkip(item, Strings.SkipReasonDevFolder, null);
+                op.Ok("suppressed folder");
                 return;
             }
 
@@ -303,6 +311,7 @@ internal sealed class ScanScheduler
                 // submission would be spent on. Saying "error" here would paint a disk sweep red.
                 UiPost(() => { item.SkipReason = Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
                 Bump(ref _skipped);
+                op.Ok("not in VirusTotal, not submitted");
             }
             else if (report == null)
             {
@@ -319,16 +328,19 @@ internal sealed class ScanScheduler
                 // Offline self-heal: if we're offline, remember the file to retry when connectivity returns
                 // (a real "not found" while online is NOT queued, so 404s don't pile up).
                 if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
+                op.Fail(failure + " — " + reason);
             }
             else
             {
                 UiPost(() => item.Report = report);
                 Complete(item, report);
+                op.Ok($"{report.DetectionCount}/{report.TotalEngines} detections" + (item.FromCache ? " (cache)" : ""));
             }
         }
         catch (OperationCanceledException)
         {
             SetStatus(item, ScanStatus.Cancelled);
+            op.Note("cancelled");
         }
         catch (Exception ex)
         {
@@ -337,6 +349,8 @@ internal sealed class ScanScheduler
             Bump(ref _failed);
             if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
             Log($"Scan failed for {item.FileName}: {ex}", LogLevel.Error);
+            op.Fail(ex.Message);
+            op.Fail(ex.Message);
         }
         finally
         {
