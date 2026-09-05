@@ -1262,6 +1262,17 @@ internal sealed class ScanQueueControl : UserControl
         // engine, there is nothing to ask — the scan keeps going without quota.
         if (_exhaustPromptShown || !_scheduler.IsRunning) return;
         if (Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable) return;
+
+        // Never block an unattended run on a dialog. A watcher-started scan, or one running with the
+        // window closed to the tray, has nobody to answer it; the rotator is already counting down to
+        // the reset, which is exactly what the default answer would have been.
+        if (IsBackgroundScan || FindForm() is not { Visible: true })
+        {
+            Log($"All keys exhausted until {resumeUtc:HH:mm:ss} UTC; no prompt (unattended run).", LogLevel.Warning);
+            UiStatusHub.Report(Strings.StatusSourceScan,
+                string.Format(Strings.QuotaAllExhaustedBannerFormat, resumeUtc.ToLocalTime().ToString("HH:mm")), StatusSeverity.Warning);
+            return;
+        }
         _exhaustPromptShown = true;
 
         using var dlg = new QuotaExhaustedDialog(resumeUtc);
