@@ -181,6 +181,8 @@ internal sealed class ScanScheduler
             _uploadGate = new SemaphoreSlim(Math.Max(1, opts.MaxUploads));
             _lookupGate = new SemaphoreSlim(Math.Max(1, opts.MaxConcurrency));
             _md5Gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+            _pendingAnalyses.Clear(); // a cancelled run can leave watchers behind; they are not this run's
+
             // Worker count has to EXCEED the network gate, or the scan grinds. Every worker that reaches
             // VirusTotal holds a _lookupGate slot for seconds; with as many workers as slots, all of them
             // end up waiting on the network and nothing local moves — even though most of a Windows disk
@@ -189,6 +191,15 @@ internal sealed class ScanScheduler
             int localDegree = Math.Max(1, opts.MaxConcurrency) + Math.Max(4, Environment.ProcessorCount);
             var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
             await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
+
+            // Uploaded files whose analysis is still running finish on the background watcher; the run
+            // is not over until they land, or the whole sweep would report them as never answered.
+            if (!_pendingAnalyses.IsEmpty)
+            {
+                using var drain = OpLog.Begin("Drain pending analyses", $"in: {_pendingAnalyses.Count} still running");
+                await Task.WhenAll(_pendingAnalyses.Values.ToArray());
+                drain.Ok($"out: {_pendingAnalyses.Count} left");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -236,6 +247,7 @@ internal sealed class ScanScheduler
         // Per file, at Debug: on a 300k-file sweep this is the only way to answer "what was it doing
         // when it stopped?" — the aggregate counters cannot point at a single stuck file.
         using var op = OpLog.Begin("File", $"{item.FileName} ({item.SizeText}) — {item.FilePath}");
+        bool handedOff = false;
         try
         {
             await _pause.WaitWhilePausedAsync(ct);
@@ -341,37 +353,16 @@ internal sealed class ScanScheduler
             }
             finally { dedupGate.Release(); }
 
-            if (report == null && failure == LookupFailure.NotSubmitted)
+            if (failure == LookupFailure.AnalysisPending)
             {
-                // Not a failure: VirusTotal has never seen it and it is not the kind of file a
-                // submission would be spent on. Saying "error" here would paint a disk sweep red.
-                UiPost(() => { item.SkipReason = Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
-                Bump(ref _skipped);
-                op.Ok("not in VirusTotal, not submitted");
+                // Handed to the background watcher: it owns this item's ending now, so nothing here
+                // may count it done or announce it finished.
+                handedOff = true;
+                op.Note("uploaded — the analysis wait was handed to the background watcher");
+                return;
             }
-            else if (report == null)
-            {
-                string reason = failure switch
-                {
-                    LookupFailure.UnknownNoKey => Strings.ItemErrorUnknownNoKey,
-                    LookupFailure.AnalysisTimedOut => string.Format(Strings.ItemErrorAnalysisTimedOutFormat, PollWindowMinutes),
-                    _ => Strings.ItemErrorNoReport,
-                };
-                UiPost(() => item.Error = reason);
-                SetStatus(item, ScanStatus.Failed);
-                Bump(ref _failed);
-                Log($"No report for {item.FileName} ({failure}): {reason}", LogLevel.Warning);
-                // Offline self-heal: if we're offline, remember the file to retry when connectivity returns
-                // (a real "not found" while online is NOT queued, so 404s don't pile up).
-                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
-                op.Fail(failure + " — " + reason);
-            }
-            else
-            {
-                UiPost(() => item.Report = report);
-                Complete(item, report);
-                op.Ok($"{report.DetectionCount}/{report.TotalEngines} detections" + (item.FromCache ? " (cache)" : ""));
-            }
+
+            RecordOutcome(item, report, failure, op);
         }
         catch (OperationCanceledException)
         {
@@ -386,15 +377,57 @@ internal sealed class ScanScheduler
             if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
             Log($"Scan failed for {item.FileName}: {ex}", LogLevel.Error);
             op.Fail(ex.Message);
-            op.Fail(ex.Message);
         }
         finally
         {
-            DoneOne();
-            // Marshal to the UI thread like ProgressChanged: subscribers mutate the grid/BindingList,
-            // and several Parallel workers finish concurrently — a direct call here races the UI.
-            UiPost(() => { try { ItemFinished?.Invoke(item); } catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); } });
+            if (!handedOff) FinishItem(item);
         }
+    }
+
+    /// <summary>Turns a lookup result into the item's visible outcome and bumps the matching counter.
+    /// Shared by the inline path and by the background analysis watcher, so a file that finished late
+    /// is reported exactly like one that finished on its worker.</summary>
+    void RecordOutcome(ScanItem item, VtFileReport? report, LookupFailure failure, OpLog op)
+    {
+        if (report == null && failure == LookupFailure.NotSubmitted)
+        {
+            // Not a failure: VirusTotal has never seen it and it is not the kind of file a
+            // submission would be spent on. Saying "error" here would paint a disk sweep red.
+            UiPost(() => { item.SkipReason = Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
+            Bump(ref _skipped);
+            op.Ok("not in VirusTotal, not submitted");
+        }
+        else if (report == null)
+        {
+            string reason = failure switch
+            {
+                LookupFailure.UnknownNoKey => Strings.ItemErrorUnknownNoKey,
+                LookupFailure.AnalysisTimedOut => string.Format(Strings.ItemErrorAnalysisTimedOutFormat, PollWindowMinutes),
+                _ => Strings.ItemErrorNoReport,
+            };
+            UiPost(() => item.Error = reason);
+            SetStatus(item, ScanStatus.Failed);
+            Bump(ref _failed);
+            Log($"No report for {item.FileName} ({failure}): {reason}", LogLevel.Warning);
+            // Offline self-heal: if we're offline, remember the file to retry when connectivity returns
+            // (a real "not found" while online is NOT queued, so 404s don't pile up).
+            if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
+            op.Fail(failure + " — " + reason);
+        }
+        else
+        {
+            UiPost(() => item.Report = report);
+            Complete(item, report);
+            op.Ok($"{report.DetectionCount}/{report.TotalEngines} detections" + (item.FromCache ? " (cache)" : ""));
+        }
+    }
+
+    /// <summary>Counts one item done and announces it. Marshalled to the UI thread like ProgressChanged:
+    /// subscribers mutate the grid/BindingList and several workers finish at once.</summary>
+    void FinishItem(ScanItem item)
+    {
+        DoneOne();
+        UiPost(() => { try { ItemFinished?.Invoke(item); } catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); } });
     }
 
     /// <summary>The resilient lookup chain for one file (keyless GUI when it is free, API + upload
@@ -470,8 +503,13 @@ internal sealed class ScanScheduler
                     {
                         SetStatus(item, ScanStatus.Polling);
                         ReleaseSlot(); // waiting for VirusTotal to finish must not block another file's lookup
-                        report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
-                        if (report == null) failure = LookupFailure.AnalysisTimedOut;
+                        // ...and it must not hold a scan WORKER either. An analysis takes minutes; a
+                        // worker parked on one is a worker not hashing the next file, and with enough of
+                        // them parked the sweep stops moving even though most of the disk needs no
+                        // network at all. The wait goes to a background watcher and this file is
+                        // finished by whatever that watcher gets back.
+                        WatchAnalysis(item, analysisId, md5, sha256, opts, ct);
+                        return (null, LookupFailure.AnalysisPending);
                     }
                 }
             }
@@ -490,6 +528,50 @@ internal sealed class ScanScheduler
             _cache.Put(md5, report, item.FilePath);
 
         return (report, report != null ? LookupFailure.None : failure);
+    }
+
+    /// <summary>Analyses still being waited for. The run is not over until these drain, and the count is
+    /// what the progress heartbeat reports as "waiting on VirusTotal".</summary>
+    readonly ConcurrentDictionary<string, Task> _pendingAnalyses = new(StringComparer.Ordinal);
+
+    /// <summary>How many uploaded files are still waiting for their VirusTotal analysis.</summary>
+    public int PendingAnalysisCount => _pendingAnalyses.Count;
+
+    /// <summary>
+    /// Waits for one uploaded file's analysis off the scan workers, then finishes the item. Started and
+    /// forgotten on purpose: the returned task is tracked in <see cref="_pendingAnalyses"/> and awaited
+    /// once at the end of the run, so nothing is lost and no worker is held.
+    /// </summary>
+    void WatchAnalysis(ScanItem item, string analysisId, string md5, string sha256, ScanOptions opts, CancellationToken ct)
+    {
+        var task = Task.Run(async () =>
+        {
+            using var op = OpLog.Begin("Analysis watch", $"in: analysis={analysisId} file={item.FileName}");
+            VtFileReport? report = null;
+            var failure = LookupFailure.AnalysisTimedOut;
+            try
+            {
+                report = await PollUntilCompleteAsync(analysisId, sha256, item, ct);
+                if (report != null)
+                {
+                    failure = LookupFailure.None;
+                    if (opts.UseCache && report.TotalEngines > 0) _cache.Put(md5, report, item.FilePath);
+                }
+            }
+            catch (OperationCanceledException) { SetStatus(item, ScanStatus.Cancelled); op.Note("cancelled"); return; }
+            catch (Exception ex)
+            {
+                UiPost(() => item.Error = ex.Message);
+                Log($"Analysis watch failed for {item.FileName}: {ex}", LogLevel.Error);
+                op.Fail(ex.Message);
+            }
+            finally { _pendingAnalyses.TryRemove(analysisId, out _); }
+
+            RecordOutcome(item, report, failure, op);
+            FinishItem(item);
+        }, CancellationToken.None);
+
+        _pendingAnalyses[analysisId] = task;
     }
 
     /// <summary>How long one file waits for a free API key before the keyless path is tried instead.

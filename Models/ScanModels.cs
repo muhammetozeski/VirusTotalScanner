@@ -35,6 +35,9 @@ internal enum LookupFailure
     NotApplicable,
     /// <summary>Every channel that was tried came back empty.</summary>
     LookupEmpty,
+    /// <summary>Uploaded, and the wait for the analysis was handed to the background watcher. Not an
+    /// outcome the row ever shows: the item is finished later, by whatever the watcher gets back.</summary>
+    AnalysisPending,
 }
 
 /// <summary>How a keyless (browser) lookup ended. Diagnostic detail the scan path does not need but
