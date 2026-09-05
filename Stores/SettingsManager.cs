@@ -57,8 +57,18 @@ internal static class SettingsManager
         }
     }
 
+    /// <summary>Guards the serialize-then-write pair. A sweep saves quota counters from every worker
+    /// thread; without this the readers walk the setting dictionary while another thread is mutating a
+    /// value, and two writes reach the file layer at once.</summary>
+    static readonly object SaveLock = new();
+
     /// <summary>Serializes all settings to the single config file.</summary>
     public static void SaveSettings()
+    {
+        lock (SaveLock) SaveSettingsLocked();
+    }
+
+    static void SaveSettingsLocked()
     {
         var sb = new StringBuilder();
         sb.AppendLine($"{AppConstants.CommentPrefix} {AppConstants.AppTitle} Configuration");

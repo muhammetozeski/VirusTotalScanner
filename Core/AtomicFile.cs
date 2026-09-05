@@ -23,9 +23,23 @@ internal static class AtomicFile
         catch { }
     }
 
+    /// <summary>One lock per destination path. Two threads saving the same store used to write the same
+    /// sibling ".tmp" at the same time and one of them died with "the file is being used by another
+    /// process" — during a sweep that is the quota counters failing to persist, over and over.</summary>
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> PathLocks =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public static void WriteAllText(string path, string content)
     {
-        string tmp = path + ".tmp";
+        lock (PathLocks.GetOrAdd(Path.GetFullPath(path), _ => new object()))
+            WriteLocked(path, content);
+    }
+
+    static void WriteLocked(string path, string content)
+    {
+        // Unique temp name: a second writer that slips past the lock (another process holding the same
+        // config open) then collides on the swap, which is recoverable, instead of on the write itself.
+        string tmp = $"{path}.{Environment.ProcessId:x}-{Environment.CurrentManagedThreadId:x}.tmp";
         File.WriteAllText(tmp, content);
         try
         {
@@ -41,8 +55,8 @@ internal static class AtomicFile
             // because a torn read of this very window is the prime suspect for the key-vault
             // decrypt failure seen in the field.
             Log($"Atomic replace failed for {path} ({ex.Message}); falling back to a plain copy.", LogLevel.Warning);
-            File.Copy(tmp, path, overwrite: true);
-            try { File.Delete(tmp); } catch { }
+            try { File.Copy(tmp, path, overwrite: true); }
+            finally { try { File.Delete(tmp); } catch (Exception del) { Log($"Temp file '{tmp}' left behind: {del.Message}", LogLevel.Warning); } }
         }
     }
 }
