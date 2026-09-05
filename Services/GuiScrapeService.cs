@@ -54,6 +54,12 @@ internal static class GuiScrapeService
     /// whole scan. If somebody is there they still have two minutes; if not, the scan carries on.</summary>
     static readonly TimeSpan CaptchaSolveWindow = TimeSpan.FromMinutes(2);
 
+    /// <summary>How long one lookup may take. The VirusTotal page is a single-page app that fetches its
+    /// own data over several round trips, and every one of them goes through three relays when Tor is
+    /// carrying the traffic. A route probe showed the first Tor lookup timing out at 45 s without ever
+    /// being challenged — the page simply had not finished. Direct stays at 45 s.</summary>
+    static TimeSpan FetchTimeout => TorService.IsActive ? TimeSpan.FromSeconds(150) : TimeSpan.FromSeconds(45);
+
     /// <summary>After an unanswered challenge the channel is parked for a while. Without this every
     /// remaining file would pay the same two minutes to learn the same thing.</summary>
     static readonly TimeSpan BlockedCooldown = TimeSpan.FromMinutes(3);
@@ -150,7 +156,8 @@ internal static class GuiScrapeService
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             _timeoutCts = timeout;
-            timeout.CancelAfter(TimeSpan.FromSeconds(45)); // extended automatically while a captcha is up
+            timeout.CancelAfter(FetchTimeout); // extended automatically while a captcha is up
+            op.Step($"timeout {FetchTimeout.TotalSeconds:F0}s");
 
             Navigate(_currentUrl, logLabel, tcs);
 
@@ -394,7 +401,15 @@ internal static class GuiScrapeService
                         {
                             var opts = new CoreWebView2EnvironmentOptions();
                             if (proxyUrl != null)
-                                opts.AdditionalBrowserArguments = $"--proxy-server=\"{proxyUrl}\" --proxy-bypass-list=\"<-loopback>\"";
+                            {
+                                // Just the proxy. An earlier attempt also passed
+                                // --proxy-bypass-list="<-loopback>" to stop Chromium bypassing the proxy
+                                // for loopback; that also pushes WebView2's own internal loopback traffic
+                                // at the SOCKS port, and every lookup then timed out with no response at
+                                // all — not even a 429.
+                                opts.AdditionalBrowserArguments = $"--proxy-server=\"{proxyUrl}\"";
+                                Log("WebView2 browser arguments: " + opts.AdditionalBrowserArguments, LogLevel.Info);
+                            }
                             env = await CoreWebView2Environment.CreateAsync(null, userData, opts);
                         }
                         catch (Exception exOpts)
@@ -549,6 +564,9 @@ internal static class GuiScrapeService
 
     static async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        // The only place a proxy/DNS/TLS failure is visible: without this, a route that cannot load the
+        // page at all looks exactly like a slow one — both just time out with nothing logged.
+        Log($"Keyless navigation completed: success={e.IsSuccess} status={e.WebErrorStatus} httpStatus={e.HttpStatusCode}", LogLevel.Info);
         _navDone?.TrySetResult(e.IsSuccess);
         if (_pending == null || _captchaShown || _autoSolving || _web == null) return;
         try
@@ -604,7 +622,7 @@ internal static class GuiScrapeService
                 if (solved)
                 {
                     Log("reCAPTCHA passed with the single click — the user was not interrupted.", LogLevel.Info);
-                    _timeoutCts?.CancelAfter(TimeSpan.FromSeconds(45));
+                    _timeoutCts?.CancelAfter(FetchTimeout);
                 }
                 else if (_pending is { Task.IsCompleted: false })
                 {
@@ -749,7 +767,7 @@ internal static class GuiScrapeService
         {
             _bar!.Visible = false;
             _captchaShown = false;
-            _timeoutCts?.CancelAfter(TimeSpan.FromSeconds(45)); // safety net for the re-fetch only
+            _timeoutCts?.CancelAfter(FetchTimeout); // safety net for the re-fetch only
             Log("User reports reCAPTCHA solved — retrying lookup.", LogLevel.Info);
             _web!.CoreWebView2.Navigate(_currentUrl); // re-fetch with the now-valid session
         }
