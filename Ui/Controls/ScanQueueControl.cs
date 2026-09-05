@@ -384,19 +384,38 @@ internal sealed class ScanQueueControl : UserControl
 
     void UpdateChipCounts()
     {
-        int all = 0, clean = 0, susp = 0, mal = 0, skip = 0, err = 0;
-        foreach (var i in _scheduler.Items)
+        int all, clean, susp, mal, skip, err;
+
+        // While a scan runs the numbers come from the counters the scheduler already keeps. Walking the
+        // list instead meant 346,000 BucketOf calls four times a second on the UI thread, which is what
+        // stopped the window from answering. The walk is still used when nothing is running, where the
+        // list is the only source and its size no longer matters.
+        if (_scheduler.IsRunning && _lastProgress is { } p)
         {
-            all++;
-            switch (BucketOf(i))
+            all = p.Total;
+            clean = p.Clean;
+            susp = p.Suspicious;
+            mal = p.Malicious;
+            skip = p.Skipped + p.SignedSkipped;
+            err = p.Failed;
+        }
+        else
+        {
+            all = clean = susp = mal = skip = err = 0;
+            foreach (var i in _scheduler.Items)
             {
-                case Bucket.Clean: clean++; break;
-                case Bucket.Suspicious: susp++; break;
-                case Bucket.Malicious: mal++; break;
-                case Bucket.Skipped: skip++; break;
-                case Bucket.Error: err++; break;
+                all++;
+                switch (BucketOf(i))
+                {
+                    case Bucket.Clean: clean++; break;
+                    case Bucket.Suspicious: susp++; break;
+                    case Bucket.Malicious: mal++; break;
+                    case Bucket.Skipped: skip++; break;
+                    case Bucket.Error: err++; break;
+                }
             }
         }
+
         SetChip(Bucket.All, Strings.ChipAll, all);
         SetChip(Bucket.Clean, Strings.ColClean, clean);
         SetChip(Bucket.Suspicious, Strings.ColSuspicious, susp);
