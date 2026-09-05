@@ -318,8 +318,33 @@ internal static class GuiScrapeService
 
         op.Step("starting a browser");
         bool ok = await StartBrowserAsync(wantProxy);
-        if (ok) op.Ok("started"); else op.Fail("start failed");
-        return ok;
+        if (!ok) { op.Fail("start failed"); return false; }
+
+        op.Step("warming the new profile up");
+        await WarmUpAsync();
+        op.Ok("started");
+        return true;
+    }
+
+    /// <summary>
+    /// Loads the VirusTotal shell once into a freshly built browser before any lookup is timed.
+    /// A new profile has an empty cache, so the first lookup otherwise pays for the whole single-page
+    /// app — script bundles, fonts, the lot — on top of its own round trip. Over Tor that consistently
+    /// pushed the FIRST lookup after a route change past the timeout while the second and third on the
+    /// same circuit came back fine. The warm-up is best-effort: if it fails the lookup still runs.
+    /// </summary>
+    static async Task WarmUpAsync()
+    {
+        using var op = OpLog.Begin("Keyless warm-up", AppConstants.VtGuiHome);
+        try
+        {
+            Navigate(AppConstants.VtGuiHome, "Keyless warm-up", null);
+            var nav = _navDone;
+            if (nav == null) { op.Note("no navigation handle"); return; }
+            var done = await Task.WhenAny(nav.Task, Task.Delay(FetchTimeout));
+            if (done == nav.Task) op.Ok("shell loaded"); else op.Fail($"still loading after {FetchTimeout.TotalSeconds:F0}s");
+        }
+        catch (Exception ex) { Log("Keyless warm-up failed: " + ex.Message, LogLevel.Warning); op.Fail(ex.Message); }
     }
 
     static void TearDown()

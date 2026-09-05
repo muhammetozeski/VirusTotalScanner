@@ -29,6 +29,9 @@ internal static class AppConstants
     // ---- VirusTotal API v3 ----
     public const string VtApiBase = "https://www.virustotal.com/api/v3";
     public const string VtGuiFile = "https://www.virustotal.com/gui/file/";
+    /// <summary>The plain VirusTotal shell, used to warm a freshly built browser profile up so the
+    /// first real lookup is not also paying to download the whole single-page app.</summary>
+    public const string VtGuiHome = "https://www.virustotal.com/gui/home/upload";
 
     /// <summary>Files at or below this size upload directly to /files; larger need an upload_url.</summary>
     public const long DirectUploadLimitBytes = 32L * 1024 * 1024;
