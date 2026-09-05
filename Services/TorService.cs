@@ -315,10 +315,37 @@ internal static class TorService
         lock (_bootLog) return string.Join(" | ", _bootLog.TakeLast(6));
     }
 
-    static async Task<bool> WaitForBootstrapAsync(CancellationToken ct)
+    /// <summary>Highest "Bootstrapped NN%" seen so far, or -1 before the first one.</summary>
+    static int BootPercent()
     {
-        var deadline = DateTime.UtcNow.AddSeconds(90);
-        while (DateTime.UtcNow < deadline)
+        int best = -1;
+        lock (_bootLog)
+            foreach (var l in _bootLog)
+            {
+                int i = l.IndexOf("Bootstrapped ", StringComparison.OrdinalIgnoreCase);
+                if (i < 0) continue;
+                int j = l.IndexOf('%', i);
+                if (j < 0) continue;
+                if (int.TryParse(l.AsSpan(i + 13, j - i - 13), out int pct) && pct > best) best = pct;
+            }
+        return best;
+    }
+
+    /// <summary>
+    /// Waits for "Bootstrapped 100%". The wait follows PROGRESS, not the clock: a flat 90-second
+    /// deadline gave up on a link that was still climbing (this one takes past 65 s just to reach 50%),
+    /// and it waited the full 90 s on a directory whose cached consensus was corrupt and would never
+    /// have moved off 0%. Now it gives up only once the percentage has stood still for
+    /// <paramref name="stallSeconds"/>, with a hard ceiling so it cannot wait forever either.
+    /// </summary>
+    static async Task<bool> WaitForBootstrapAsync(CancellationToken ct, int stallSeconds = 60, int ceilingSeconds = 300)
+    {
+        var start = DateTime.UtcNow;
+        var ceiling = start.AddSeconds(ceilingSeconds);
+        int lastPct = BootPercent();
+        var lastMove = start;
+
+        while (DateTime.UtcNow < ceiling)
         {
             ct.ThrowIfCancellationRequested();
             if (_proc is { HasExited: true })
@@ -326,11 +353,21 @@ internal static class TorService
                 LastError = string.Format(Strings.TorErrExitedFormat, LastBootLines());
                 return false;
             }
-            lock (_bootLog)
-                if (_bootLog.Any(l => l.Contains("Bootstrapped 100%", StringComparison.OrdinalIgnoreCase)))
-                    return true;
+
+            int pct = BootPercent();
+            if (pct >= 100) { Log($"Tor bootstrap complete after {(DateTime.UtcNow - start).TotalSeconds:0} s.", LogLevel.Info); return true; }
+            if (pct > lastPct) { lastPct = pct; lastMove = DateTime.UtcNow; }
+            else if (DateTime.UtcNow - lastMove > TimeSpan.FromSeconds(stallSeconds))
+            {
+                LastError = string.Format(Strings.TorErrBootstrapStalledFormat, lastPct < 0 ? 0 : lastPct, stallSeconds);
+                Log($"Tor bootstrap stalled at {(lastPct < 0 ? 0 : lastPct)}% for {stallSeconds} s; giving up on this attempt.", LogLevel.Warning);
+                return false;
+            }
+
             await Task.Delay(300, ct);
         }
+        LastError = string.Format(Strings.TorErrBootstrapStalledFormat, lastPct < 0 ? 0 : lastPct, ceilingSeconds);
+        Log($"Tor bootstrap did not finish within {ceilingSeconds} s (reached {(lastPct < 0 ? 0 : lastPct)}%).", LogLevel.Warning);
         return false;
     }
 

@@ -1352,7 +1352,8 @@ internal static class Strings
     public static string TorErrConfigWriteFormat = "Tor yapılandırması yazılamadı: {0}";
     public static string TorErrStartFailed = "Tor süreci başlatılamadı.";
     public static string TorErrStartFailedFormat = "Tor süreci başlatılamadı: {0}";
-    public static string TorErrBootstrapTimeout = "Tor 90 saniyede ağa bağlanamadı.";
+    public static string TorErrBootstrapTimeout = "Tor ağa bağlanamadı.";
+    public static string TorErrBootstrapStalledFormat = "Tor %{0} ilerlemede takıldı ({1} sn boyunca kıpırdamadı).";
     public static string TorErrExitedFormat = "Tor süreci beklenmedik şekilde kapandı: {0}";
     public static string TorErrNotRunning = "Tor çalışmıyor.";
     public static string TorErrControlAuthFormat = "Tor denetim portu kimlik doğrulamayı reddetti: {0}";
