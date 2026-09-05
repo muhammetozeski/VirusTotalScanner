@@ -563,10 +563,10 @@ internal sealed class ScanScheduler
     {
         var timer = new System.Threading.Timer(_ =>
         {
-            try { FlushFinished(); }
+            try { FlushFinished(); FlushProgress(); }
             catch (Exception ex) { Log("Finished flush failed: " + ex.Message, LogLevel.Warning); }
         }, null, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250));
-        return new Restore(() => { try { timer.Dispose(); } catch { } FlushFinished(); });
+        return new Restore(() => { try { timer.Dispose(); } catch { } FlushFinished(); FlushProgress(); });
     }
 
     /// <summary>The resilient lookup chain for one file (keyless GUI when it is free, API + upload
@@ -1032,11 +1032,24 @@ internal sealed class ScanScheduler
         }
     }
 
+    int _progressDirty;
+
     void DoneOne()
     {
         Interlocked.Increment(ref _done);
         lock (_rateLock) { _recent.Enqueue(_stopwatch.ElapsedMilliseconds); while (_recent.Count > 30) _recent.Dequeue(); }
-        ReportProgress();
+
+        // Marked, not reported. This used to raise ProgressChanged for every finished file, and the
+        // handler sets a label whose text change lays the whole scan tab out again — at 30,000 files a
+        // minute that is 500 layout passes a second and the window never answers anything else. The
+        // flush timer reports four times a second, and once more when the run ends.
+        Volatile.Write(ref _progressDirty, 1);
+    }
+
+    /// <summary>Reports progress if anything finished since the last report.</summary>
+    void FlushProgress()
+    {
+        if (Interlocked.Exchange(ref _progressDirty, 0) == 1) ReportProgress();
     }
 
     /// <summary>Rolling files/sec over the recent window + a remaining-time estimate, so trusted-skip

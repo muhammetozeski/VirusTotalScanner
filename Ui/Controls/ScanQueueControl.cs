@@ -157,11 +157,21 @@ internal sealed class ScanQueueControl : UserControl
         };
 
         // ---- overall ----
-        var bottom = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, AutoSize = true, Padding = new Padding(8, 4, 8, 8) };
+        var bottom = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Height = 48, Padding = new Padding(8, 4, 8, 8) };
+        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         _overall.Dock = DockStyle.Fill;
         _overall.Height = 16;
         _overall.Paint += PaintOverall;
-        _summary.AutoSize = true;
+        // Fixed height, NOT AutoSize. An auto-sizing label answers every text change by asking its whole
+        // parent chain to lay out again, and this one sits inside nested TableLayout/FlowLayout panels
+        // full of auto-size buttons — so each progress line re-measured every button's text through GDI.
+        // A stack dump of the frozen window landed exactly there: set_Text -> ResumeLayout -> LayoutCore
+        // -> ... -> TextRenderer.MeasureText. Now a new line only repaints the label.
+        _summary.AutoSize = false;
+        _summary.Dock = DockStyle.Fill;
+        _summary.Height = 20;
+        _summary.AutoEllipsis = true;
         _summary.Text = Strings.StatusReady;
         bottom.Controls.Add(_overall, 0, 0);
         bottom.Controls.Add(_summary, 0, 1);
@@ -1592,9 +1602,19 @@ internal sealed class ScanQueueControl : UserControl
             string eta = p.Remaining is { } rem ? string.Format(Strings.ProgressEtaFormat, ShortDuration(rem)) : "";
             text += string.Format(Strings.ProgressRateFormat, eta, p.FilesPerSec, ShortDuration(p.Elapsed));
         }
-        _summary.Text = text;
-        try { _overallTip.SetToolTip(_overall, string.Format(Strings.OverallBarTooltipFormat, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Skipped, p.Failed, p.Done, p.Total)); } catch { }
+        // Both of these reach into the window manager, so neither is done unless the text really moved:
+        // setting the same label text still lays the tab out again, and SetToolTip is a window message.
+        if (!string.Equals(_summary.Text, text, StringComparison.Ordinal)) _summary.Text = text;
+
+        string tip = string.Format(Strings.OverallBarTooltipFormat, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Skipped, p.Failed, p.Done, p.Total);
+        if (!string.Equals(_lastOverallTip, tip, StringComparison.Ordinal))
+        {
+            _lastOverallTip = tip;
+            try { _overallTip.SetToolTip(_overall, tip); } catch (Exception ex) { Log("Overall tooltip update failed: " + ex.Message, LogLevel.Warning); }
+        }
     }
+
+    string _lastOverallTip = "";
 
     /// <summary>Owner-draws the overall bar as stacked verdict segments (red/amber/green/grey) with a
     /// hatched tail for the not-yet-scanned remainder — so a red sliver among thousands of pending files
