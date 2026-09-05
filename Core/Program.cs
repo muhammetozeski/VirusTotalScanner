@@ -109,8 +109,13 @@ internal static class Program
 
         if (opts.Paths.Count > 0)
         {
+            // Once, and only once. EnqueueExternalPaths restores the window from the tray, which shows
+            // the form again and raises Shown a second time — the handler then started the same scan
+            // twice and the second one queued itself as an automatic follow-up run of the whole drive.
             var initial = opts.Paths.ToArray();
-            form.Shown += (_, _) => form.EnqueueExternalPaths(initial);
+            EventHandler? handOff = null;
+            handOff = (_, _) => { form.Shown -= handOff; form.EnqueueExternalPaths(initial); };
+            form.Shown += handOff;
         }
 
         Log($"GUI starting ({(primary ? "primary" : "standalone")})", LogLevel.Info);
