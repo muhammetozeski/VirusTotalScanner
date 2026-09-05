@@ -748,13 +748,21 @@ internal sealed class ScanScheduler
     /// not park the whole scan.</summary>
     static readonly TimeSpan ApiWaitForKey = TimeSpan.FromSeconds(75);
 
-    /// <summary>Whether an unknown file should actually be submitted. Looking a hash up is cheap and
-    /// always happens; submitting is not, so by default only code-shaped files earn one.</summary>
+    /// <summary>
+    /// Whether an unknown file should actually be submitted.
+    ///
+    /// A hash lookup costs one API request. A submission costs about thirteen: the upload, then up to
+    /// eleven status checks, then the finished report. With 500 requests a key a day, ninety uploads
+    /// spend everything fourteen keys have — and on a drive sweep the files VirusTotal has never seen
+    /// are shortcuts, build output and per-machine scripts that no verdict was ever going to exist for.
+    /// So a sweep looks up and reports what is known; submitting is for files the user picked, or for
+    /// someone who set the policy to "always" on purpose.
+    /// </summary>
     static bool ShouldUpload(string path, ScanOptions opts) => opts.UploadPolicy switch
     {
         0 => false,
         2 => true,
-        _ => FileClass.IsWorthUploading(path),
+        _ => opts.ExplicitFileSelection && FileClass.IsWorthUploading(path),
     };
 
     /// <summary>
