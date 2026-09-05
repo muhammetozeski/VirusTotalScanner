@@ -1325,6 +1325,8 @@ internal static class Strings
     public static string SkipReasonDevFolder = "Geliştirme klasörü (kullanıcı onayı)";
     public static string ItemErrorNoReport = "Sorgu sonuç vermedi — hiçbir kanal bu dosya için yanıt döndürmedi.";
     public static string SkipReasonNotCodeFile = "Kod dosyası değil · sorgulanmadı";
+    public static string SkipReasonFileLocked = "Başka bir işlem dosyayı açık tutuyor · okunamadı";
+    public static string SkipReasonNoAccess = "Bu hesabın okuma izni yok";
     public static string SkipReasonNotSubmitted = "VT'de kayıtlı değil · gönderilmedi (kod dosyası değil)";
     public static string ItemErrorUnknownNoKey = "VirusTotal'de kayıtlı değil ve yüklemek için kullanılabilir API anahtarı yok.";
     public static string ItemErrorAnalysisTimedOutFormat = "Dosya VirusTotal'e yüklendi ama analiz {0} dakikada bitmedi. Biraz sonra 'Hatalıları yeniden tara' ile sonucu alabilirsin.";

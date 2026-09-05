@@ -416,6 +416,17 @@ internal sealed class ScanScheduler
             SetStatus(item, ScanStatus.Cancelled);
             op.Note("cancelled");
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A disk sweep walks live temp files and folders this account cannot open. Neither is a
+            // scan error, and reporting them as failures painted the whole run red. The row says which
+            // one it was and the file is counted as not examined — it is not quietly called clean.
+            string reason = ex is UnauthorizedAccessException ? Strings.SkipReasonNoAccess : Strings.SkipReasonFileLocked;
+            UiPost(() => { item.SkipReason = reason; item.Status = ScanStatus.Skipped; });
+            Bump(ref _skipped);
+            Log($"Not readable, skipped: {item.FilePath} — {ex.Message}", LogLevel.Warning);
+            op.Note("not readable — " + reason);
+        }
         catch (Exception ex)
         {
             UiPost(() => item.Error = ex.Message);
