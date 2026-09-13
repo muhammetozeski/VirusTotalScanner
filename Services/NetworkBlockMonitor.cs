@@ -85,7 +85,7 @@ internal static class NetworkBlockMonitor
                     SettingsManager.SaveSettings();
                     // Both channels have to be told, or they keep using the address that was blocked.
                     VtHttpClientFactory.Invalidate();
-                    GuiScrapeService.InvalidateSession("tor auto-enabled");
+                    GuiScrapeService.ResetHard("tor auto-enabled");
                     lock (_lock) _hits.Clear(); // the counter is about the OLD address
                     UiStatusHub.Report(Strings.StatusSourceTor, TorService.StatusLine(), StatusSeverity.Info);
                     try { TorAutoEnabled?.Invoke(); } catch (Exception ex) { Log("TorAutoEnabled handler failed: " + ex.Message, LogLevel.Warning); }
@@ -118,8 +118,8 @@ internal static class NetworkBlockMonitor
                 if (ok)
                 {
                     // A new exit address needs a new browser profile: the old VirusTotal session cookie
-                    // was issued to the address that just got blocked.
-                    GuiScrapeService.InvalidateSession("tor circuit rotated");
+                    // was issued to the address that just got blocked. Wipe it, don't reuse it.
+                    GuiScrapeService.ResetHard("tor circuit rotated");
                     lock (_lock) _hits.Clear(); // fresh exit address, fresh budget
                     UiStatusHub.Report(Strings.StatusSourceTor, TorService.StatusLine());
                     try { CircuitAutoChanged?.Invoke(); } catch (Exception ex) { Log("CircuitAutoChanged handler failed: " + ex.Message, LogLevel.Warning); }
@@ -132,7 +132,7 @@ internal static class NetworkBlockMonitor
                     if (await TorService.EnableAsync())
                     {
                         VtHttpClientFactory.Invalidate();
-                        GuiScrapeService.InvalidateSession("tor restarted");
+                        GuiScrapeService.ResetHard("tor restarted");
                         lock (_lock) _hits.Clear();
                         UiStatusHub.Report(Strings.StatusSourceTor, TorService.StatusLine());
                     }

@@ -104,15 +104,80 @@ internal static class GuiScrapeService
     /// address is actually treated, with no human and no automation in the way.</summary>
     public static bool ProbeMode { get; set; }
 
-    /// <summary>Drop the current browser (profile + cookies included) before the next lookup. Called
-    /// when Tor is switched on/off or the circuit changes: the old VirusTotal session cookie belongs
-    /// to the old exit address and would carry the old block straight over to the new one.</summary>
+    /// <summary>Rebuild the browser before the next lookup, keeping its profile folder (so a route switch
+    /// between the direct and Tor profiles picks the right cookies). Used for the plain Tor on/off toggle,
+    /// where the per-route folder already separates the sessions.</summary>
     public static void InvalidateSession(string why)
     {
         _restartRequested = true;
         // A new route/profile is exactly the thing a parked channel was waiting for.
         OpenChannel("session invalidated: " + why);
         Log("Keyless browser session invalidated: " + why, LogLevel.Info);
+    }
+
+    /// <summary>Bumped by <see cref="ResetHard"/> so the next browser is built in a brand-new, empty profile
+    /// folder — no file lock is fought with the one being torn down, and no cookie survives.</summary>
+    static volatile int _profileGeneration;
+
+    static string ProfileLeaf(bool tor, int generation)
+    {
+        string baseName = tor ? "webview2-tor" : "webview2";
+        return generation == 0 ? baseName : $"{baseName}-g{generation}";
+    }
+
+    /// <summary>The profile folder the browser should use for this route right now.</summary>
+    static string ProfileFolder(string? proxyUrl) =>
+        Path.Combine(ConfigPathResolver.DataFolder, ProfileLeaf(proxyUrl != null, _profileGeneration));
+
+    /// <summary>
+    /// Throws the whole keyless browser away — its profile and cookies with it — and rebuilds it fresh on
+    /// the next lookup. <see cref="InvalidateSession"/> only rebuilt the browser; the VirusTotal session
+    /// cookie earned on a blocked address survived in the reused profile folder and carried the block
+    /// straight to the new exit IP. Here the next browser uses a brand-new, empty folder (a bumped
+    /// generation, so there is no lock to fight with the one being disposed) and the old folders are
+    /// deleted in the background.
+    /// </summary>
+    public static void ResetHard(string why)
+    {
+        int newGen = Interlocked.Increment(ref _profileGeneration);
+        _restartRequested = true;
+        OpenChannel("hard reset: " + why);
+        Log($"Keyless browser hard reset ({why}); fresh profile generation {newGen}.", LogLevel.Info);
+        DeleteOldProfilesInBackground(newGen);
+    }
+
+    /// <summary>Best-effort removal of every keyless profile folder except the current generation's two
+    /// (direct + Tor). The just-abandoned one's msedgewebview2.exe can hold a lock for a second or two
+    /// after teardown, so this retries for a while before giving up.</summary>
+    static void DeleteOldProfilesInBackground(int currentGeneration)
+    {
+        _ = Task.Run(async () =>
+        {
+            var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ProfileLeaf(false, currentGeneration),
+                ProfileLeaf(true, currentGeneration),
+            };
+            for (int attempt = 0; attempt < 12; attempt++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                bool anyLeft = false;
+                try
+                {
+                    var dir = new DirectoryInfo(ConfigPathResolver.DataFolder);
+                    if (!dir.Exists) return;
+                    foreach (var sub in dir.EnumerateDirectories("webview2*"))
+                    {
+                        if (keep.Contains(sub.Name)) continue;
+                        try { sub.Delete(recursive: true); }
+                        catch { anyLeft = true; } // still locked; try again next round
+                    }
+                }
+                catch (Exception ex) { Log("Old keyless profile cleanup failed: " + ex.Message, LogLevel.Debug); }
+                if (!anyLeft) return;
+            }
+            Log("Some old keyless profile folders could not be deleted (still locked).", LogLevel.Debug);
+        });
     }
 
     /// <summary>The one navigate-and-capture round trip all three fetches share: opens the GUI page,
@@ -423,9 +488,9 @@ internal static class GuiScrapeService
                     try
                     {
                         // A separate profile per route: a VirusTotal session cookie earned on the direct
-                        // address is worthless (and suspicious) on a Tor exit, and vice versa.
-                        string userData = Path.Combine(ConfigPathResolver.DataFolder,
-                            proxyUrl == null ? "webview2" : "webview2-tor");
+                        // address is worthless (and suspicious) on a Tor exit, and vice versa. A hard reset
+                        // bumps the generation so this is a brand-new, empty folder.
+                        string userData = ProfileFolder(proxyUrl);
                         Directory.CreateDirectory(userData);
 
                         CoreWebView2Environment env;
@@ -450,7 +515,7 @@ internal static class GuiScrapeService
                             // plain environment and say so, rather than disabling the whole path.
                             Log("WebView2 environment with proxy failed, retrying direct: " + exOpts.Message, LogLevel.Warning);
                             _activeProxy = null;
-                            env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(ConfigPathResolver.DataFolder, "webview2"));
+                            env = await CoreWebView2Environment.CreateAsync(null, ProfileFolder(null));
                         }
 
                         await _web.EnsureCoreWebView2Async(env);
