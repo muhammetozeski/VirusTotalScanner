@@ -12,11 +12,16 @@ internal static class UiSlice
     public static void Measure(string what, Action work)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        var gcBefore = GC.GetTotalPauseDuration();
         try { work(); }
         finally
         {
             if (clock.ElapsedMilliseconds >= SlowMs)
-                Log($"UI work '{what}' took {clock.ElapsedMilliseconds} ms.", LogLevel.Warning);
+                Log($"UI work '{what}' took {clock.ElapsedMilliseconds} ms ({GcPauseSince(gcBefore)} ms of it the runtime paused every thread for garbage collection).", LogLevel.Warning);
         }
     }
+
+    /// <summary>Milliseconds the garbage collector had every thread stopped since <paramref name="before"/>. A
+    /// stall that is mostly this is not caused by the work that happened to be running.</summary>
+    public static long GcPauseSince(TimeSpan before) => (long)(GC.GetTotalPauseDuration() - before).TotalMilliseconds;
 }

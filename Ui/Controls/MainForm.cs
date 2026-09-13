@@ -232,6 +232,7 @@ internal sealed partial class MainForm : Form
             if (!IsHandleCreated || IsDisposed) return;
             if (Interlocked.Exchange(ref _uiLagProbePending, 1) == 1) return; // the last probe is still waiting
             long posted = clock.ElapsedMilliseconds;
+            var gcBefore = GC.GetTotalPauseDuration();
             try
             {
                 BeginInvoke(() =>
@@ -239,7 +240,7 @@ internal sealed partial class MainForm : Form
                     long waited = clock.ElapsedMilliseconds - posted;
                     Interlocked.Exchange(ref _uiLagProbePending, 0);
                     if (waited >= UiLagWarnMs)
-                        Log($"UI thread did not answer for {waited} ms (scan running: {AppServices.Scheduler.IsRunning}, rows: {AppServices.Scheduler.Items.Count}).", LogLevel.Warning);
+                        Log($"UI thread did not answer for {waited} ms (scan running: {AppServices.Scheduler.IsRunning}, rows: {AppServices.Scheduler.Items.Count}, GC pause {UiSlice.GcPauseSince(gcBefore)} ms).", LogLevel.Warning);
                 });
             }
             catch (Exception ex)
