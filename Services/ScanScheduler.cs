@@ -183,6 +183,7 @@ internal sealed class ScanScheduler
         try { Started?.Invoke(); } catch (Exception ex) { Log("Started handler failed: " + ex.Message, LogLevel.Warning); }
 
         var archiveTemps = new List<string>(); // temp folders from archive expansion, cleaned in finally
+        List<ScanItem> items = [];             // this run's rows, so a cancel can close the ones never reached
         try
         {
             if (Settings.ResumeInterruptedScans) ScanSessionStore.SaveRunning(paths, opts.Recurse, opts.BypassTrust);
@@ -213,7 +214,7 @@ internal sealed class ScanScheduler
                 files = await Task.Run(() => files.OrderByDescending(RiskScorer.Score).ToList(), ct);
 
             _total = files.Count;
-            var items = files.Select(f => new ScanItem(f)).ToList();
+            items = files.Select(f => new ScanItem(f)).ToList();
             UiPost(() => BulkAdd(items));
 
             // Ledger: show each size-skipped file as a row so the user sees what was excluded and why.
@@ -290,6 +291,7 @@ internal sealed class ScanScheduler
             // Keep the session if the user stopped (cancelled) so it can be resumed; clear it on
             // a natural finish. A crash also leaves it (finally never runs) -> resume offered.
             if (!ct.IsCancellationRequested) ScanSessionStore.Clear();
+            else MarkUnfinishedCancelled(items, runOp);
             foreach (var td in archiveTemps) ArchiveExpander.CleanupTemp(td);
             _cache.Flush();
             FingerprintCache.Flush();
@@ -299,6 +301,41 @@ internal sealed class ScanScheduler
             runOp.Ok($"{_done}/{_total} done — malicious={_malicious} suspicious={_suspicious} clean={_clean} "
                 + $"unknown={_unknown} failed={_failed} skipped={_skipped} trustSkipped={_signedSkipped}");
         }
+    }
+
+    /// <summary>
+    /// Closes every row a cancelled run never finished. Files the workers had not reached, and files
+    /// still waiting in the network queue, kept the status they had when the run stopped, so the table
+    /// said "Sırada" for thousands of files that nothing was ever going to touch again. One trip to the
+    /// UI thread and one grid reset for the whole batch.
+    /// </summary>
+    void MarkUnfinishedCancelled(List<ScanItem> items, OpLog runOp)
+    {
+        if (items.Count == 0) return;
+        UiPost(() =>
+        {
+            bool raising = Items.RaiseListChangedEvents;
+            Items.RaiseListChangedEvents = false;
+            int closed = 0;
+            try
+            {
+                foreach (var it in items)
+                {
+                    if (it.Status is not (ScanStatus.Queued or ScanStatus.Hashing or ScanStatus.LookingUp
+                        or ScanStatus.Uploading or ScanStatus.Polling)) continue;
+                    it.Status = ScanStatus.Cancelled;
+                    closed++;
+                }
+            }
+            catch (Exception ex) { Log("Closing the unfinished rows failed: " + ex.Message, LogLevel.Warning); }
+            finally
+            {
+                Items.RaiseListChangedEvents = raising;
+                if (raising) Items.ResetBindings();
+                Log($"Run cancelled: {closed} unfinished row(s) marked cancelled.", LogLevel.Info);
+            }
+        });
+        runOp.Step("unfinished rows handed to the UI to be marked cancelled");
     }
 
     /// <summary>Replaces each expandable archive with its extracted member paths (tracking the temp
