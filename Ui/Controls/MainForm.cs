@@ -206,9 +206,48 @@ internal sealed partial class MainForm : Form
         DragDrop += OnDragDrop;
         FormClosing += OnFormClosing;
         Shown += OnShownFirst;
+        HandleCreated += (_, _) => StartUiLagWatch();
+        FormClosed += (_, _) => { try { _uiLagWatch?.Dispose(); } catch (Exception ex) { Log("UI lag watch stop failed: " + ex.Message, LogLevel.Warning); } };
 
         ApplyTheme();
         UpdateStatusBar();
+    }
+
+    System.Threading.Timer? _uiLagWatch;
+    int _uiLagProbePending;
+    const int UiLagWarnMs = 250;
+
+    /// <summary>
+    /// Twice a second, asks the UI thread to run an empty probe and logs how long it took to get to it
+    /// when that is longer than <see cref="UiLagWarnMs"/>. A frozen window leaves nothing in the log by
+    /// itself — the thread that would log is the one that is stuck — so without this a report of "the
+    /// window hangs" had no measurement behind it at all.
+    /// </summary>
+    void StartUiLagWatch()
+    {
+        if (_uiLagWatch != null) return;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        _uiLagWatch = new System.Threading.Timer(_ =>
+        {
+            if (!IsHandleCreated || IsDisposed) return;
+            if (Interlocked.Exchange(ref _uiLagProbePending, 1) == 1) return; // the last probe is still waiting
+            long posted = clock.ElapsedMilliseconds;
+            try
+            {
+                BeginInvoke(() =>
+                {
+                    long waited = clock.ElapsedMilliseconds - posted;
+                    Interlocked.Exchange(ref _uiLagProbePending, 0);
+                    if (waited >= UiLagWarnMs)
+                        Log($"UI thread did not answer for {waited} ms (scan running: {AppServices.Scheduler.IsRunning}, rows: {AppServices.Scheduler.Items.Count}).", LogLevel.Warning);
+                });
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Exchange(ref _uiLagProbePending, 0);
+                Log("UI lag probe could not be posted: " + ex.Message, LogLevel.Debug);
+            }
+        }, null, 1000, 500);
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
