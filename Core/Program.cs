@@ -102,21 +102,47 @@ internal static class Program
             try { NativeMessageBox.Error(string.Format(Strings.UiThreadExceptionFormat, e.Exception.Message)); }
             catch (Exception ex) { Log("Error dialog failed: " + ex.Message, LogLevel.Warning); }
         };
+        // Paths that arrive before the window can take them: this launch's own, and any a second launch
+        // forwards while this one is still building its window. The pipe server used to start only after
+        // the window was built — ten seconds and more — while a second launch gives up after two, so a
+        // multi-select right-click opened standalone windows that each ran their own start-up retries.
+        var early = new List<string[]>();
+        MainForm? ready = null;
+        var handOffLock = new object();
+        void Deliver(string[] paths)
+        {
+            MainForm? target;
+            lock (handOffLock)
+            {
+                target = ready;
+                if (target == null) { early.Add(paths); return; }
+            }
+            target.EnqueueExternalPaths(paths);
+        }
+
+        if (opts.Paths.Count > 0) early.Add(opts.Paths.ToArray());
+        if (primary)
+            SingleInstance.StartPipeServer(Deliver);
+
         var form = new MainForm(startHidden: opts.Tray);
 
-        if (primary)
-            SingleInstance.StartPipeServer(paths => form.EnqueueExternalPaths(paths));
-
-        if (opts.Paths.Count > 0)
+        // Once, and only once. EnqueueExternalPaths restores the window from the tray, which shows
+        // the form again and raises Shown a second time — the handler then started the same scan
+        // twice and the second one queued itself as an automatic follow-up run of the whole drive.
+        EventHandler? handOff = null;
+        handOff = (_, _) =>
         {
-            // Once, and only once. EnqueueExternalPaths restores the window from the tray, which shows
-            // the form again and raises Shown a second time — the handler then started the same scan
-            // twice and the second one queued itself as an automatic follow-up run of the whole drive.
-            var initial = opts.Paths.ToArray();
-            EventHandler? handOff = null;
-            handOff = (_, _) => { form.Shown -= handOff; form.EnqueueExternalPaths(initial); };
-            form.Shown += handOff;
-        }
+            form.Shown -= handOff;
+            string[][] backlog;
+            lock (handOffLock)
+            {
+                ready = form;
+                backlog = [.. early];
+                early.Clear();
+            }
+            foreach (var paths in backlog) form.EnqueueExternalPaths(paths);
+        };
+        form.Shown += handOff;
 
         Log($"GUI starting ({(primary ? "primary" : "standalone")})", LogLevel.Info);
         Application.Run(form);
