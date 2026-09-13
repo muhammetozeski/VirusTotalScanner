@@ -27,11 +27,11 @@ internal static class SelectionEnumerator
             {
                 if (File.Exists(path))
                 {
-                    AddFile(path);
+                    AddFile(path, named: true);
                 }
                 else if (Directory.Exists(path))
                 {
-                    Walk(path, recurse, AddFile, ref prunedFolders, ref deniedFolders);
+                    Walk(path, recurse, f => AddFile(f, named: false), ref prunedFolders, ref deniedFolders);
                 }
                 else
                 {
@@ -52,9 +52,12 @@ internal static class SelectionEnumerator
             + ".", LogLevel.Info);
         return result;
 
-        void AddFile(string file)
+        // The safe-extension filter thins out what a folder walk finds. A file the user named directly is
+        // scanned whatever its extension: package_info.txt passed next to six folders was dropped without
+        // a trace, neither scanned nor listed as skipped.
+        void AddFile(string file, bool named)
         {
-            if (applySafeFilter && IsSafe(file, safeExtensions)) return;
+            if (!named && applySafeFilter && IsSafe(file, safeExtensions)) return;
             if (maxSizeBytes > 0)
             {
                 try
