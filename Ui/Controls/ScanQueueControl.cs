@@ -309,8 +309,9 @@ internal sealed class ScanQueueControl : UserControl
         if (_bucket != Bucket.All && BucketOf(i) != _bucket) return false;
         string q = _search.Text.Trim();
         if (q.Length > 0 &&
-            (i.FileName?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0 &&
-            (i.FilePath?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0)
+            i.DisplayName.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0 &&
+            (i.FilePath?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0 &&
+            (i.ContainerPath?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0)
             return false;
         return true;
     }
@@ -337,7 +338,7 @@ internal sealed class ScanQueueControl : UserControl
         string sortName = _sortCol >= 0 && _sortCol < _grid.Columns.Count ? _grid.Columns[_sortCol].Name : "";
         List<ScanItem> list = sortName switch
         {
-            "col_file" => src.OrderBy(i => i.FileName, StringComparer.OrdinalIgnoreCase).ToList(),
+            "col_file" => src.OrderBy(i => i.DisplayName, StringComparer.OrdinalIgnoreCase).ToList(),
             "col_size" => src.OrderBy(i => i.SizeBytes).ToList(),
             "col_status" => src.OrderBy(SeverityKey).ToList(),
             _ => src.OrderBy(i => (int)i.Status).ToList(),
@@ -794,7 +795,7 @@ internal sealed class ScanQueueControl : UserControl
         _grid.AutoGenerateColumns = false;
         EntityGrid.AddMarkColumn(_grid); // leading "mark" checkbox at column 0 (before the data columns
                                          // so _progressCol below stays a valid index)
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_file", HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.FileName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_file", HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.DisplayName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_size", HeaderText = Strings.ColSize, DataPropertyName = nameof(ScanItem.SizeText), Width = 80 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_status", HeaderText = Strings.ColStatus, DataPropertyName = nameof(ScanItem.StatusText), Width = 220 });
         var prog = new DataGridViewTextBoxColumn { Name = "col_progress", HeaderText = Strings.ColProgress, Width = 110, SortMode = DataGridViewColumnSortMode.NotSortable };

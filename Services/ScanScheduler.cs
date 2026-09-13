@@ -237,8 +237,12 @@ internal sealed class ScanScheduler
 
             // Archive expansion: swap each ZIP-family archive for its extracted members so each member
             // is hashed and looked up on its own (no upload). Archives we cannot open stay as-is.
+            var origins = new Dictionary<string, (string Archive, string Member)>(StringComparer.OrdinalIgnoreCase);
             if (opts.ExpandArchives)
-                files = await Task.Run(() => ExpandArchives(files, archiveTemps), ct);
+            {
+                var toExpand = files;
+                files = await Task.Run(() => ExpandArchives(toExpand, archiveTemps, origins), ct);
+            }
 
             // Risk-weighted ordering: scan the likeliest-malicious files first (cheap local signals).
             // Risk ordering scores every file before the first one is scanned, and scoring reads the disk
@@ -257,7 +261,9 @@ internal sealed class ScanScheduler
             _total = files.Count;
             using (var rowsOp = OpLog.Begin("Build rows", $"in: {files.Count} file(s)"))
             {
-                items = files.Select(f => new ScanItem(f)).ToList();
+                items = files.Select(f => origins.TryGetValue(f, out var o)
+                    ? new ScanItem(f) { ContainerPath = o.Archive, MemberPath = o.Member }
+                    : new ScanItem(f)).ToList();
                 rowsOp.Ok($"out: {items.Count} row(s)");
             }
             UiPost(() => BulkAdd(items));
@@ -389,14 +395,21 @@ internal sealed class ScanScheduler
 
     /// <summary>Replaces each expandable archive with its extracted member paths (tracking the temp
     /// folders for cleanup). Archives that fail to open are scanned as the archive file itself.</summary>
-    static List<string> ExpandArchives(List<string> files, List<string> tempDirs)
+    static List<string> ExpandArchives(List<string> files, List<string> tempDirs, Dictionary<string, (string Archive, string Member)> origins)
     {
         var result = new List<string>();
         foreach (var f in files)
         {
             if (!ArchiveExpander.IsExpandable(f)) { result.Add(f); continue; }
-            var members = ArchiveExpander.ExpandToTemp(f, out var td);
-            if (members.Count > 0) { result.AddRange(members); tempDirs.Add(td); }
+            var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var members = ArchiveExpander.ExpandToTemp(f, out var td, names);
+            if (members.Count > 0)
+            {
+                result.AddRange(members);
+                tempDirs.Add(td);
+                foreach (var m in members)
+                    origins[m] = (f, names.TryGetValue(m, out var inside) ? inside : Path.GetFileName(m));
+            }
             else { ArchiveExpander.CleanupTemp(td); result.Add(f); }
         }
         return result;
@@ -406,7 +419,7 @@ internal sealed class ScanScheduler
     {
         // Per file, at Debug: on a 300k-file sweep this is the only way to answer "what was it doing
         // when it stopped?" — the aggregate counters cannot point at a single stuck file.
-        using var op = OpLog.Begin("File", $"{item.FileName} ({item.SizeText}) — {item.FilePath}");
+        using var op = OpLog.Begin("File", $"{item.DisplayName} ({item.SizeText}) — {item.FilePath}");
         bool handedOff = false;
         try
         {
@@ -774,7 +787,7 @@ internal sealed class ScanScheduler
         finally { ReleaseSlot(); }
 
         if (report != null && opts.UseCache && report.TotalEngines > 0)
-            _cache.Put(md5, report, item.FilePath);
+            _cache.Put(md5, report, item.LastingPath);
 
         return (report, report != null ? LookupFailure.None : failure);
     }
@@ -963,7 +976,7 @@ internal sealed class ScanScheduler
                 if (report != null)
                 {
                     failure = LookupFailure.None;
-                    if (opts.UseCache && report.TotalEngines > 0) _cache.Put(md5, report, item.FilePath);
+                    if (opts.UseCache && report.TotalEngines > 0) _cache.Put(md5, report, item.LastingPath);
                 }
             }
             catch (OperationCanceledException) { SetStatus(item, ScanStatus.Cancelled); op.Note("cancelled"); return; }

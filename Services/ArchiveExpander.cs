@@ -68,7 +68,10 @@ internal static class ArchiveExpander
     /// paths. Bounded by member count and size; directory entries and zip-slip paths are skipped.
     /// Returns an empty list (and a temp dir that may not exist) on any failure.
     /// </summary>
-    public static List<string> ExpandToTemp(string archivePath, out string tempDir)
+    /// <param name="namesInArchive">When given, receives each extracted path's name inside the archive
+    /// (the zip entry's full name, or the path under the 7-Zip output folder). The extracted copy has a
+    /// flattened temp name that says nothing about where the member came from.</param>
+    public static List<string> ExpandToTemp(string archivePath, out string tempDir, Dictionary<string, string>? namesInArchive = null)
     {
         tempDir = Path.Combine(Path.GetTempPath(), "vtscan-archives",
             Path.GetFileNameWithoutExtension(archivePath) + "_" + Guid.NewGuid().ToString("N")[..8]);
@@ -76,15 +79,15 @@ internal static class ArchiveExpander
         try
         {
             Directory.CreateDirectory(tempDir);
-            if (ZipFamily.Contains(Path.GetExtension(archivePath))) ExtractZip(archivePath, tempDir, members);
-            else ExtractWith7z(archivePath, tempDir, members);
+            if (ZipFamily.Contains(Path.GetExtension(archivePath))) ExtractZip(archivePath, tempDir, members, namesInArchive);
+            else ExtractWith7z(archivePath, tempDir, members, namesInArchive);
             Log($"Archive '{Path.GetFileName(archivePath)}' expanded to {members.Count} member(s).", LogLevel.Info);
         }
         catch (Exception ex) { Log($"Archive expand failed for '{archivePath}': {ex.Message}", LogLevel.Warning); }
         return members;
     }
 
-    static void ExtractZip(string archivePath, string tempDir, List<string> members)
+    static void ExtractZip(string archivePath, string tempDir, List<string> members, Dictionary<string, string>? namesInArchive)
     {
         string root = Path.GetFullPath(tempDir);
         using var zip = ZipFile.OpenRead(archivePath);
@@ -100,12 +103,18 @@ internal static class ArchiveExpander
             string dest = Path.Combine(tempDir, flat);
             if (!Path.GetFullPath(dest).StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
 
-            try { entry.ExtractToFile(dest, overwrite: true); members.Add(dest); n++; }
+            try
+            {
+                entry.ExtractToFile(dest, overwrite: true);
+                members.Add(dest);
+                if (namesInArchive != null) namesInArchive[dest] = entry.FullName;
+                n++;
+            }
             catch (Exception ex) { Log($"Archive member extract failed ({entry.FullName}): {ex.Message}", LogLevel.Warning); }
         }
     }
 
-    static void ExtractWith7z(string archivePath, string tempDir, List<string> members)
+    static void ExtractWith7z(string archivePath, string tempDir, List<string> members, Dictionary<string, string>? namesInArchive)
     {
         try
         {
@@ -127,6 +136,7 @@ internal static class ArchiveExpander
                 if (n >= MaxEntries) { Log($"Archive '{archivePath}': stopped at {MaxEntries} members.", LogLevel.Warning); break; }
                 try { if (new FileInfo(f).Length > MaxEntryBytes) continue; } catch { }
                 members.Add(f);
+                if (namesInArchive != null) namesInArchive[f] = Path.GetRelativePath(tempDir, f);
                 n++;
             }
         }

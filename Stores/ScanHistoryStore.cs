@@ -96,8 +96,8 @@ internal static class ScanHistoryStore
         var e = new HistoryEntry
         {
             WhenUtc = DateTime.UtcNow,
-            Name = item.FileName,
-            Path = item.FilePath,
+            Name = item.DisplayName,
+            Path = item.LastingPath, // an archive member's temp copy is gone once the scan ends; the archive is not
             Md5 = item.Md5,
             Sha256 = item.Sha256,
             Verdict = item.Verdict.Length > 0 ? item.Verdict : item.Status.ToString(),

@@ -72,6 +72,21 @@ internal sealed class ScanItem : INotifyPropertyChanged
 
     public string FilePath { get; }
     public string FileName => Path.GetFileName(FilePath);
+
+    /// <summary>For a member extracted from an archive: the archive on disk. <see cref="FilePath"/> is then
+    /// a temp copy with a flattened name, deleted when the scan ends.</summary>
+    public string? ContainerPath { get; init; }
+    /// <summary>For a member extracted from an archive: its path inside the archive.</summary>
+    public string? MemberPath { get; init; }
+
+    /// <summary>What a row is called: the file name, or "archive.zip › path/inside" for an archive member,
+    /// which otherwise showed up as a stray file with a temp name and no hint of where it came from.</summary>
+    public string DisplayName => ContainerPath != null && MemberPath != null
+        ? Path.GetFileName(ContainerPath) + " › " + MemberPath
+        : FileName;
+
+    /// <summary>The path that still means something after the scan: the archive for a member, else the file.</summary>
+    public string LastingPath => ContainerPath ?? FilePath;
     /// <summary>Optional context shown next to the file name — e.g. the offending member of an archive
     /// ("› setup.exe") when the threat was found inside a downloaded .zip.</summary>
     public string? OriginNote { get; set; }
