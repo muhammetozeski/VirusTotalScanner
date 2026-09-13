@@ -136,11 +136,45 @@ internal static class ScanHistoryStore
         lock (Lock) { if (_dirty) Save(); }
     }
 
+    static readonly object WriteLock = new();
+    static long _version, _writtenVersion; // a snapshot is only written if nothing newer has been written
+    static int _backgroundSaveRunning;
+
+    /// <summary>
+    /// The throttled save of <see cref="Record"/>. Record runs on the UI thread for every finished file, and
+    /// serializing and writing 5,000 rows there took 125-175 ms every five seconds of a scan. The rows are
+    /// copied under the lock and written on a background task instead.
+    /// </summary>
     static void MaybeSave() // caller holds Lock
     {
         if (!_dirty) return;
         if (DateTime.UtcNow - _lastSaveUtc < TimeSpan.FromSeconds(5)) return;
-        Save();
+        if (Interlocked.Exchange(ref _backgroundSaveRunning, 1) == 1) return;
+
+        var snapshot = new List<HistoryEntry>(_entries ?? []);
+        long version = ++_version;
+        _dirty = false;
+        _lastSaveUtc = DateTime.UtcNow;
+        _ = Task.Run(() =>
+        {
+            try { WriteSnapshot(snapshot, version); }
+            catch (Exception ex) { _dirty = true; Log("History background save failed: " + ex.Message, LogLevel.Warning); }
+            finally { Interlocked.Exchange(ref _backgroundSaveRunning, 0); }
+        });
+    }
+
+    static void WriteSnapshot(List<HistoryEntry> rows, long version)
+    {
+        lock (WriteLock)
+        {
+            if (version <= _writtenVersion) return; // a newer save already reached the disk
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            Directory.CreateDirectory(ConfigPathResolver.DataFolder);
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(rows, JsonOpts));
+            _writtenVersion = version;
+            if (clock.ElapsedMilliseconds >= 100)
+                Log($"History save took {clock.ElapsedMilliseconds} ms ({rows.Count} entries, thread {Environment.CurrentManagedThreadId}).", LogLevel.Warning);
+        }
     }
 
     static List<HistoryEntry> Load()
@@ -158,13 +192,9 @@ internal static class ScanHistoryStore
     {
         try
         {
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-            Directory.CreateDirectory(ConfigPathResolver.DataFolder);
-            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
+            WriteSnapshot(new List<HistoryEntry>(_entries ?? []), ++_version);
             _lastSaveUtc = DateTime.UtcNow;
             _dirty = false;
-            if (clock.ElapsedMilliseconds >= 100)
-                Log($"History save took {clock.ElapsedMilliseconds} ms ({_entries?.Count ?? 0} entries, thread {Environment.CurrentManagedThreadId}).", LogLevel.Warning);
         }
         catch (Exception ex) { Log("History save failed: " + ex.Message, LogLevel.Warning); }
     }
