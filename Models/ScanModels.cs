@@ -223,6 +223,10 @@ internal sealed class ScanOptions
     /// <summary>When true, force every file through VT even if trusted (re-scan ignoring trust).</summary>
     public bool BypassTrust { get; set; }
 
+    /// <summary>Started by the app on its own (pending-outbox retry, auto-resume, USB auto-scan), not by
+    /// the user. A scan the user asks for replaces a running automatic one instead of waiting behind it.</summary>
+    public bool Automatic { get; set; }
+
     public static ScanOptions FromSettings(bool recurse) => new()
     {
         Recurse = recurse,

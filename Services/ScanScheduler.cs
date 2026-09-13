@@ -86,10 +86,32 @@ internal sealed class ScanScheduler
     /// is active and gets queued behind it. Carries the total pending path count.</summary>
     public event Action<int>? PendingQueued;
 
+    bool _runIsAutomatic; // the pass running now was started by the app, not the user
+    bool _preempting;     // a user request cancelled that automatic pass and waits in _pendingPaths
+
+    /// <summary>True while the running pass is one the app started on its own.</summary>
+    public bool IsRunningAutomatic { get { lock (_pendingLock) return IsRunning && _runIsAutomatic; } }
+
     public async Task RunAsync(IEnumerable<string> paths, ScanOptions opts, CancellationToken externalCt = default)
     {
         lock (_pendingLock)
         {
+            if (IsRunning && _runIsAutomatic && !opts.Automatic)
+            {
+                // The user asked for a scan while the app was busy with one of its own (a retry of the
+                // pending outbox, an auto-resumed session). Queueing behind it put the user's folder at
+                // the back of an unrelated list that could run for hours; the window showed that list
+                // instead of the folder that was right-clicked. The automatic pass stops and the user's
+                // request runs next, on a cleared table. Files the automatic pass did not reach stay in
+                // their store and are retried another time.
+                _pendingPaths.Clear();
+                _pendingPaths.AddRange(paths);
+                _pendingOpts = opts;
+                _preempting = true;
+                Log($"User scan request replaces the running automatic scan: {string.Join(", ", paths.Take(4))}", LogLevel.Info);
+                try { _cts?.Cancel(); } catch (Exception ex) { Log("Stopping the automatic scan failed: " + ex.Message, LogLevel.Warning); }
+                return;
+            }
             if (IsRunning)
             {
                 // Anything the running pass already walks is dropped, not queued. An auto-resumed
@@ -105,13 +127,16 @@ internal sealed class ScanScheduler
                 if (fresh.Count == 0) return;
 
                 _pendingPaths.AddRange(fresh);
-                _pendingOpts = opts;
+                // An automatic request joining a queued user request must not turn the user's batch into
+                // an automatic one (which the next user request would then cancel).
+                if (!(opts.Automatic && _pendingOpts is { Automatic: false })) _pendingOpts = opts;
                 int pending = _pendingPaths.Count;
                 Log($"Scan already running; queued {pending} path(s) for an automatic follow-up run.", LogLevel.Info);
                 UiPost(() => { try { PendingQueued?.Invoke(pending); } catch (Exception ex) { Log("PendingQueued handler failed: " + ex.Message, LogLevel.Warning); } });
                 return;
             }
             IsRunning = true; // reserved inside the lock, so two racing requests can't both start
+            _runIsAutomatic = opts.Automatic;
             _activeTargets = paths.ToArray();
         }
 
@@ -123,15 +148,18 @@ internal sealed class ScanScheduler
             await RunCoreAsync(runPaths, runOpts, clearQueue, externalCt);
             lock (_pendingLock)
             {
-                if (_cts?.IsCancellationRequested == true) { _pendingPaths.Clear(); _pendingOpts = null; } // Cancel covers the queued batch too
-                if (_pendingPaths.Count == 0) { IsRunning = false; _activeTargets = []; return; }
+                bool preempted = _preempting;
+                _preempting = false;
+                if (!preempted && _cts?.IsCancellationRequested == true) { _pendingPaths.Clear(); _pendingOpts = null; } // Cancel covers the queued batch too
+                if (_pendingPaths.Count == 0) { IsRunning = false; _runIsAutomatic = false; _activeTargets = []; return; }
                 var next = _pendingPaths.ToArray();
                 runPaths = next;
                 _activeTargets = next;
                 _pendingPaths.Clear();
                 runOpts = _pendingOpts ?? runOpts;
                 _pendingOpts = null;
-                clearQueue = false;
+                _runIsAutomatic = runOpts.Automatic;
+                clearQueue = preempted; // the user's request replaces the automatic list; a follow-up appends
             }
         }
     }
@@ -174,6 +202,9 @@ internal sealed class ScanScheduler
             + $"cacheDays={opts.CacheDays}/{opts.ThreatCacheDays} clearQueue={clearQueue}");
         _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
         var ct = _cts.Token;
+        // A user request that arrived between two passes cancelled the previous pass's token, not this
+        // one. This automatic pass must not start in its place.
+        lock (_pendingLock) if (_preempting) _cts.Cancel();
         // Pause belongs to the run it was pressed in. A new run always starts moving.
         if (_pause.IsPaused) { _pause.Resume(); runOp.Step("pause left over from the previous run lifted"); }
         ResetCounters();

@@ -69,7 +69,7 @@ internal sealed partial class MainForm : Form
         if (Settings.AutoScanUsb)
         {
             _tabs.SelectedIndex = 1; // Tarama
-            _scan.StartScan([drive], recurse: true, background: true);
+            _scan.StartScan([drive], recurse: true, background: true, automatic: true);
             _toastAction = ToastAction.None;
             _tray.BalloonTipTitle = Strings.ToastUsbScanningTitle;
             _tray.BalloonTipText = string.Format(Strings.ToastUsbScanningTextFormat, letter);
@@ -364,13 +364,18 @@ internal sealed partial class MainForm : Form
 
     internal void SelectFirstResult() => _scan.SelectFirst();
 
+    /// <summary>Set as soon as a real path arrives from outside (command line or a forwarded launch), so the
+    /// start-up retries know the user already said what to scan.</summary>
+    volatile bool _externalPathsArrived;
+
     public void EnqueueExternalPaths(string[] paths)
     {
+        // Ignore control tokens like "--show"; keep only real existing paths.
+        var real = paths.Where(p => !p.StartsWith("--") && (File.Exists(p) || Directory.Exists(p))).ToArray();
+        if (real.Length > 0) _externalPathsArrived = true;
         SafeUi(() =>
         {
             RestoreFromTray();
-            // Ignore control tokens like "--show"; keep only real existing paths.
-            var real = paths.Where(p => !p.StartsWith("--") && (File.Exists(p) || Directory.Exists(p))).ToArray();
             if (real.Length == 0) return;
             _tabs.SelectedIndex = 1;
             _scan.StartScan(real, recurse: true);
@@ -554,9 +559,21 @@ internal sealed partial class MainForm : Form
         // A stale right-click menu (exe moved) is surfaced passively on the overview coverage card
         // with a one-click repair — no modal nag on startup.
 
-        OfferResume();
+        // After every Shown handler, not inside this one: the paths this launch was started with (a
+        // right-click) are handed over by a Shown handler registered after this one. Started here, the
+        // outbox retry won the race, filled the table with an unrelated list, and the right-clicked
+        // folder was queued behind it. A launch that brought paths runs exactly those.
+        BeginInvoke(() =>
+        {
+            if (_externalPathsArrived)
+            {
+                Log("Launched with paths to scan: the pending-outbox retry and the session resume wait for a plain launch.", LogLevel.Info);
+                return;
+            }
+            OfferResume();
+            RetryPendingOutbox();
+        });
         StartWatchCheck();
-        RetryPendingOutbox();
         CheckSweepResult();
         if (Settings.QuarantineRetentionDays > 0)
             try { QuarantineVault.PurgeOlderThan(Settings.QuarantineRetentionDays); } catch (Exception ex) { Log("Retention purge failed: " + ex.Message, LogLevel.Warning); }
@@ -642,7 +659,7 @@ internal sealed partial class MainForm : Form
             if (paths.Length == 0) return;
             UiStatusHub.Report(Strings.StatusSourceOutbox, string.Format(Strings.StatusOutboxRetryFormat, paths.Length));
             _tabs.SelectedIndex = 1; // Tarama
-            _scan.StartScan(paths, recurse: false);
+            _scan.StartScan(paths, recurse: false, automatic: true);
         }
         catch (Exception ex) { Log("Pending-outbox retry failed: " + ex.Message, LogLevel.Warning); }
     }
@@ -687,7 +704,7 @@ internal sealed partial class MainForm : Form
         {
             ScanSessionStore.Clear();
             _tabs.SelectedIndex = 1;
-            _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust);
+            _scan.StartScan(s.Paths, s.Recurse, s.BypassTrust, automatic: true);
             return;
         }
 

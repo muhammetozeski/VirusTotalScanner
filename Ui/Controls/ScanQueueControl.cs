@@ -925,7 +925,9 @@ internal sealed class ScanQueueControl : UserControl
     /// (USB auto-scan, watcher, sweep) rather than the user picking files — gates auto-quarantine.</summary>
     public bool IsBackgroundScan { get; private set; }
 
-    public void StartScan(IEnumerable<string> paths, bool recurse, bool bypassTrust = false, bool background = false)
+    /// <param name="automatic">The app started this scan on its own (outbox retry, auto-resume, USB
+    /// auto-scan). A scan the user asks for replaces it instead of queueing behind it.</param>
+    public void StartScan(IEnumerable<string> paths, bool recurse, bool bypassTrust = false, bool background = false, bool automatic = false)
     {
         IsBackgroundScan = background;
         bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
@@ -937,9 +939,10 @@ internal sealed class ScanQueueControl : UserControl
         }
         var opts = ScanOptions.FromSettings(recurse);
         opts.BypassTrust = bypassTrust;
+        opts.Automatic = automatic;
 
         var pathList = paths.ToList();
-        opts.ExpandArchives = ShouldExpandArchives(pathList, background);
+        opts.ExpandArchives = ShouldExpandArchives(pathList, background || automatic); // nobody is there to answer the archive question
         // Picking files by hand means "check exactly these", so the code-shaped-only scope does not
         // apply to them — only to folder sweeps, where it is the difference between 32,000 lookups
         // and 228,000.
@@ -965,7 +968,9 @@ internal sealed class ScanQueueControl : UserControl
     {
         try
         {
-            if (_scheduler.IsRunning) return false;   // follow-up batch: keep the running run's shape
+            // Follow-up batch: keep the running run's shape. Not when the running pass is automatic — this
+            // request replaces it and is a fresh run of its own.
+            if (_scheduler.IsRunning && !_scheduler.IsRunningAutomatic) return false;
             if (background) { Log("Archive expansion skipped: unattended scan.", LogLevel.Info); return false; }
 
             foreach (var p in paths)
