@@ -217,7 +217,7 @@ internal sealed class ScanOverviewControl : UserControl
     /// what is actually guarding the machine going forward (download watch ships OFF, sweep is opt-in).</summary>
     void RefreshCoverage()
     {
-        _coverageRows.Controls.Clear();
+        while (_coverageRows.Controls.Count > 0) _coverageRows.Controls[0].Dispose(); // Clear() leaked each row's handles
         string watchLabel = Settings.WatchDownloads
             ? string.Format(Strings.CoverageWatchDownloadsCountFormat, DownloadsTriageService.Folders().Count)
             : Strings.CoverageWatchDownloads;
