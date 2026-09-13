@@ -197,6 +197,7 @@ internal sealed class ScanQueueControl : UserControl
         _detail.MarkCleanRequested += MarkClean;
 
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
+        _scheduler.HasUiThread = true;
         _scheduler.ProgressChanged += p => UiSlice.Measure("progress line", () => OnProgress(p));
         _scheduler.ItemFinished += OnItemFinished;
         _scheduler.Started += () => SafeUi(() =>

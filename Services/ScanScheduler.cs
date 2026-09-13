@@ -609,6 +609,23 @@ internal sealed class ScanScheduler
     /// <summary>A sweep large enough that the machine has to keep being usable while it runs.</summary>
     const int SweepSizeThatNeedsToBePolite = 5000;
 
+    /// <summary>Set by the GUI: <see cref="UiPost"/> reaches a window's UI thread. The command line posts inline,
+    /// onto a scan thread, whose priority must not be raised.</summary>
+    public bool HasUiThread { get; set; }
+
+    static void SetCurrentThreadPriority(System.Threading.ThreadPriority priority)
+    {
+        try
+        {
+            // UiPost runs the action inline when the window has no handle yet; only a thread that runs a
+            // message loop is the UI thread.
+            if (!System.Windows.Forms.Application.MessageLoop) return;
+            System.Threading.Thread.CurrentThread.Priority = priority;
+            Log($"UI thread priority set to {priority}.", LogLevel.Info);
+        }
+        catch (Exception ex) { Log("Could not set the UI thread priority: " + ex.Message, LogLevel.Warning); }
+    }
+
     /// <summary>
     /// Drops the process to below-normal priority for the length of a large sweep, and puts it back
     /// afterwards. Two dozen workers reading the disk flat out at normal priority make the whole machine
@@ -625,11 +642,20 @@ internal sealed class ScanScheduler
             if (previous != System.Diagnostics.ProcessPriorityClass.Normal) return null; // the user set it; leave it
             me.PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
             Log($"Sweep of {fileCount} file(s): process priority lowered to BelowNormal so the machine stays usable.", LogLevel.Info);
+
+            // The priority class covers every thread, the window's too. Scanning the Bannerlord folders the
+            // machine sat at 55-100% CPU (Defender reading the same files, the keyless browser, System), and a
+            // below-normal UI thread lost to all of it: eight grid rows took 900 ms to paint while the process
+            // itself used almost no CPU. Highest inside a below-normal process is the base priority of an
+            // ordinary window's thread, so the window keeps its place and only the scan work steps back.
+            if (HasUiThread) UiPost(() => SetCurrentThreadPriority(System.Threading.ThreadPriority.Highest));
+
             return new Restore(() =>
             {
                 try
                 {
                     System.Diagnostics.Process.GetCurrentProcess().PriorityClass = previous;
+                    if (HasUiThread) UiPost(() => SetCurrentThreadPriority(System.Threading.ThreadPriority.Normal));
                     Log("Sweep finished: process priority restored to " + previous + ".", LogLevel.Info);
                 }
                 catch (Exception ex) { Log("Could not restore process priority: " + ex.Message, LogLevel.Warning); }
