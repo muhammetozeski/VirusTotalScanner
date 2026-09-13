@@ -916,10 +916,16 @@ internal sealed class ScanQueueControl : UserControl
     };
 
     // Tint each row by its verdict so the list scans at a glance (red threat, yellow suspicious, …).
+    /// <summary>The item behind a grid row, read from the bound list. <c>_grid.Rows[i]</c> would do too, but
+    /// indexing a row makes the grid replace its shared row with a full row object — on every paint of
+    /// every visible cell, several times a second while a scan runs.</summary>
+    ScanItem? RowItem(int rowIndex) =>
+        rowIndex >= 0 && _grid.DataSource is IList<ScanItem> rows && rowIndex < rows.Count ? rows[rowIndex] : null;
+
     void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex == _progressCol) return;
-        if (_grid.Rows[e.RowIndex].DataBoundItem is not ScanItem item) return;
+        if (RowItem(e.RowIndex) is not ScanItem item) return;
         var p = Theme.Current;
         Color? c = item.Status switch
         {
@@ -942,7 +948,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (e.RowIndex < 0 || e.ColumnIndex != _progressCol) return;
         e.PaintBackground(e.CellBounds, true);
-        if (_grid.Rows[e.RowIndex].DataBoundItem is ScanItem item)
+        if (RowItem(e.RowIndex) is ScanItem item)
         {
             var p = Theme.Current;
             int pct = item.Status is ScanStatus.Completed or ScanStatus.Skipped or ScanStatus.TrustedSkipped ? 100 : Math.Clamp(item.Progress, 0, 100);
@@ -957,11 +963,15 @@ internal sealed class ScanQueueControl : UserControl
             };
             int w = (int)(rect.Width * pct / 100.0);
             if (w > 0) using (var fb = new SolidBrush(c)) e.Graphics!.FillRectangle(fb, rect.X, rect.Y, w, rect.Height);
-            TextRenderer.DrawText(e.Graphics, pct + "%", new Font("Segoe UI", 8f), rect, p.Text,
+            TextRenderer.DrawText(e.Graphics, pct + "%", ProgressFont, rect, p.Text,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
         e.Handled = true;
     }
+
+    /// <summary>One font for every progress cell. A new Font per painted cell created a GDI font handle
+    /// per visible row on every repaint, none of them disposed.</summary>
+    static readonly Font ProgressFont = new("Segoe UI", 8f);
 
     // ---- actions ----
 
