@@ -15,6 +15,7 @@ internal enum ScanStatus
     Skipped,
     TrustedSkipped, // valid trusted signature or known-good list — VT skipped, NOT "clean"
     Cancelled,
+    AwaitingLookup, // hashed and handed to the network stage; not yet asked. Last, so stored values keep their numbers.
 }
 
 /// <summary>Why a lookup ended with no report. "VirusTotal has never seen this file and there is no key
@@ -135,6 +136,7 @@ internal sealed class ScanItem : INotifyPropertyChanged
     public string StatusText => _status switch
     {
         ScanStatus.Queued => Strings.StatusQueued,
+        ScanStatus.AwaitingLookup => Detail ?? Strings.StatusAwaitingLookup,
         ScanStatus.Hashing => Strings.StatusHashing,
         ScanStatus.LookingUp => Strings.StatusLookingUp,
         ScanStatus.Uploading => Detail ?? Strings.StatusUploading,
@@ -178,6 +180,13 @@ internal sealed class OverallProgress
     public int Failed { get; set; }
     public int Skipped { get; set; }
     public int SignedSkipped { get; set; }
+    /// <summary>Hashed files waiting their turn at VirusTotal.</summary>
+    public int AwaitingLookup { get; set; }
+    /// <summary>Uploaded files whose VirusTotal analysis is still running.</summary>
+    public int AnalysesPending { get; set; }
+    public bool Paused { get; set; }
+    /// <summary>Set while every VirusTotal channel came back empty and the network stage is holding off.</summary>
+    public DateTime? NetworkHeldUntilUtc { get; set; }
     public TimeSpan Elapsed { get; set; }
     public double FilesPerSec { get; set; }
     public TimeSpan? Remaining { get; set; }

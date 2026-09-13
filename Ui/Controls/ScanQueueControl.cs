@@ -1566,6 +1566,7 @@ internal sealed class ScanQueueControl : UserControl
         try
         {
             var target = FirstMatchingRow(i => i.Status is ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)
+                      ?? FirstMatchingRow(i => i.Status == ScanStatus.AwaitingLookup)
                       ?? FirstMatchingRow(i => i.Status == ScanStatus.Queued);
             if (target == null) { _summary.Text = Strings.JumpNothingRunning; return; }
 
@@ -1597,6 +1598,10 @@ internal sealed class ScanQueueControl : UserControl
         _lastProgress = p;
         _overall.Invalidate();
         string text = string.Format(Strings.ProgressSummaryFormat, p.Total, p.Done, p.Malicious, p.Suspicious, p.Clean, p.SignedSkipped, p.Failed, p.Unknown);
+        if (p.Paused) text = Strings.ProgressPausedPrefix + text;
+        if (p.AwaitingLookup > 0) text += string.Format(Strings.ProgressAwaitingLookupFormat, p.AwaitingLookup);
+        if (p.AnalysesPending > 0) text += string.Format(Strings.ProgressAnalysesPendingFormat, p.AnalysesPending);
+        if (p.NetworkHeldUntilUtc is { } held) text += string.Format(Strings.ProgressNetworkHeldFormat, held.ToLocalTime());
         if (p.Done < p.Total && p.FilesPerSec > 0)
         {
             string eta = p.Remaining is { } rem ? string.Format(Strings.ProgressEtaFormat, ShortDuration(rem)) : "";

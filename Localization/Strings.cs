@@ -375,6 +375,10 @@ internal static class Strings
 
     public static string ProgressSummaryFormat = "Toplam {0} • Tamamlanan {1} • Zararlı {2} • Şüpheli {3} • Temiz {4} • İmzalı↷atlandı {5} • Hata {6} • Bilinmiyor {7}";
     public static string PendingQueuedFormat = "{0} öğe kuyruğa eklendi — bu tarama bitince otomatik taranacak.";
+    public static string ProgressPausedPrefix = "⏸ Duraklatıldı • ";
+    public static string ProgressAwaitingLookupFormat = " • VirusTotal sırasında {0}";
+    public static string ProgressAnalysesPendingFormat = " • Analizi süren {0}";
+    public static string ProgressNetworkHeldFormat = " • VirusTotal cevap vermiyor, {0:HH:mm:ss}'e kadar bekleniyor";
 
     // ---- scan queue control: scan-entry / lookup / export / cache messages ----
     public static string FolderPickDescription = "Taranacak klasör (alt klasörler dahil)";
@@ -471,6 +475,8 @@ internal static class Strings
 
     // ---- scan item status text ----
     public static string StatusQueued = "Sırada";
+    public static string StatusAwaitingLookup = "Hash alındı, VirusTotal sırası bekleniyor";
+    public static string StatusRequeuedFormat = "VirusTotal cevap vermedi, yeniden sorulacak (deneme {0}/{1})";
     public static string StatusHashing = "Hash hesaplanıyor…";
     public static string StatusLookingUp = "VirusTotal sorgulanıyor…";
     public static string StatusUploading = "Yükleniyor…";

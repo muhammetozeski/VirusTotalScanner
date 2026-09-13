@@ -238,6 +238,10 @@
   <s name="MenuQuarantine">⚠  Quarantine (.VIRUS)</s>
   <s name="ProgressSummaryFormat">Total {0} • Done {1} • Malicious {2} • Suspicious {3} • Clean {4} • Signed↷skipped {5} • Errors {6} • Unknown {7}</s>
   <s name="PendingQueuedFormat">{0} item(s) queued — they will be scanned automatically when this scan finishes.</s>
+  <s name="ProgressPausedPrefix">⏸ Paused • </s>
+  <s name="ProgressAwaitingLookupFormat"> • Waiting for VirusTotal {0}</s>
+  <s name="ProgressAnalysesPendingFormat"> • Analysis running {0}</s>
+  <s name="ProgressNetworkHeldFormat"> • VirusTotal is not answering, holding until {0:HH:mm:ss}</s>
   <s name="FolderPickDescription">Folder to scan (subfolders included)</s>
   <s name="NeedApiKeyWarn">Add an API key before scanning, or enable signature-skip / keyless (GUI) mode in Trust Sources.</s>
   <s name="ArchivePrompt">The selection contains an archive (zip/nupkg/jar…).\n\nExpand its members and look each one up separately (no quota)?\n\nYes = scan members   •   No = scan the archive itself</s>
@@ -335,6 +339,8 @@
   <s name="ColFirstSeen">First seen</s>
   <s name="ColPaths">Paths</s>
   <s name="StatusQueued">Queued</s>
+  <s name="StatusAwaitingLookup">Hashed, waiting for its turn at VirusTotal</s>
+  <s name="StatusRequeuedFormat">VirusTotal did not answer, will ask again (attempt {0}/{1})</s>
   <s name="StatusHashing">Hashing…</s>
   <s name="StatusLookingUp">Looking up on VirusTotal…</s>
   <s name="StatusUploading">Uploading…</s>

@@ -321,8 +321,8 @@ internal sealed class ScanScheduler
             {
                 foreach (var it in items)
                 {
-                    if (it.Status is not (ScanStatus.Queued or ScanStatus.Hashing or ScanStatus.LookingUp
-                        or ScanStatus.Uploading or ScanStatus.Polling)) continue;
+                    if (it.Status is not (ScanStatus.Queued or ScanStatus.AwaitingLookup or ScanStatus.Hashing
+                        or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)) continue;
                     it.Status = ScanStatus.Cancelled;
                     closed++;
                 }
@@ -455,7 +455,7 @@ internal sealed class ScanScheduler
             // there are only two dozen of them: the sweep dropped from 2,587 files a minute to 20 the
             // moment they were all queued on the network. So the file is handed to the network stage,
             // which runs on its own bounded set of tasks, and this worker goes back to the disk.
-            SetStatus(item, ScanStatus.Queued);
+            SetStatus(item, ScanStatus.AwaitingLookup);
             if (!_netQueue!.Writer.TryWrite(new NetworkJob(item, md5, sha256, opts)))
             {
                 // An unbounded channel only refuses after it is completed, i.e. the run is ending.
@@ -638,7 +638,7 @@ internal sealed class ScanScheduler
     async Task<(VtFileReport? Report, LookupFailure Failure)> DoLookupAsync(ScanItem item, string md5, string sha256, ScanOptions opts, CancellationToken ct)
     {
         await _pause.WaitWhilePausedAsync(ct);
-        SetStatus(item, ScanStatus.LookingUp);
+        ItemWrite(() => { item.Detail = null; item.Status = ScanStatus.LookingUp; }); // a retry note from the queue no longer applies
 
         bool guiAvailable = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         VtFileReport? report = null;
@@ -873,7 +873,8 @@ internal sealed class ScanScheduler
                     if (again.Attempt <= MaxLookupAttempts && _netQueue.Writer.TryWrite(again))
                     {
                         HoldOffChannels("every channel came back empty");
-                        SetStatus(job.Item, ScanStatus.Queued);
+                        string retry = string.Format(Strings.StatusRequeuedFormat, again.Attempt, MaxLookupAttempts);
+                        ItemWrite(() => { job.Item.Detail = retry; job.Item.Status = ScanStatus.AwaitingLookup; });
                         fileOp.Note($"out: no channel could answer — requeued (attempt {again.Attempt})");
                         continue;
                     }
@@ -1155,10 +1156,29 @@ internal sealed class ScanScheduler
         Volatile.Write(ref _progressDirty, 1);
     }
 
-    /// <summary>Reports progress if anything finished since the last report.</summary>
+    // What the summary line last showed about the work that is not finished yet. Only the flush timer
+    // touches these.
+    int _shownAwaiting = -1, _shownAnalyses = -1;
+    bool _shownPaused;
+    long _shownHeldTicks;
+
+    /// <summary>
+    /// Reports progress if anything finished since the last report, or if the unfinished work changed
+    /// shape. Hashing a file finishes nothing, and neither does a pause or a hold-off on VirusTotal, so a
+    /// report driven only by finished files left the summary frozen on a number while the queue for
+    /// VirusTotal grew by thousands — the window gave no sign of what the scan was doing.
+    /// </summary>
     void FlushProgress()
     {
-        if (Interlocked.Exchange(ref _progressDirty, 0) == 1) ReportProgress();
+        int awaiting = NetworkQueueDepth, analyses = _pendingAnalyses.Count;
+        bool paused = _pause.IsPaused;
+        long held = Interlocked.Read(ref _channelsHeldUntilTicks);
+        bool shapeChanged = awaiting != _shownAwaiting || analyses != _shownAnalyses || paused != _shownPaused || held != _shownHeldTicks;
+        if (Interlocked.Exchange(ref _progressDirty, 0) == 1 || shapeChanged)
+        {
+            (_shownAwaiting, _shownAnalyses, _shownPaused, _shownHeldTicks) = (awaiting, analyses, paused, held);
+            ReportProgress();
+        }
     }
 
     /// <summary>Rolling files/sec over the recent window + a remaining-time estimate, so trusted-skip
@@ -1193,7 +1213,12 @@ internal sealed class ScanScheduler
             Failed = _failed,
             Skipped = _skipped,
             SignedSkipped = _signedSkipped,
+            AwaitingLookup = NetworkQueueDepth,
+            AnalysesPending = _pendingAnalyses.Count,
+            Paused = _pause.IsPaused,
         };
+        long held = Interlocked.Read(ref _channelsHeldUntilTicks);
+        if (held > DateTime.UtcNow.Ticks) p.NetworkHeldUntilUtc = new DateTime(held, DateTimeKind.Utc);
         var (rate, rem) = ComputeRate(_total, _done);
         p.Elapsed = _stopwatch.Elapsed;
         p.FilesPerSec = rate;
