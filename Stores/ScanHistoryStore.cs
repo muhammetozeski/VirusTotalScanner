@@ -90,7 +90,7 @@ internal static class ScanHistoryStore
     {
         if (item == null) return;
         // Only log items that reached a terminal state (not mid-scan transitions).
-        if (item.Status is ScanStatus.Queued or ScanStatus.AwaitingLookup or ScanStatus.Hashing or ScanStatus.LookingUp
+        if (item.Status is ScanStatus.Queued or ScanStatus.AwaitingLookup or ScanStatus.CheckingSignature or ScanStatus.Hashing or ScanStatus.LookingUp
             or ScanStatus.Uploading or ScanStatus.Polling) return;
 
         var e = new HistoryEntry

@@ -16,6 +16,7 @@ internal enum ScanStatus
     TrustedSkipped, // valid trusted signature or known-good list — VT skipped, NOT "clean"
     Cancelled,
     AwaitingLookup, // hashed and handed to the network stage; not yet asked. Last, so stored values keep their numbers.
+    CheckingSignature, // reading and verifying the file's Authenticode signature
 }
 
 /// <summary>Why a lookup ended with no report. "VirusTotal has never seen this file and there is no key
@@ -68,10 +69,46 @@ internal sealed class ScanItem : INotifyPropertyChanged
     public ScanItem(string filePath)
     {
         FilePath = filePath;
+        AddedUtcTicks = DateTime.UtcNow.Ticks;
+        AddedSequence = Interlocked.Increment(ref _sequence);
+        _activityUtcTicks = AddedUtcTicks;
+        _activitySequence = AddedSequence;
     }
 
     public string FilePath { get; }
     public string FileName => Path.GetFileName(FilePath);
+
+    /// <summary>One counter for both "added" and "something happened", so ties inside the same clock tick
+    /// still sort in the order things really happened.</summary>
+    static long _sequence;
+
+    /// <summary>The newest sequence number any row has taken. A list sorted by activity is only out of date
+    /// when this has moved.</summary>
+    public static long LatestSequence => Interlocked.Read(ref _sequence);
+
+    /// <summary>When the row was created in this session (UTC ticks).</summary>
+    public long AddedUtcTicks { get; }
+    public long AddedSequence { get; }
+    public DateTime AddedLocal => new DateTime(AddedUtcTicks, DateTimeKind.Utc).ToLocalTime();
+    public string AddedText => AddedLocal.ToString("dd.MM HH:mm:ss.fff");
+
+    long _activityUtcTicks, _activitySequence;
+
+    /// <summary>When the program last did something to this file: its status, detail, progress, hashes,
+    /// report or error changed. Written by scan threads, read by the UI.</summary>
+    public long ActivityUtcTicks => Interlocked.Read(ref _activityUtcTicks);
+    public long ActivitySequence => Interlocked.Read(ref _activitySequence);
+    public DateTime ActivityLocal => new DateTime(ActivityUtcTicks, DateTimeKind.Utc).ToLocalTime();
+    public string ActivityText => ActivityLocal.ToString("HH:mm:ss.fff");
+
+    void Touch()
+    {
+        Interlocked.Exchange(ref _activityUtcTicks, DateTime.UtcNow.Ticks);
+        Interlocked.Exchange(ref _activitySequence, Interlocked.Increment(ref _sequence));
+    }
+
+    /// <summary>The extension the row is judged by: the member's for an archive member, else the file's.</summary>
+    public string Extension => Path.GetExtension(MemberPath ?? FilePath).ToLowerInvariant();
 
     /// <summary>For a member extracted from an archive: the archive on disk. <see cref="FilePath"/> is then
     /// a temp copy with a flattened name, deleted when the scan ends.</summary>
@@ -162,8 +199,9 @@ internal sealed class ScanItem : INotifyPropertyChanged
     {
         ScanStatus.Queued => Strings.StatusQueued,
         ScanStatus.AwaitingLookup => Detail ?? Strings.StatusAwaitingLookup,
+        ScanStatus.CheckingSignature => Strings.StatusCheckingSignature,
         ScanStatus.Hashing => Strings.StatusHashing,
-        ScanStatus.LookingUp => Strings.StatusLookingUp,
+        ScanStatus.LookingUp => Detail ?? Strings.StatusLookingUp,
         ScanStatus.Uploading => Detail ?? Strings.StatusUploading,
         ScanStatus.Polling => Detail ?? Strings.StatusPolling,
         ScanStatus.Completed => Report == null ? Strings.StatusCompleted :
@@ -184,6 +222,7 @@ internal sealed class ScanItem : INotifyPropertyChanged
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return false;
         field = value;
+        Touch();
         OnPropertyChanged(name);
         return true;
     }

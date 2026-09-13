@@ -376,8 +376,8 @@ internal sealed class ScanScheduler
             {
                 foreach (var it in items)
                 {
-                    if (it.Status is not (ScanStatus.Queued or ScanStatus.AwaitingLookup or ScanStatus.Hashing
-                        or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)) continue;
+                    if (it.Status is not (ScanStatus.Queued or ScanStatus.AwaitingLookup or ScanStatus.CheckingSignature
+                        or ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)) continue;
                     it.Status = ScanStatus.Cancelled;
                     closed++;
                 }
@@ -431,6 +431,7 @@ internal sealed class ScanScheduler
             // (Trusted = vouched-for provenance, NOT "clean" — it never shows the green banner.)
             if (opts.SkipTrusted && !opts.BypassTrust)
             {
+                SetStatus(item, ScanStatus.CheckingSignature); // verifying can take seconds on a large file
                 var trust = TrustService.Evaluate(item.FilePath);
                 item.Trust = trust; // keep the signature signal even when the file is still sent to VT
                 if (trust.Trusted) ProductSignerRegistry.RecordTrusted(item.FilePath, trust.Publisher);
@@ -729,7 +730,6 @@ internal sealed class ScanScheduler
     async Task<(VtFileReport? Report, LookupFailure Failure)> DoLookupAsync(ScanItem item, string md5, string sha256, ScanOptions opts, CancellationToken ct)
     {
         await _pause.WaitWhilePausedAsync(ct);
-        ItemWrite(() => { item.Detail = null; item.Status = ScanStatus.LookingUp; }); // a retry note from the queue no longer applies
 
         bool guiAvailable = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
         VtFileReport? report = null;
@@ -737,6 +737,10 @@ internal sealed class ScanScheduler
         bool guiAnswered = false;      // the browser actually ran the lookup (rather than being skipped as busy)
         bool vtHasNeverSeenIt = false; // the API answered 404 — asking any other channel gets the same 404
 
+        // The row says which wait it is in. "VirusTotal sorgulanıyor" for every one of them left a file
+        // showing the same text for minutes while it was only queued for a connection slot, a key or the
+        // browser, and nothing on screen told those apart.
+        ItemWrite(() => { item.Detail = Strings.StatusWaitingLookupSlot; item.Status = ScanStatus.AwaitingLookup; });
         await _lookupGate!.WaitAsync(ct);
         int slotHeld = 1;
         void ReleaseSlot() { if (Interlocked.Exchange(ref slotHeld, 0) == 1) _lookupGate!.Release(); }
@@ -753,6 +757,9 @@ internal sealed class ScanScheduler
                 // was 15 lookups a minute against the 56 the keys allow. A worker that does not get
                 // the browser quickly falls through to the API below and waits for a key instead.
                 var guiWait = _rotator.HasImmediateRoom ? TimeSpan.Zero : GuiWaitWhenKeysBusy;
+                string guiNote = guiWait == TimeSpan.Zero ? Strings.StatusAskingKeyless
+                    : string.Format(Strings.StatusWaitingKeylessFormat, (int)guiWait.TotalSeconds);
+                ItemWrite(() => { item.Detail = guiNote; item.Status = ScanStatus.LookingUp; });
                 report = await GuiScrapeService.LookupAsync(sha256, ct, guiWait).WaitAsync(ct);
                 guiAnswered = report != null;
             }
@@ -768,6 +775,7 @@ internal sealed class ScanScheduler
 
             if (report == null && _rotator.HasUsableKeys && apiWorthTrying)
             {
+                ItemWrite(() => { item.Detail = Strings.StatusAskingApi; item.Status = ScanStatus.LookingUp; });
                 var (gotKeySlot, existing) = await TryCallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ApiWaitForKey, ct);
                 report = existing;
                 if (report == null && gotKeySlot) vtHasNeverSeenIt = true; // a served 404 is an answer
@@ -811,7 +819,10 @@ internal sealed class ScanScheduler
             // seen. Both would come back identical from the browser and cost a slot to learn nothing.
             if (report == null && guiAvailable && !guiAnswered && !vtHasNeverSeenIt && !ct.IsCancellationRequested
                 && failure is not (LookupFailure.AnalysisTimedOut or LookupFailure.NotSubmitted))
+            {
+                ItemWrite(() => { item.Detail = Strings.StatusKeylessLastResort; item.Status = ScanStatus.LookingUp; });
                 report = await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
+            }
         }
         finally { ReleaseSlot(); }
 
@@ -882,14 +893,17 @@ internal sealed class ScanScheduler
 
     static readonly TimeSpan ChannelHoldOff = TimeSpan.FromSeconds(30);
 
-    /// <summary>Waits out any hold-off before the next lookup.</summary>
-    async Task WaitForAChannelAsync(CancellationToken ct)
+    /// <summary>Waits out any hold-off before the next lookup, saying so on the row that is held.</summary>
+    async Task WaitForAChannelAsync(ScanItem item, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
             long until = Interlocked.Read(ref _channelsHeldUntilTicks);
-            var left = new DateTime(until, DateTimeKind.Utc) - DateTime.UtcNow;
+            var untilUtc = new DateTime(until, DateTimeKind.Utc);
+            var left = untilUtc - DateTime.UtcNow;
             if (left <= TimeSpan.Zero) return;
+            string note = string.Format(Strings.StatusNetworkHeldFormat, untilUtc.ToLocalTime());
+            ItemWrite(() => { item.Detail = note; item.Status = ScanStatus.AwaitingLookup; });
             await Task.Delay(left > ChannelHoldOff ? ChannelHoldOff : left, ct);
         }
     }
@@ -914,7 +928,7 @@ internal sealed class ScanScheduler
         {
             await foreach (var job in _netQueue!.Reader.ReadAllAsync(ct))
             {
-                await WaitForAChannelAsync(ct);
+                await WaitForAChannelAsync(job.Item, ct);
                 handled++;
                 using var fileOp = OpLog.Begin("Lookup", $"in: {job.Item.FileName} md5={job.Md5}");
                 VtFileReport? report = null;
@@ -925,7 +939,11 @@ internal sealed class ScanScheduler
                     // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
                     // lookup. The first item caches the report; the rest get the cache hit here.
                     var dedupGate = _md5Gates!.GetOrAdd(job.Md5, _ => new SemaphoreSlim(1, 1));
-                    await dedupGate.WaitAsync(ct);
+                    if (!dedupGate.Wait(0))
+                    {
+                        ItemWrite(() => { job.Item.Detail = Strings.StatusWaitingSameContent; job.Item.Status = ScanStatus.AwaitingLookup; });
+                        await dedupGate.WaitAsync(ct);
+                    }
                     try
                     {
                         var dup = (job.Options.UseCache && !job.Options.BypassTrust)
