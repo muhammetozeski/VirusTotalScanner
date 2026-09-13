@@ -352,6 +352,11 @@
   <s name="StatusAskingApi">Asking through the API (waiting for a free key)</s>
   <s name="StatusKeylessLastResort">The API did not answer, waiting for the keyless browser</s>
   <s name="StatusKeylessNoKeyRoom">No API key has room right now, waiting for the keyless browser</s>
+  <s name="BtnUnstickQueue">♻  Unstick queue</s>
+  <s name="TipUnstickQueue">When the queue is stuck and nothing is being looked up: deletes the keyless browser with its cookies and builds a fresh one, changes the Tor exit IP when Tor is on, clears the hold-off, and puts the waiting files back in the queue together. The program does this by itself when the queue stalls; this button does the same on demand.</s>
+  <s name="UnstickDoneFormat">Queue unstuck: the browser was reset with a fresh identity and {0} waiting file(s) were requeued.</s>
+  <s name="UnstickAutoFormat">Queue was stuck and unstuck itself: the browser was reset and {0} file(s) will be retried.</s>
+  <s name="UnstickNothingInfo">There is no stuck scan to unstick.</s>
   <s name="ColExtension">Ext.</s>
   <s name="ColActivity">Last activity</s>
   <s name="SortLabel">Sort:</s>

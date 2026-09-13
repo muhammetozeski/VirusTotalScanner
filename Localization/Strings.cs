@@ -53,6 +53,7 @@ internal static class Strings
     public static string BtnRecheck = "🔁  Verdikt yeniden denetle";
     public static string BtnBackupCache = "💾  Önbelleği yedekle";
     public static string BtnJumpToCurrent = "🎯  Şu an tarananı göster";
+    public static string BtnUnstickQueue = "♻  Kuyruğu canlandır";
     public static string DropHint = "  Dosya/klasörleri buraya da sürükleyip bırakabilirsiniz.";
     public static string JumpNothingRunning = "Şu anda taranan dosya yok — listede bekleyen de kalmamış.";
     public static string JumpFailed = "Satıra atlanamadı (liste değişmiş olabilir).";
@@ -744,6 +745,10 @@ internal static class Strings
     public static string TipRecheck = "Eski önbellek kayıtlarını kotasız (GUI) yeniden sorgula.";
     public static string TipBackupCache = "Hash önbelleğinin (cache.json) tarih damgalı bir kopyasını seçtiğin klasöre al. Önbellekteki her kayıt harcanmış VirusTotal kotasıdır; bu yüzden programda önbelleği silen bir düğme yok, sadece yedekleyen var.";
     public static string TipJumpToCurrent = "Listede o an VirusTotal'e sorulan satıra atla ve seç. Aynı anda birkaç dosya işlenebildiği için en üstteki, yani sıranın önündeki gösterilir; hiçbiri işlenmiyorsa henüz başlamamış ilk satıra gider.";
+    public static string TipUnstickQueue = "Sıra tıkanıp hiçbir dosya işlenmiyorsa: anahtarsız tarayıcıyı çerezleriyle birlikte silip yeni bir tarayıcı kurar, Tor açıksa çıkış IP'sini değiştirir, beklemeyi kaldırır ve bekleyen dosyaları topluca yeniden sıraya alır. Program bunu tıkanma olunca kendisi de yapar; bu düğme aynısını hemen elle tetikler.";
+    public static string UnstickDoneFormat = "Kuyruk canlandırıldı: tarayıcı yeni bir kimlikle sıfırlandı, {0} bekleyen dosya yeniden sıraya alındı.";
+    public static string UnstickAutoFormat = "Kuyruk tıkandı, kendiliğinden canlandırıldı: tarayıcı sıfırlandı, {0} dosya yeniden denenecek.";
+    public static string UnstickNothingInfo = "Canlandırılacak takılı bir tarama yok.";
     public static string TipUndoQuarantine = "Az önce karantinaya alınan dosyayı eski yerine geri koy.";
     public static string TipIncidentTimeline = "Diske gelen çalıştırılabilirleri varış gününe göre kümele.";
 

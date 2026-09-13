@@ -20,6 +20,7 @@ internal sealed class ScanQueueControl : UserControl
     readonly Label _summary = new();
     readonly Button _pauseBtn;
     readonly Button _cancelBtn;
+    readonly Button _unstickBtn;
     readonly System.Windows.Forms.Timer _repaintTimer = new() { Interval = 250 };
     readonly ToolTip _tips = new() { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 100 };
     int _progressCol;
@@ -104,6 +105,8 @@ internal sealed class ScanQueueControl : UserControl
         bar.Controls.Add(_pauseBtn);
         bar.Controls.Add(_cancelBtn);
         bar.Controls.Add(ThemeManager.MakeButton(Strings.BtnJumpToCurrent, (_, _) => JumpToCurrent()));
+        _unstickBtn = ThemeManager.MakeButton(Strings.BtnUnstickQueue, (_, _) => _ = UnstickQueueAsync());
+        bar.Controls.Add(_unstickBtn);
         bar.Controls.Add(ThemeManager.MakeLabel(Strings.DropHint, subtle: true));
 
         var moreScans = new DrawerPanel("scan", Strings.DrawerMoreScans);
@@ -224,6 +227,7 @@ internal sealed class ScanQueueControl : UserControl
         });
         _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); UpdateEmptyState(); _detail.RefreshLive(); });
         _scheduler.PendingQueued += n => _summary.Text = string.Format(Strings.PendingQueuedFormat, n); // already on the UI thread via UiPost
+        _scheduler.QueueUnstuck += n => _summary.Text = string.Format(_userUnstickInFlight ? Strings.UnstickDoneFormat : Strings.UnstickAutoFormat, n);
         _scheduler.Items.ListChanged += (_, e) =>
         {
             if (e.ListChangedType is System.ComponentModel.ListChangedType.ItemAdded or System.ComponentModel.ListChangedType.ItemDeleted or System.ComponentModel.ListChangedType.Reset)
@@ -793,6 +797,7 @@ internal sealed class ScanQueueControl : UserControl
             [Strings.BtnPause] = Strings.TipPause,
             [Strings.BtnCancel] = Strings.TipCancel,
             [Strings.BtnJumpToCurrent] = Strings.TipJumpToCurrent,
+            [Strings.BtnUnstickQueue] = Strings.TipUnstickQueue,
             [Strings.BtnUndo] = Strings.TipUndoQuarantine,
         };
         // Walk the whole subtree: the drawers nest their buttons a couple of panels deep, and every
@@ -1316,6 +1321,35 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (_scheduler.IsPaused) { _scheduler.Resume(); _pauseBtn.Text = Strings.BtnPause; }
         else { _scheduler.Pause(); _pauseBtn.Text = Strings.BtnResume; }
+    }
+
+    bool _userUnstickInFlight; // distinguishes the button's QueueUnstuck report from the automatic one
+
+    /// <summary>The "Kuyruğu canlandır" button. During a run it resets the browser + route and requeues the
+    /// stuck files. With nothing running it re-scans the files the last run had to drop for want of a channel,
+    /// after a fresh browser reset — the same recovery, applied as a new scan.</summary>
+    async Task UnstickQueueAsync()
+    {
+        _unstickBtn.Enabled = false;
+        try
+        {
+            if (_scheduler.IsRunning)
+            {
+                _userUnstickInFlight = true;
+                try { await _scheduler.UnstickAsync("kullanıcı düğmesi"); }
+                finally { _userUnstickInFlight = false; }
+                return;
+            }
+
+            var paths = _scheduler.Items
+                .Where(i => i.Status == ScanStatus.Skipped && i.SkipReason == Strings.SkipReasonNotAskedYet && File.Exists(i.FilePath))
+                .Select(i => i.FilePath).Distinct().ToArray();
+            if (paths.Length == 0) { NativeMessageBox.Info(Strings.UnstickNothingInfo); return; }
+            GuiScrapeService.ResetHard("kullanıcı düğmesi (yeni tarama)");
+            StartScan(paths, recurse: false);
+        }
+        catch (Exception ex) { Log("Unstick from the button failed: " + ex, LogLevel.Error); }
+        finally { _unstickBtn.Enabled = true; }
     }
 
     void RescanSelected()

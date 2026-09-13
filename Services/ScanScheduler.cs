@@ -303,6 +303,8 @@ internal sealed class ScanScheduler
 
             _netQueue = System.Threading.Channels.Channel.CreateUnbounded<NetworkJob>(
                 new System.Threading.Channels.UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
+            _currentOpts = opts; // so a manual/auto "unstick" can build fresh jobs for dropped files
+            Interlocked.Exchange(ref _consecutiveEmpty, 0);
             int netWorkers = Math.Max(1, opts.MaxConcurrency);
             var netTasks = Enumerable.Range(0, netWorkers).Select(i => NetworkWorkerAsync(i, ct)).ToArray();
             Log($"Network stage started with {netWorkers} worker(s); disk stage runs {localDegree} wide.", LogLevel.Info);
@@ -898,9 +900,12 @@ internal sealed class ScanScheduler
 
     static readonly TimeSpan ChannelHoldOff = TimeSpan.FromSeconds(30);
 
-    /// <summary>Waits out any hold-off before the next lookup, saying so on the row that is held.</summary>
+    /// <summary>Waits out any hold-off before the next lookup, saying so on the row that is held. Polled in
+    /// short steps so an "unstick" that opens the hold-off is noticed within a couple of seconds, not at the
+    /// end of a 30-second wait.</summary>
     async Task WaitForAChannelAsync(ScanItem item, CancellationToken ct)
     {
+        var poll = TimeSpan.FromSeconds(2);
         while (!ct.IsCancellationRequested)
         {
             long until = Interlocked.Read(ref _channelsHeldUntilTicks);
@@ -909,8 +914,95 @@ internal sealed class ScanScheduler
             if (left <= TimeSpan.Zero) return;
             string note = string.Format(Strings.StatusNetworkHeldFormat, untilUtc.ToLocalTime());
             ItemWrite(() => { item.Detail = note; item.Status = ScanStatus.AwaitingLookup; });
-            await Task.Delay(left > ChannelHoldOff ? ChannelHoldOff : left, ct);
+            await Task.Delay(left < poll ? left : poll, ct);
         }
+    }
+
+    /// <summary>The run's options, so a manual or automatic unstick can rebuild a lookup job for a file that
+    /// was dropped after its attempts ran out.</summary>
+    ScanOptions? _currentOpts;
+
+    /// <summary>Consecutive "no channel could answer" results with no lookup succeeding in between. When this
+    /// crosses <see cref="AutoUnstickAfterEmpties"/> the stage unstuck itself automatically.</summary>
+    int _consecutiveEmpty;
+    long _lastAutoUnstickTicks;
+
+    /// <summary>How many lookups in a row can come back empty before the stage resets its own browser and
+    /// route without being asked. About one full set of workers plus a couple, so a genuinely blocked
+    /// address is reacted to quickly but a single slow lookup is not.</summary>
+    const int AutoUnstickAfterEmpties = 16;
+    static readonly TimeSpan AutoUnstickThrottle = TimeSpan.FromSeconds(45);
+
+    /// <summary>Raised (marshalled by the UI) when the queue is automatically unstuck, so the window can say so.</summary>
+    public event Action<int>? QueueUnstuck;
+
+    void NoteEmptyLookup()
+    {
+        if (Interlocked.Increment(ref _consecutiveEmpty) < AutoUnstickAfterEmpties) return;
+        long now = DateTime.UtcNow.Ticks;
+        long last = Interlocked.Read(ref _lastAutoUnstickTicks);
+        if (now - last < AutoUnstickThrottle.Ticks) return;
+        if (Interlocked.CompareExchange(ref _lastAutoUnstickTicks, now, last) != last) return;
+        Interlocked.Exchange(ref _consecutiveEmpty, 0);
+        Log($"Network stage stuck: {AutoUnstickAfterEmpties} lookups in a row with no channel able to answer — unsticking automatically.", LogLevel.Warning);
+        _ = UnstickAsync("stuck queue (automatic)", auto: true);
+    }
+
+    void NoteLookupServed() => Interlocked.Exchange(ref _consecutiveEmpty, 0);
+
+    /// <summary>
+    /// Clears the network hold-off now, throws the keyless browser and its cookies away and rebuilds it
+    /// fresh (a new Tor exit too, when Tor is on), and puts every file that was dropped for want of a
+    /// channel back in the queue. This is the manual button and the automatic recovery in one place.
+    /// Returns how many dropped files were requeued.
+    /// </summary>
+    public async Task<int> UnstickAsync(string why, bool auto = false)
+    {
+        Interlocked.Exchange(ref _channelsHeldUntilTicks, 0); // stop every worker's wait immediately
+
+        // A fresh browser with no cookies, and a fresh exit IP when Tor is carrying the traffic.
+        try
+        {
+            if (TorService.IsActive)
+            {
+                bool rotated = await TorService.NewCircuitAsync();
+                Log(rotated ? "Unstick: Tor circuit changed." : "Unstick: Tor circuit change failed: " + (TorService.LastError ?? "?"),
+                    rotated ? LogLevel.Info : LogLevel.Warning);
+            }
+        }
+        catch (Exception ex) { Log("Unstick: Tor circuit change threw: " + ex.Message, LogLevel.Warning); }
+        GuiScrapeService.ResetHard(why);
+
+        int requeued = RequeueDroppedLookups();
+        Log($"Unstick ({why}): hold-off cleared, browser reset, {requeued} dropped file(s) requeued.", LogLevel.Info);
+        try { UiPost(() => { try { QueueUnstuck?.Invoke(requeued); } catch (Exception ex) { Log("QueueUnstuck handler failed: " + ex.Message, LogLevel.Warning); } }); }
+        catch (Exception ex) { Log("QueueUnstuck dispatch failed: " + ex.Message, LogLevel.Warning); }
+        return requeued;
+    }
+
+    /// <summary>Puts every file that was dropped as "not asked yet" back into the network queue with a clean
+    /// attempt count, so the fresh browser/route gets another shot at all of them at once.</summary>
+    int RequeueDroppedLookups()
+    {
+        var queue = _netQueue;
+        var opts = _currentOpts;
+        if (queue == null || opts == null || !IsRunning) return 0;
+
+        int requeued = 0;
+        foreach (var item in Items.ToArray())
+        {
+            if (item.Status != ScanStatus.Skipped || item.SkipReason != Strings.SkipReasonNotAskedYet) continue;
+            if (string.IsNullOrEmpty(item.Md5) || string.IsNullOrEmpty(item.Sha256)) continue;
+            if (!queue.Writer.TryWrite(new NetworkJob(item, item.Md5!, item.Sha256!, opts))) break; // queue closed
+            // It had been counted done+skipped when it was dropped; put it back in flight.
+            PendingOutbox.Remove(item.FilePath);
+            Interlocked.Decrement(ref _skipped);
+            Interlocked.Decrement(ref _done);
+            ItemWrite(() => { item.SkipReason = null; item.Detail = Strings.StatusWaitingLookupSlot; item.Status = ScanStatus.AwaitingLookup; });
+            requeued++;
+        }
+        if (requeued > 0) ReportProgress();
+        return requeued;
     }
 
     /// <summary>Files handed over by the scan workers, waiting for the network stage. Unbounded on
@@ -987,6 +1079,7 @@ internal sealed class ScanScheduler
                     if (again.Attempt <= MaxLookupAttempts && _netQueue.Writer.TryWrite(again))
                     {
                         HoldOffChannels("every channel came back empty");
+                        NoteEmptyLookup(); // enough of these in a row and the stage resets itself
                         string retry = string.Format(Strings.StatusRequeuedFormat, again.Attempt, MaxLookupAttempts);
                         ItemWrite(() => { job.Item.Detail = retry; job.Item.Status = ScanStatus.AwaitingLookup; });
                         fileOp.Note($"out: no channel could answer — requeued (attempt {again.Attempt})");
@@ -994,6 +1087,7 @@ internal sealed class ScanScheduler
                     }
                 }
 
+                if (report != null) NoteLookupServed(); // a real answer: the channel is working again
                 RecordOutcome(job.Item, report, failure, fileOp);
                 FinishItem(job.Item);
             }
