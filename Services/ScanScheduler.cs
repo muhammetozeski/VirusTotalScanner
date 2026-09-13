@@ -64,7 +64,14 @@ internal sealed class ScanScheduler
 
     public void Pause() { _pause.Pause(); Log("Scan paused.", LogLevel.Info); }
     public void Resume() { _pause.Resume(); Log("Scan resumed.", LogLevel.Info); }
-    public void Cancel() { try { _cts?.Cancel(); } catch (Exception ex) { Log("Cancel failed: " + ex.Message, LogLevel.Warning); } Log("Scan cancel requested.", LogLevel.Info); }
+    public void Cancel()
+    {
+        try { _cts?.Cancel(); } catch (Exception ex) { Log("Cancel failed: " + ex.Message, LogLevel.Warning); }
+        // A cancelled run is not a paused one. Left closed, the gate outlived the run and every worker of
+        // the NEXT scan stopped on its first line, forever: 24 files "started", none ended, 0 done.
+        if (_pause.IsPaused) { _pause.Resume(); Log("Pause lifted by the cancel.", LogLevel.Info); }
+        Log("Scan cancel requested.", LogLevel.Info);
+    }
 
     // Paths that arrived while a run was active, drained into an automatic follow-up run —
     // a drop / right-click / forwarded path during a scan is queued, never silently discarded.
@@ -167,6 +174,8 @@ internal sealed class ScanScheduler
             + $"cacheDays={opts.CacheDays}/{opts.ThreatCacheDays} clearQueue={clearQueue}");
         _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
         var ct = _cts.Token;
+        // Pause belongs to the run it was pressed in. A new run always starts moving.
+        if (_pause.IsPaused) { _pause.Resume(); runOp.Step("pause left over from the previous run lifted"); }
         ResetCounters();
         _stopwatch.Restart();
         lock (_rateLock) _recent.Clear();
