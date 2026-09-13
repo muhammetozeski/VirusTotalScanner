@@ -284,13 +284,12 @@ internal sealed class ScanScheduler
             _md5Gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
             _pendingAnalyses.Clear(); // a cancelled run can leave watchers behind; they are not this run's
 
-            // Worker count has to EXCEED the network gate, or the scan grinds. Every worker that reaches
-            // VirusTotal holds a _lookupGate slot for seconds; with as many workers as slots, all of them
-            // end up waiting on the network and nothing local moves — even though most of a Windows disk
-            // is Microsoft-signed or already cached and needs no network at all. The extra workers keep
-            // those cheap decisions flowing at disk speed while the gated ones wait.
-            int localDegree = Math.Max(1, opts.MaxConcurrency) + Math.Max(4, Environment.ProcessorCount);
-            var po = new ParallelOptions { MaxDegreeOfParallelism = localDegree, CancellationToken = ct };
+            // The disk stage takes the files one at a time. It used to run two dozen wide (the concurrency
+            // setting plus the core count), and two dozen workers reading whole files and verifying
+            // signatures at once made the whole machine stall. A worker no longer waits on VirusTotal —
+            // it hands the file to the network stage below and moves on — so nothing is gained by more of
+            // them except load.
+            const int localDegree = 1;
             using var heartbeat = StartHeartbeat(items.Count, localDegree, ct);
             using var quietList = SuspendItemNotifications();
             using var finishedFlush = StartFinishedFlush();
@@ -302,7 +301,11 @@ internal sealed class ScanScheduler
             var netTasks = Enumerable.Range(0, netWorkers).Select(i => NetworkWorkerAsync(i, ct)).ToArray();
             Log($"Network stage started with {netWorkers} worker(s); disk stage runs {localDegree} wide.", LogLevel.Info);
 
-            await Parallel.ForEachAsync(items, po, async (item, token) => await ProcessAsync(item, opts, token));
+            foreach (var item in items)
+            {
+                ct.ThrowIfCancellationRequested(); // ProcessAsync absorbs a cancel per file; the run must stop here
+                await ProcessAsync(item, opts, ct);
+            }
 
             // The disk is done; tell the network stage no more files are coming and let it finish.
             using (var drainNet = OpLog.Begin("Drain network queue", $"in: {_netQueue.Reader.Count} file(s) still queued"))
