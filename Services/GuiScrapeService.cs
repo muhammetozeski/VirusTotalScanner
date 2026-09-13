@@ -6,7 +6,7 @@ using Microsoft.Web.WebView2.WinForms;
 namespace VirusTotalScanner;
 
 /// <summary>
-/// Keyless VirusTotal lookup: drives a hidden WebView2 (real Chromium) to the public GUI page
+/// Keyless VirusTotal lookup: drives hidden WebView2 browsers (real Chromium) to the public GUI page
 /// and captures the page's own internal /ui/files/&lt;hash&gt; response — the same data the API
 /// returns, with NO API key and NO quota. If VirusTotal demands a reCAPTCHA the app first tries the
 /// single "I am not a robot" click by itself; only when a picture puzzle actually follows is the
@@ -14,54 +14,87 @@ namespace VirusTotalScanner;
 /// really blocks us: the data call returns 429/403, or a genuinely VISIBLE challenge is in the DOM.
 /// (The page uses invisible reCAPTCHA, so the mere loading of recaptcha resources is ignored.)
 ///
-/// The public UI is rate-limited per SOURCE IP, so the browser can be pointed at
-/// <see cref="TorService"/>'s SOCKS proxy; changing the proxy (or the circuit) rebuilds the browser
+/// This is a POOL of independent <see cref="KeylessBrowser"/> instances, so several lookups run at
+/// once instead of one at a time behind a single gate. Each browser owns its own hidden window,
+/// thread and — because WebView2 cannot share a user-data folder — its own profile folder
+/// (webview2[-tor]-s{slot}[-g{gen}]). Only one browser may bring its window to the foreground for a
+/// human at a time; the parked-channel and hard-reset state is shared across the whole pool.
+///
+/// The public UI is rate-limited per SOURCE IP, so the browsers can be pointed at
+/// <see cref="TorService"/>'s SOCKS proxy; changing the proxy (or the circuit) rebuilds every browser
 /// with a clean profile, because VirusTotal ties its session cookie to the address that got it.
 /// Lookup-only: it cannot upload unknown files.
 /// </summary>
 internal static class GuiScrapeService
 {
+    /// <summary>How many keyless browsers may run at once. Each is a real Chromium process with its own
+    /// window and profile folder, so this is also the ceiling on concurrent keyless lookups and on the
+    /// memory the keyless path costs. A probe measures one exit address at a time, so it never needs
+    /// more than one browser.</summary>
+    const int MaxPoolSize = 3;
+
+    // ---- the browser identity every keyless connection presents ----
+
+    /// <summary>The browser identity (User-Agent) a keyless connection presents to VirusTotal. This is
+    /// the app's OWN, HONEST identity: a single entry with the app's name. Before every connection a
+    /// random entry is chosen — with one entry that is always the same string. Edit this list to change
+    /// the identity; it is the only place the identity is decided.</summary>
+    static readonly string[] BrowserIdentities = { "VirusTotalScanner" };
+
+    static readonly Random _identityRng = new();
+
+    /// <summary>Picks the identity for a connection attempt (a random entry from <see cref="BrowserIdentities"/>).
+    /// Empty when the list is empty, in which case the browser's default User-Agent is left untouched.</summary>
+    internal static string PickIdentity()
+    {
+        var list = BrowserIdentities;
+        if (list.Length == 0) return "";
+        lock (_identityRng) return list[_identityRng.Next(list.Length)];
+    }
+
+    // ---- pool ----
+
+    static readonly SemaphoreSlim _slots = new(MaxPoolSize, MaxPoolSize);
+    static readonly object _poolLock = new();
+    static readonly List<KeylessBrowser> _all = [];
+    static readonly Stack<KeylessBrowser> _idle = new();
+
+    /// <summary>Only one browser at a time may show its window to a human. A second challenge, rather
+    /// than stacking a second window, ends its own lookup — which parks the shared channel anyway.</summary>
+    internal static readonly SemaphoreSlim CaptchaWindowGate = new(1, 1);
+
     static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
-    static readonly SemaphoreSlim _gate = new(1, 1);
 
-    static Thread? _thread;
-    static Form? _form;
-    static WebView2? _web;
-    static Panel? _bar;
-    static Button? _torBtn;
-    static Label? _barLabel;
-    static TaskCompletionSource<bool>? _initTcs;
-    static volatile bool _initFailed;
-    static volatile bool _shuttingDown;
-    static volatile bool _restartRequested;
-    static string? _activeProxy;                  // the proxy the live browser was created with
+    /// <summary>Takes a free browser (reusing an idle one, or building a new instance up to the pool
+    /// size), waiting at most <paramref name="maxWait"/> for a concurrency slot. Null = every browser is
+    /// busy and the caller was not willing to keep waiting.</summary>
+    static async Task<KeylessBrowser?> AcquireAsync(TimeSpan maxWait, CancellationToken ct)
+    {
+        if (!await _slots.WaitAsync(maxWait, ct)) return null;
+        try
+        {
+            lock (_poolLock)
+            {
+                if (_idle.Count > 0) return _idle.Pop();
+                var b = new KeylessBrowser(_all.Count);
+                _all.Add(b);
+                return b;
+            }
+        }
+        catch { _slots.Release(); throw; }
+    }
 
-    static string _targetHash = "";
-    static string _targetSuffix = ""; // "" = the file report; "/comments" = community comments
-    static string _currentUrl = "";
-    static TaskCompletionSource<string?>? _pending;
-    static TaskCompletionSource<bool>? _navDone;
-    static CancellationTokenSource? _timeoutCts;
-    static volatile bool _captchaShown;
-    static volatile bool _autoSolving;
-    static volatile bool _autoSolveTried;
-    static volatile bool _blockReported; // one IP-block strike per lookup, not per retry
-    static volatile bool _challengeSeen; // this lookup ran into a challenge, whether or not it was shown
+    static void Release(KeylessBrowser b)
+    {
+        lock (_poolLock) _idle.Push(b);
+        _slots.Release();
+    }
 
-    /// <summary>How long a human is given to answer a challenge the app could not click through before
-    /// the lookup gives up. It used to be forever, which is fine at a desk and fatal overnight: the
-    /// single browser is behind one gate, so one unanswered challenge froze every keyless lookup in the
-    /// whole scan. If somebody is there they still have two minutes; if not, the scan carries on.</summary>
-    static readonly TimeSpan CaptchaSolveWindow = TimeSpan.FromMinutes(2);
+    // ---- shared "parked channel" state (rate-limit hit / unanswered challenge) ----
 
-    /// <summary>How long one lookup may take. The VirusTotal page is a single-page app that fetches its
-    /// own data over several round trips, and every one of them goes through three relays when Tor is
-    /// carrying the traffic. A route probe showed the first Tor lookup timing out at 45 s without ever
-    /// being challenged — the page simply had not finished. Direct stays at 45 s.</summary>
-    static TimeSpan FetchTimeout => TorService.IsActive ? TimeSpan.FromSeconds(150) : TimeSpan.FromSeconds(45);
-
-    /// <summary>After an unanswered challenge the channel is parked for a while. Without this every
-    /// remaining file would pay the same two minutes to learn the same thing.</summary>
+    /// <summary>After an unanswered challenge the whole keyless channel is parked for a while. Without
+    /// this every remaining file would pay the same two minutes to learn the same thing. The source IP
+    /// is shared by every browser in the pool, so the park is shared too.</summary>
     static readonly TimeSpan BlockedCooldown = TimeSpan.FromMinutes(3);
     static long _blockedUntilTicks;      // DateTime.UtcNow.Ticks; 0 = open. Interlocked-accessed.
     static long _lastBlockedLogTicks;
@@ -75,89 +108,88 @@ internal static class GuiScrapeService
         get { long t = Interlocked.Read(ref _blockedUntilTicks); return t > DateTime.UtcNow.Ticks ? new DateTime(t, DateTimeKind.Utc) : null; }
     }
 
-    static void ParkChannel(string why)
+    internal static void ParkChannel(string why)
     {
         Interlocked.Exchange(ref _blockedUntilTicks, DateTime.UtcNow.Add(BlockedCooldown).Ticks);
         Log($"Keyless channel parked for {BlockedCooldown.TotalMinutes:F0} min ({why}). Lookups fall through to the API meanwhile.", LogLevel.Warning);
         UiStatusHub.Report(Strings.StatusSourceScan, string.Format(Strings.KeylessParkedFormat, (int)BlockedCooldown.TotalMinutes), StatusSeverity.Warning);
     }
 
-    static void OpenChannel(string why)
+    internal static void OpenChannel(string why)
     {
         if (Interlocked.Exchange(ref _blockedUntilTicks, 0) == 0) return;
         Log("Keyless channel reopened: " + why, LogLevel.Info);
     }
-    static readonly List<CoreWebView2Frame> _frames = [];
+
+    // ---- shared profile generation (bumped on a hard reset) ----
+
+    /// <summary>Bumped by <see cref="ResetHard"/> so the next browsers are built in brand-new, empty
+    /// profile folders — no file lock is fought with the ones being torn down, and no cookie survives.</summary>
+    static volatile int _profileGeneration;
+    internal static int Generation => _profileGeneration;
+
+    internal static string ProfileLeaf(bool tor, int slot, int generation)
+    {
+        string baseName = (tor ? "webview2-tor" : "webview2") + "-s" + slot;
+        return generation == 0 ? baseName : $"{baseName}-g{generation}";
+    }
 
     public static bool IsRuntimeAvailable
     {
         get { try { return !string.IsNullOrEmpty(CoreWebView2Environment.GetAvailableBrowserVersionString()); } catch { return false; } }
     }
 
-    /// <summary>How the most recent keyless lookup ended. Diagnostic only — the scan path just looks at
-    /// the returned report — but it is what lets the network probe say WHY an exit address failed
-    /// instead of only that it did.</summary>
-    public static KeylessOutcome LastOutcome { get; private set; } = KeylessOutcome.None;
+    /// <summary>How the most recent keyless lookup ended (whichever browser finished last). Diagnostic
+    /// only — the scan path just looks at the returned report — but it is what lets the network probe say
+    /// WHY an exit address failed instead of only that it did.</summary>
+    public static KeylessOutcome LastOutcome { get; internal set; } = KeylessOutcome.None;
 
-    /// <summary>Probe mode: never bring the window up and never try the checkbox — a challenge is
+    /// <summary>Probe mode: never bring a window up and never try the checkbox — a challenge is
     /// reported as a challenge and the lookup ends. Used by the network probe to measure how an exit
-    /// address is actually treated, with no human and no automation in the way.</summary>
+    /// address is actually treated, with no human and no automation in the way. The probe runs its
+    /// lookups one at a time, so only one browser is ever built.</summary>
     public static bool ProbeMode { get; set; }
 
-    /// <summary>Rebuild the browser before the next lookup, keeping its profile folder (so a route switch
-    /// between the direct and Tor profiles picks the right cookies). Used for the plain Tor on/off toggle,
-    /// where the per-route folder already separates the sessions.</summary>
+    /// <summary>Rebuild every browser before its next lookup, keeping the profile folders (so a route
+    /// switch between the direct and Tor profiles picks the right cookies). Used for the plain Tor on/off
+    /// toggle, where the per-route folder already separates the sessions.</summary>
     public static void InvalidateSession(string why)
     {
-        _restartRequested = true;
-        // A new route/profile is exactly the thing a parked channel was waiting for.
         OpenChannel("session invalidated: " + why);
-        Log("Keyless browser session invalidated: " + why, LogLevel.Info);
+        lock (_poolLock) foreach (var b in _all) b.RequestRestart();
+        Log("Keyless browser sessions invalidated: " + why, LogLevel.Info);
     }
-
-    /// <summary>Bumped by <see cref="ResetHard"/> so the next browser is built in a brand-new, empty profile
-    /// folder — no file lock is fought with the one being torn down, and no cookie survives.</summary>
-    static volatile int _profileGeneration;
-
-    static string ProfileLeaf(bool tor, int generation)
-    {
-        string baseName = tor ? "webview2-tor" : "webview2";
-        return generation == 0 ? baseName : $"{baseName}-g{generation}";
-    }
-
-    /// <summary>The profile folder the browser should use for this route right now.</summary>
-    static string ProfileFolder(string? proxyUrl) =>
-        Path.Combine(ConfigPathResolver.DataFolder, ProfileLeaf(proxyUrl != null, _profileGeneration));
 
     /// <summary>
-    /// Throws the whole keyless browser away — its profile and cookies with it — and rebuilds it fresh on
-    /// the next lookup. <see cref="InvalidateSession"/> only rebuilt the browser; the VirusTotal session
-    /// cookie earned on a blocked address survived in the reused profile folder and carried the block
-    /// straight to the new exit IP. Here the next browser uses a brand-new, empty folder (a bumped
-    /// generation, so there is no lock to fight with the one being disposed) and the old folders are
+    /// Throws every keyless browser away — profiles and cookies with them — and rebuilds them fresh on
+    /// their next lookup. <see cref="InvalidateSession"/> only rebuilt the browsers; the VirusTotal
+    /// session cookie earned on a blocked address survived in the reused profile folder and carried the
+    /// block straight to the new exit IP. Here the next browsers use brand-new, empty folders (a bumped
+    /// generation, so there is no lock to fight with the ones being disposed) and the old folders are
     /// deleted in the background.
     /// </summary>
     public static void ResetHard(string why)
     {
         int newGen = Interlocked.Increment(ref _profileGeneration);
-        _restartRequested = true;
         OpenChannel("hard reset: " + why);
-        Log($"Keyless browser hard reset ({why}); fresh profile generation {newGen}.", LogLevel.Info);
+        lock (_poolLock) foreach (var b in _all) b.RequestRestart();
+        Log($"Keyless browser pool hard reset ({why}); fresh profile generation {newGen}.", LogLevel.Info);
         DeleteOldProfilesInBackground(newGen);
     }
 
-    /// <summary>Best-effort removal of every keyless profile folder except the current generation's two
-    /// (direct + Tor). The just-abandoned one's msedgewebview2.exe can hold a lock for a second or two
-    /// after teardown, so this retries for a while before giving up.</summary>
+    /// <summary>Best-effort removal of every keyless profile folder except the current generation's
+    /// (direct + Tor, for every pool slot). A just-abandoned folder's msedgewebview2.exe can hold a lock
+    /// for a second or two after teardown, so this retries for a while before giving up.</summary>
     static void DeleteOldProfilesInBackground(int currentGeneration)
     {
         _ = Task.Run(async () =>
         {
-            var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int slot = 0; slot < MaxPoolSize; slot++)
             {
-                ProfileLeaf(false, currentGeneration),
-                ProfileLeaf(true, currentGeneration),
-            };
+                keep.Add(ProfileLeaf(false, slot, currentGeneration));
+                keep.Add(ProfileLeaf(true, slot, currentGeneration));
+            }
             for (int attempt = 0; attempt < 12; attempt++)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1));
@@ -180,14 +212,22 @@ internal static class GuiScrapeService
         });
     }
 
-    /// <summary>The one navigate-and-capture round trip all three fetches share: opens the GUI page,
-    /// waits for the page's own /ui/files/&lt;hash&gt;&lt;suffix&gt; response (captcha flow included)
-    /// and returns the captured JSON, or null on miss / timeout / cancel / browser busy. Serialized by
-    /// the gate: only one lookup can drive the single browser at a time, so a caller that has another
-    /// option passes a short <paramref name="maxQueueWait"/> and takes null as "busy, use the API".</summary>
+    public static void Shutdown()
+    {
+        List<KeylessBrowser> all;
+        lock (_poolLock) all = [.. _all];
+        foreach (var b in all) b.Shutdown();
+    }
+
+    // ---- public lookup entry points (unchanged surface) ----
+
+    /// <summary>The one navigate-and-capture round trip all three fetches share: takes a free browser,
+    /// opens the GUI page on it, waits for the page's own /ui/files/&lt;hash&gt;&lt;suffix&gt; response
+    /// (captcha flow included) and returns the captured JSON, or null on miss / timeout / cancel / every
+    /// browser busy / channel parked. A caller that has another option passes a short
+    /// <paramref name="maxQueueWait"/> and takes null as "busy, use the API".</summary>
     static async Task<string?> FetchJsonAsync(string hash, string suffix, string pageUrl, string logLabel, CancellationToken ct, TimeSpan maxQueueWait)
     {
-        LastOutcome = KeylessOutcome.None;
         if (IsBlocked)
         {
             LastOutcome = KeylessOutcome.Parked;
@@ -200,85 +240,15 @@ internal static class GuiScrapeService
             }
             return null;
         }
-        if (!await _gate.WaitAsync(maxQueueWait, ct)) { LastOutcome = KeylessOutcome.Busy; return null; }
-        try
-        {
-            if (!await EnsureReadyAsync()) { LastOutcome = KeylessOutcome.NoRuntime; return null; }
 
-            var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _targetHash = hash;
-            _targetSuffix = suffix;
-            _currentUrl = pageUrl;
-            _pending = tcs;
-            _captchaShown = false;
-            _autoSolveTried = false;
-            _autoSolving = false;
-            _blockReported = false;
-            _challengeSeen = false;
-
-            Log(logLabel + ": " + hash, LogLevel.Info);
-            using var op = OpLog.Begin("Keyless lookup", $"{hash[..Math.Min(16, hash.Length)]}… route={(_activeProxy ?? "direct")} url={pageUrl}");
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            _timeoutCts = timeout;
-            timeout.CancelAfter(FetchTimeout); // extended automatically while a captcha is up
-            op.Step($"timeout {FetchTimeout.TotalSeconds:F0}s");
-
-            Navigate(_currentUrl, logLabel, tcs);
-
-            string? json;
-            using (timeout.Token.Register(() => tcs.TrySetResult(null)))
-                json = await tcs.Task;
-
-            bool gaveUpOnChallenge = (_captchaShown || _challengeSeen) && string.IsNullOrEmpty(json);
-            LastOutcome = !string.IsNullOrEmpty(json) ? KeylessOutcome.Report
-                        : gaveUpOnChallenge ? KeylessOutcome.Challenged
-                        : timeout.IsCancellationRequested ? KeylessOutcome.TimedOut
-                        : KeylessOutcome.NotFound;
-            op.Ok($"{LastOutcome}" + (json != null ? $", {json.Length} chars" : ""));
-            _pending = null;
-            _timeoutCts = null;
-            HideBrowser();
-
-            // A route probe showed exit addresses behaving very differently: one answers, the next
-            // times out every time. While Tor is carrying the traffic, a lookup that got nowhere is a
-            // reason to take a different exit rather than to keep paying the same timeout per file.
-            if (!ProbeMode && TorService.IsActive && LastOutcome is KeylessOutcome.TimedOut or KeylessOutcome.Challenged)
-                NetworkBlockMonitor.ReportTorPathFailure("keyless:" + LastOutcome);
-
-            if (gaveUpOnChallenge && !ProbeMode) ParkChannel("a challenge went unanswered");
-            else if (!string.IsNullOrEmpty(json)) OpenChannel("a lookup succeeded");
-            return string.IsNullOrEmpty(json) ? null : json;
-        }
-        finally { _targetSuffix = ""; _gate.Release(); }
-    }
-
-    static void Navigate(string url, string logLabel, TaskCompletionSource<string?>? failTo)
-    {
-        try
-        {
-            _navDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _form!.BeginInvoke(() =>
-            {
-                try { _web!.CoreWebView2.Navigate(url); }
-                catch (Exception ex)
-                {
-                    failTo?.TrySetResult(null);
-                    _navDone?.TrySetResult(false);
-                    Log(logLabel + " navigate failed: " + ex.Message, LogLevel.Warning);
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            failTo?.TrySetResult(null);
-            _navDone?.TrySetResult(false);
-            Log(logLabel + " navigate dispatch failed: " + ex.Message, LogLevel.Warning);
-        }
+        KeylessBrowser? browser = await AcquireAsync(maxQueueWait, ct);
+        if (browser == null) { LastOutcome = KeylessOutcome.Busy; return null; }
+        try { return await browser.FetchJsonAsync(hash, suffix, pageUrl, logLabel, ct); }
+        finally { Release(browser); }
     }
 
     /// <summary>Looks up a hash (sha256 preferred) via the GUI. Returns null if not found / cancelled /
-    /// timed out / the browser was busy and the caller was not willing to wait for it.</summary>
+    /// timed out / the pool was busy and the caller was not willing to wait for it.</summary>
     public static async Task<VtFileReport?> LookupAsync(string hash, CancellationToken ct = default, TimeSpan? maxQueueWait = null)
     {
         hash = hash.Trim().ToLowerInvariant();
@@ -356,8 +326,163 @@ internal static class GuiScrapeService
         }
         catch (Exception ex) { Log("Keyless GUI behaviour failed: " + ex.Message, LogLevel.Warning); return b; }
     }
+}
 
-    public static void Shutdown()
+/// <summary>
+/// One hidden WebView2 browser in the keyless pool: its own STA thread, form, web view, profile folder
+/// and per-lookup state. Only one lookup runs on an instance at a time (the pool hands each instance to
+/// exactly one caller), so the fields below need no locking of their own — the pool's slot semaphore
+/// serialises access to each browser. Shared concerns (parked channel, hard-reset generation, the
+/// single foreground captcha window) live on <see cref="GuiScrapeService"/>.
+/// </summary>
+internal sealed class KeylessBrowser
+{
+    /// <summary>Stable pool slot, so this browser always uses the same profile folders and never fights
+    /// another browser for a user-data directory.</summary>
+    readonly int _slot;
+
+    Thread? _thread;
+    Form? _form;
+    WebView2? _web;
+    Panel? _bar;
+    Button? _torBtn;
+    Label? _barLabel;
+    TaskCompletionSource<bool>? _initTcs;
+    volatile bool _initFailed;
+    volatile bool _shuttingDown;
+    volatile bool _restartRequested;
+    string? _activeProxy;                  // the proxy the live browser was created with
+    int _builtGeneration;                  // the profile generation the live browser was built in
+
+    string _targetHash = "";
+    string _targetSuffix = ""; // "" = the file report; "/comments" = community comments
+    string _currentUrl = "";
+    TaskCompletionSource<string?>? _pending;
+    TaskCompletionSource<bool>? _navDone;
+    CancellationTokenSource? _timeoutCts;
+    volatile bool _captchaShown;
+    volatile bool _autoSolving;
+    volatile bool _autoSolveTried;
+    volatile bool _blockReported; // one IP-block strike per lookup, not per retry
+    volatile bool _challengeSeen; // this lookup ran into a challenge, whether or not it was shown
+    int _holdsCaptchaGate;        // 1 while this browser holds GuiScrapeService.CaptchaWindowGate
+
+    readonly List<CoreWebView2Frame> _frames = [];
+
+    public KeylessBrowser(int slot) => _slot = slot;
+
+    /// <summary>Rebuild this browser before its next lookup (a route/profile change or a hard reset).</summary>
+    public void RequestRestart() => _restartRequested = true;
+
+    /// <summary>How long a human is given to answer a challenge the app could not click through before
+    /// the lookup gives up. It used to be forever, which is fine at a desk and fatal overnight: one
+    /// unanswered challenge would hold a browser out of the pool for the whole scan. If somebody is there
+    /// they still have two minutes; if not, the scan carries on.</summary>
+    static readonly TimeSpan CaptchaSolveWindow = TimeSpan.FromMinutes(2);
+
+    /// <summary>How long one lookup may take. The VirusTotal page is a single-page app that fetches its
+    /// own data over several round trips, and every one of them goes through three relays when Tor is
+    /// carrying the traffic. A route probe showed the first Tor lookup timing out at 45 s without ever
+    /// being challenged — the page simply had not finished. Direct stays at 45 s.</summary>
+    static TimeSpan FetchTimeout => TorService.IsActive ? TimeSpan.FromSeconds(150) : TimeSpan.FromSeconds(45);
+
+    string ProfileFolder(string? proxyUrl) =>
+        Path.Combine(ConfigPathResolver.DataFolder, GuiScrapeService.ProfileLeaf(proxyUrl != null, _slot, GuiScrapeService.Generation));
+
+    /// <summary>Drives this browser through one navigate-and-capture round trip and returns the captured
+    /// JSON, or null on miss / timeout / cancel. Sets <see cref="GuiScrapeService.LastOutcome"/>.</summary>
+    public async Task<string?> FetchJsonAsync(string hash, string suffix, string pageUrl, string logLabel, CancellationToken ct)
+    {
+        GuiScrapeService.LastOutcome = KeylessOutcome.None;
+        if (!await EnsureReadyAsync()) { GuiScrapeService.LastOutcome = KeylessOutcome.NoRuntime; return null; }
+
+        var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _targetHash = hash;
+        _targetSuffix = suffix;
+        _currentUrl = pageUrl;
+        _pending = tcs;
+        _captchaShown = false;
+        _autoSolveTried = false;
+        _autoSolving = false;
+        _blockReported = false;
+        _challengeSeen = false;
+
+        try
+        {
+            Log(logLabel + $" (slot {_slot}): " + hash, LogLevel.Info);
+            using var op = OpLog.Begin("Keyless lookup", $"{hash[..Math.Min(16, hash.Length)]}… slot={_slot} route={(_activeProxy ?? "direct")} url={pageUrl}");
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _timeoutCts = timeout;
+            timeout.CancelAfter(FetchTimeout); // extended automatically while a captcha is up
+            op.Step($"timeout {FetchTimeout.TotalSeconds:F0}s");
+
+            Navigate(_currentUrl, logLabel, tcs);
+
+            string? json;
+            using (timeout.Token.Register(() => tcs.TrySetResult(null)))
+                json = await tcs.Task;
+
+            bool gaveUpOnChallenge = (_captchaShown || _challengeSeen) && string.IsNullOrEmpty(json);
+            var outcome = !string.IsNullOrEmpty(json) ? KeylessOutcome.Report
+                        : gaveUpOnChallenge ? KeylessOutcome.Challenged
+                        : timeout.IsCancellationRequested ? KeylessOutcome.TimedOut
+                        : KeylessOutcome.NotFound;
+            GuiScrapeService.LastOutcome = outcome;
+            op.Ok($"{outcome}" + (json != null ? $", {json.Length} chars" : ""));
+            _pending = null;
+            _timeoutCts = null;
+            HideBrowser();
+
+            // A route probe showed exit addresses behaving very differently: one answers, the next
+            // times out every time. While Tor is carrying the traffic, a lookup that got nowhere is a
+            // reason to take a different exit rather than to keep paying the same timeout per file.
+            if (!GuiScrapeService.ProbeMode && TorService.IsActive && outcome is KeylessOutcome.TimedOut or KeylessOutcome.Challenged)
+                NetworkBlockMonitor.ReportTorPathFailure("keyless:" + outcome);
+
+            if (gaveUpOnChallenge && !GuiScrapeService.ProbeMode) GuiScrapeService.ParkChannel("a challenge went unanswered");
+            else if (!string.IsNullOrEmpty(json)) GuiScrapeService.OpenChannel("a lookup succeeded");
+            return string.IsNullOrEmpty(json) ? null : json;
+        }
+        finally { _targetSuffix = ""; _pending = null; _timeoutCts = null; ReleaseCaptchaGate(); }
+    }
+
+    void Navigate(string url, string logLabel, TaskCompletionSource<string?>? failTo)
+    {
+        try
+        {
+            _navDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _form!.BeginInvoke(() =>
+            {
+                try
+                {
+                    // Pick the identity for THIS connection attempt (a random entry from the honest
+                    // identity list) and present it before navigating.
+                    string ua = GuiScrapeService.PickIdentity();
+                    if (!string.IsNullOrEmpty(ua))
+                    {
+                        try { _web!.CoreWebView2.Settings.UserAgent = ua; }
+                        catch (Exception exUa) { Log("Setting the browser identity failed: " + exUa.Message, LogLevel.Warning); }
+                    }
+                    _web!.CoreWebView2.Navigate(url);
+                }
+                catch (Exception ex)
+                {
+                    failTo?.TrySetResult(null);
+                    _navDone?.TrySetResult(false);
+                    Log(logLabel + " navigate failed: " + ex.Message, LogLevel.Warning);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            failTo?.TrySetResult(null);
+            _navDone?.TrySetResult(false);
+            Log(logLabel + " navigate dispatch failed: " + ex.Message, LogLevel.Warning);
+        }
+    }
+
+    public void Shutdown()
     {
         _shuttingDown = true;
         try { _form?.BeginInvoke(() => { try { _web?.Dispose(); _form?.Close(); } catch (Exception ex) { Log("WebView2 shutdown: " + ex.Message, LogLevel.Warning); } }); }
@@ -366,15 +491,16 @@ internal static class GuiScrapeService
 
     // ---- browser lifecycle ----
 
-    static async Task<bool> EnsureReadyAsync()
+    async Task<bool> EnsureReadyAsync()
     {
         string? wantProxy = TorService.ProxyUrl;
+        int wantGen = GuiScrapeService.Generation;
         using var op = OpLog.Begin("Keyless browser ready-check",
-            $"proxy now='{_activeProxy ?? "direct"}' wanted='{wantProxy ?? "direct"}' restartRequested={_restartRequested} started={_initTcs != null}");
+            $"slot={_slot} proxy now='{_activeProxy ?? "direct"}' wanted='{wantProxy ?? "direct"}' gen {_builtGeneration}->{wantGen} restartRequested={_restartRequested} started={_initTcs != null}");
 
-        if (_initTcs != null && (_restartRequested || _activeProxy != wantProxy))
+        if (_initTcs != null && (_restartRequested || _activeProxy != wantProxy || _builtGeneration != wantGen))
         {
-            Log($"Rebuilding the keyless browser (proxy '{_activeProxy ?? "direct"}' -> '{wantProxy ?? "direct"}').", LogLevel.Info);
+            Log($"Rebuilding keyless browser slot {_slot} (proxy '{_activeProxy ?? "direct"}' -> '{wantProxy ?? "direct"}', gen {_builtGeneration} -> {wantGen}).", LogLevel.Info);
             op.Step("tearing the old browser down");
             TearDown();
         }
@@ -405,9 +531,9 @@ internal static class GuiScrapeService
     /// pushed the FIRST lookup after a route change past the timeout while the second and third on the
     /// same circuit came back fine. The warm-up is best-effort: if it fails the lookup still runs.
     /// </summary>
-    static async Task WarmUpAsync()
+    async Task WarmUpAsync()
     {
-        using var op = OpLog.Begin("Keyless warm-up", AppConstants.VtGuiHome);
+        using var op = OpLog.Begin("Keyless warm-up", $"slot={_slot} {AppConstants.VtGuiHome}");
         try
         {
             Navigate(AppConstants.VtGuiHome, "Keyless warm-up", null);
@@ -419,9 +545,9 @@ internal static class GuiScrapeService
         catch (Exception ex) { Log("Keyless warm-up failed: " + ex.Message, LogLevel.Warning); op.Fail(ex.Message); }
     }
 
-    static void TearDown()
+    void TearDown()
     {
-        using var op = OpLog.Begin("Keyless browser teardown", $"thread={_thread?.ManagedThreadId.ToString() ?? "-"}");
+        using var op = OpLog.Begin("Keyless browser teardown", $"slot={_slot} thread={_thread?.ManagedThreadId.ToString() ?? "-"}");
         var form = _form;
         var thread = _thread;
         _shuttingDown = true;
@@ -442,6 +568,7 @@ internal static class GuiScrapeService
         finally
         {
             lock (_frames) _frames.Clear();
+            ReleaseCaptchaGate();
             _form = null; _web = null; _bar = null; _torBtn = null; _barLabel = null;
             _thread = null; _initTcs = null; _initFailed = false;
             _shuttingDown = false; _restartRequested = false;
@@ -449,11 +576,12 @@ internal static class GuiScrapeService
         }
     }
 
-    static Task<bool> StartBrowserAsync(string? proxyUrl)
+    Task<bool> StartBrowserAsync(string? proxyUrl)
     {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _initTcs = tcs;
         _activeProxy = proxyUrl;
+        _builtGeneration = GuiScrapeService.Generation;
 
         _thread = new Thread(() =>
         {
@@ -474,7 +602,7 @@ internal static class GuiScrapeService
                 _form.FormClosing += (_, e) =>
                 {
                     if (_shuttingDown) return;
-                    e.Cancel = true; // singleton browser — never really close, just hide
+                    e.Cancel = true; // pooled browser — never really close, just hide
                     HideBrowser();
                 };
 
@@ -487,9 +615,10 @@ internal static class GuiScrapeService
                 {
                     try
                     {
-                        // A separate profile per route: a VirusTotal session cookie earned on the direct
-                        // address is worthless (and suspicious) on a Tor exit, and vice versa. A hard reset
-                        // bumps the generation so this is a brand-new, empty folder.
+                        // A separate profile per route AND per slot: a VirusTotal session cookie earned on
+                        // the direct address is worthless (and suspicious) on a Tor exit, and WebView2
+                        // cannot share a user-data folder between two live browsers. A hard reset bumps the
+                        // generation so this is a brand-new, empty folder.
                         string userData = ProfileFolder(proxyUrl);
                         Directory.CreateDirectory(userData);
 
@@ -505,7 +634,7 @@ internal static class GuiScrapeService
                                 // at the SOCKS port, and every lookup then timed out with no response at
                                 // all — not even a 429.
                                 opts.AdditionalBrowserArguments = $"--proxy-server=\"{proxyUrl}\"";
-                                Log("WebView2 browser arguments: " + opts.AdditionalBrowserArguments, LogLevel.Info);
+                                Log($"WebView2 slot {_slot} browser arguments: " + opts.AdditionalBrowserArguments, LogLevel.Info);
                             }
                             env = await CoreWebView2Environment.CreateAsync(null, userData, opts);
                         }
@@ -541,13 +670,13 @@ internal static class GuiScrapeService
                 tcs.TrySetResult(false);
             }
         })
-        { IsBackground = true, Name = "vt-webview" };
+        { IsBackground = true, Name = $"vt-webview-{_slot}" };
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
         return tcs.Task;
     }
 
-    static void OnFrameCreated(object? sender, CoreWebView2FrameCreatedEventArgs e)
+    void OnFrameCreated(object? sender, CoreWebView2FrameCreatedEventArgs e)
     {
         try
         {
@@ -558,7 +687,7 @@ internal static class GuiScrapeService
         catch (Exception ex) { Log("Frame tracking failed: " + ex.Message, LogLevel.Warning); }
     }
 
-    static void BuildCaptchaBar()
+    void BuildCaptchaBar()
     {
         _bar = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.FromArgb(0xE3, 0xB3, 0x41), Visible = false };
         _barLabel = new Label
@@ -594,7 +723,7 @@ internal static class GuiScrapeService
 
     // ---- reCAPTCHA detection (three independent paths) ----
 
-    static async void OnResponse(object? sender, CoreWebView2WebResourceResponseReceivedEventArgs e)
+    async void OnResponse(object? sender, CoreWebView2WebResourceResponseReceivedEventArgs e)
     {
         var pending = _pending;
         if (pending == null) return;
@@ -611,7 +740,7 @@ internal static class GuiScrapeService
             if (!path.EndsWith("/ui/files/" + _targetHash + _targetSuffix, StringComparison.OrdinalIgnoreCase)) return;
 
             int code = e.Response.StatusCode;
-            Log($"Keyless <- HTTP {code} {e.Response.ReasonPhrase} for {path}", LogLevel.Info);
+            Log($"Keyless slot {_slot} <- HTTP {code} {e.Response.ReasonPhrase} for {path}", LogLevel.Info);
             if (code == 200)
             {
                 var stream = await e.Response.GetContentAsync();
@@ -659,11 +788,11 @@ internal static class GuiScrapeService
         }
     }
 
-    static async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         // The only place a proxy/DNS/TLS failure is visible: without this, a route that cannot load the
         // page at all looks exactly like a slow one — both just time out with nothing logged.
-        Log($"Keyless navigation completed: success={e.IsSuccess} status={e.WebErrorStatus} httpStatus={e.HttpStatusCode}", LogLevel.Info);
+        Log($"Keyless slot {_slot} navigation completed: success={e.IsSuccess} status={e.WebErrorStatus} httpStatus={e.HttpStatusCode}", LogLevel.Info);
         _navDone?.TrySetResult(e.IsSuccess);
         if (_pending == null || _captchaShown || _autoSolving || _web == null) return;
         try
@@ -676,7 +805,7 @@ internal static class GuiScrapeService
     /// <summary>(3) DOM check for a VISIBLE challenge only. Invisible reCAPTCHA always injects a 0-sized
     /// anchor iframe, so the challenge frame (api2/bframe) must be actually shown with real size, or an
     /// explicit challenge widget / page title must be present — otherwise we'd false-fire.</summary>
-    static async Task<bool> HasVisibleChallengeAsync()
+    async Task<bool> HasVisibleChallengeAsync()
     {
         if (_web == null) return false;
         const string js = "(function(){try{" +
@@ -691,11 +820,11 @@ internal static class GuiScrapeService
 
     // ---- captcha handling: try the one click ourselves before disturbing the user ----
 
-    static void HandleCaptcha(string via)
+    void HandleCaptcha(string via)
     {
         if (_captchaShown || _autoSolving) return;
         _challengeSeen = true;
-        if (ProbeMode)
+        if (GuiScrapeService.ProbeMode)
         {
             // Measuring, not scanning: report the challenge and end the lookup. No window, no clicking —
             // the whole point is to see how this exit address is treated on its own.
@@ -732,7 +861,7 @@ internal static class GuiScrapeService
     /// <summary>Loads the page, clicks the reCAPTCHA checkbox inside its own frame and waits to see
     /// whether that alone satisfied it. Returns true when the checkbox went green with no picture
     /// puzzle and the page was re-requested; false when a puzzle appeared or nothing worked.</summary>
-    static async Task<bool> TryAutoSolveAsync()
+    async Task<bool> TryAutoSolveAsync()
     {
         var pending = _pending;
         if (pending == null || _web == null) return false;
@@ -778,7 +907,7 @@ internal static class GuiScrapeService
     /// <summary>Runs the checkbox click inside every child frame; only the reCAPTCHA anchor frame
     /// matches, which is why the script checks its own location first. Returns the frame's answer:
     /// "clicked", "checked", "already", or "none".</summary>
-    static async Task<string> ClickAnchorInFramesAsync()
+    async Task<string> ClickAnchorInFramesAsync()
     {
         const string js = "(function(){try{" +
                           "if(location.href.indexOf('api2/anchor')<0)return 'skip';" +
@@ -807,7 +936,7 @@ internal static class GuiScrapeService
     }
 
     /// <summary>Marshals a WebView2 call onto the browser's own UI thread and awaits its result.</summary>
-    static Task<string> RunOnUiAsync(Func<Task<string>> action)
+    Task<string> RunOnUiAsync(Func<Task<string>> action)
     {
         var form = _form;
         var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -824,11 +953,22 @@ internal static class GuiScrapeService
         return tcs.Task;
     }
 
-    static void ShowCaptcha(string via)
+    void ShowCaptcha(string via)
     {
         if (_captchaShown || _form == null || _bar == null) return;
+
+        // Only one browser at a time may take the foreground for a human. If another already holds it,
+        // this lookup ends here instead of stacking a second window; ending it parks the shared channel,
+        // which is the same effect as an unanswered challenge.
+        if (!GuiScrapeService.CaptchaWindowGate.Wait(0))
+        {
+            Log($"reCAPTCHA on slot {_slot} ({via}) but another browser already holds the foreground — ending this lookup.", LogLevel.Info);
+            _pending?.TrySetResult(null);
+            return;
+        }
+        Interlocked.Exchange(ref _holdsCaptchaGate, 1);
         _captchaShown = true;
-        Log("reCAPTCHA detected (" + via + ") — bringing browser to foreground.", LogLevel.Warning);
+        Log($"reCAPTCHA detected on slot {_slot} ({via}) — bringing browser to foreground.", LogLevel.Warning);
 
         try
         {
@@ -858,7 +998,7 @@ internal static class GuiScrapeService
         catch (Exception ex) { Log("ShowCaptcha failed: " + ex.Message, LogLevel.Warning); }
     }
 
-    static void OnSolvedClicked()
+    void OnSolvedClicked()
     {
         try
         {
@@ -873,7 +1013,7 @@ internal static class GuiScrapeService
 
     /// <summary>The captcha bar's Tor button: switch Tor on when it is off, take a new exit address
     /// when it is already on. Either way the lookup is dropped so it restarts on the new route.</summary>
-    static void OnTorButtonClicked()
+    void OnTorButtonClicked()
     {
         var pending = _pending;
         try { if (_torBtn != null) { _torBtn.Enabled = false; _torBtn.Text = Strings.CaptchaBtnTorWorking; } }
@@ -898,7 +1038,7 @@ internal static class GuiScrapeService
                         VtHttpClientFactory.Invalidate();
                     }
                 }
-                if (ok) InvalidateSession("captcha bar");
+                if (ok) GuiScrapeService.InvalidateSession("captcha bar");
                 UiStatusHub.Report(Strings.StatusSourceTor,
                     ok ? TorService.StatusLine() : string.Format(Strings.TorAutoEnableFailedFormat, TorService.LastError ?? "?"),
                     ok ? StatusSeverity.Info : StatusSeverity.Warning);
@@ -927,15 +1067,25 @@ internal static class GuiScrapeService
 
     /// <summary>User chose to use an API key instead of solving the reCAPTCHA — give up the GUI
     /// lookup so the scan falls back to the API path.</summary>
-    static void OnSwitchToApi()
+    void OnSwitchToApi()
     {
         Log("User chose API over reCAPTCHA.", LogLevel.Info);
         _pending?.TrySetResult(null);
         HideBrowser();
     }
 
-    static void HideBrowser()
+    void ReleaseCaptchaGate()
     {
+        if (Interlocked.Exchange(ref _holdsCaptchaGate, 0) == 1)
+        {
+            try { GuiScrapeService.CaptchaWindowGate.Release(); }
+            catch (Exception ex) { Log("Captcha window gate release failed: " + ex.Message, LogLevel.Warning); }
+        }
+    }
+
+    void HideBrowser()
+    {
+        ReleaseCaptchaGate();
         if (_form == null) return;
         try
         {
