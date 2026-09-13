@@ -31,14 +31,16 @@ internal sealed class ScanQueueControl : UserControl
     readonly Dictionary<Bucket, Button> _chips = [];
     readonly Label _filterCount = new() { AutoSize = true, Margin = new Padding(10, 8, 0, 0) };
     /// <summary>
-    /// The rows the grid shows. A plain list on purpose, not a BindingList: a BindingList listens to every
-    /// row's PropertyChanged and passes it to the grid on whatever thread raised it. Scan threads write row
-    /// state directly, so the grid then reacted on a scan thread, moved its selection there and made the
-    /// detail pane create its window handles on that thread; the next time the UI thread read one of those
-    /// labels it waited forever for a thread that never pumps messages. The grid repaints on its own timer
-    /// and is re-bound only here, on the UI thread.
+    /// The rows the grid shows, in order. The grid is virtual and reads this list only on the UI thread.
+    /// It is deliberately not a BindingList: a BindingList passes every row's PropertyChanged to the grid on
+    /// whatever thread raised it, scan threads write row state directly, and the grid then moved its
+    /// selection on a scan thread and made the detail pane create its window handles there; the next time
+    /// the UI thread touched one of those labels it waited forever.
     /// </summary>
     readonly List<ScanItem> _view = [];
+
+    /// <summary>Marked files. Kept by file, not on row cells, so the live re-sort does not wipe them.</summary>
+    readonly HashSet<ScanItem> _marks = new(ReferenceEqualityComparer.Instance);
     readonly System.Windows.Forms.Timer _filterTimer = new() { Interval = 200 }; // debounce search keystrokes
     Bucket _bucket = Bucket.All;
 
@@ -436,14 +438,6 @@ internal sealed class ScanQueueControl : UserControl
         }
     }
 
-    /// <summary>
-    /// How many rows the grid is ever given. A bound DataGridView builds a row object for every record,
-    /// so handing it a whole-drive sweep — 346,000 files — froze the window before the first file was
-    /// even hashed. Past this many the grid shows the first rows of the sorted order. The full set stays in
-    /// the scheduler, and search and the chips still run over all of it.
-    /// </summary>
-    const int GridRowBudget = 5000;
-
     const int LiveSortIntervalMs = 500;
 
     void ApplyFilter()
@@ -519,9 +513,8 @@ internal sealed class ScanQueueControl : UserControl
             return c != 0 ? c : a.Tie.CompareTo(b.Tie);
         });
 
-        int count = Math.Min(keys.Count, GridRowBudget);
-        var result = new List<ScanItem>(count);
-        for (int n = 0; n < count; n++) result.Add(keys[n].Item);
+        var result = new List<ScanItem>(keys.Count);
+        foreach (var k in keys) result.Add(k.Item);
         return result;
     }
 
@@ -546,7 +539,7 @@ internal sealed class ScanQueueControl : UserControl
     /// keeps the row they were looking at.</summary>
     void ShowSorted(List<ScanItem> rows)
     {
-        if (ReferenceEquals(_grid.DataSource, _view) && _view.Count == rows.Count)
+        if (_grid.RowCount == rows.Count && _view.Count == rows.Count)
         {
             bool same = true;
             for (int n = 0; n < rows.Count && same; n++) same = ReferenceEquals(_view[n], rows[n]);
@@ -554,11 +547,12 @@ internal sealed class ScanQueueControl : UserControl
         }
 
         var keep = SelectedItem();
+        var selected = EntityGrid.Selected<ScanItem>(_grid);
         bool atTop = FirstDisplayedRow() <= 0;
         var top = atTop ? null : TopItem();
         _view.Clear();
         _view.AddRange(rows);
-        RebindKeepingPlace(_view, keep, top);
+        RebindKeepingPlace(keep, selected, top);
         if (atTop && _view.Count > 0)
         {
             try { _grid.FirstDisplayedScrollingRowIndex = 0; }
@@ -576,40 +570,46 @@ internal sealed class ScanQueueControl : UserControl
     bool _rebindingView;     // set while RebindKeepingPlace rebuilds the rows
 
     /// <summary>
-    /// Rebuilds the grid's rows from <paramref name="list"/> and puts the user back where they were.
+    /// Shows <see cref="_view"/> in its new order and puts the user back where they were: the current row, every
+    /// highlighted row and the top visible row follow their files to wherever they moved.
     ///
-    /// A rebuild makes the grid select its first row, and that raised SelectionChanged. During a scan
-    /// the live view is rebuilt four times a second, so the detail pane was rebuilt four times a second
-    /// for whatever row happened to be first — and building it verifies the file's signature and reads
-    /// its PE headers, on this thread. Stack samples of the stuttering window landed there every time.
-    /// The list also jumped back to the top under the user's scroll. Selection changes raised by the
-    /// rebuild are now ignored, and the selected row and the top visible row are restored afterwards.
+    /// The grid is virtual, so this only sets the row count and repaints; there is no row object per file to
+    /// rebuild, whatever the list's length. Selection lives on row positions, which is why it is restored by
+    /// file. Selection changes raised on the way are ignored: rebuilding the detail pane for each of them
+    /// verified signatures and read PE headers on this thread.
     /// </summary>
-    void RebindKeepingPlace(List<ScanItem> list, ScanItem? keep, ScanItem? top)
+    void RebindKeepingPlace(ScanItem? keep, List<ScanItem> selected, ScanItem? top)
     {
         _rebindingView = true;
         try
         {
-            // A plain list raises no change events, so the grid is told to read it again.
-            if (!ReferenceEquals(_grid.DataSource, list)) _grid.DataSource = list;
-            else if (_grid.BindingContext?[list] is CurrencyManager manager) manager.Refresh();
+            if (_grid.RowCount != _view.Count) _grid.RowCount = _view.Count;
 
-            // IndexOf on the list, not a walk of grid.Rows: touching a row by index makes the grid build
-            // a full row object for it, and the view holds up to 5,000.
-            int sel = keep == null ? -1 : list.IndexOf(keep);
-            if (sel >= 0)
+            // Positions by file, built once when more than one row has to be found.
+            Dictionary<ScanItem, int>? index = null;
+            int IndexOfItem(ScanItem item)
             {
-                _grid.CurrentCell = _grid.Rows[sel].Cells[0];
-                _grid.Rows[sel].Selected = true;
-            }
-            else
-            {
-                _grid.CurrentCell = null; // nothing was selected, or that row left the view: select nothing
-                _grid.ClearSelection();
+                if (selected.Count <= 1) return _view.IndexOf(item);
+                if (index == null)
+                {
+                    index = new Dictionary<ScanItem, int>(_view.Count, ReferenceEqualityComparer.Instance);
+                    for (int n = 0; n < _view.Count; n++) index[_view[n]] = n;
+                }
+                return index.TryGetValue(item, out int at) ? at : -1;
             }
 
-            int first = top == null ? -1 : list.IndexOf(top);
+            int current = keep == null ? -1 : IndexOfItem(keep);
+            if (current >= 0) _grid.CurrentCell = _grid.Rows[current].Cells[FirstDataColumn()];
+            else _grid.CurrentCell = null; // nothing was selected, or that row left the view: select nothing
+
+            _grid.ClearSelection();
+            foreach (var item in selected)
+                if (IndexOfItem(item) is int at && at >= 0) _grid.Rows[at].Selected = true;
+            if (current >= 0) _grid.Rows[current].Selected = true;
+
+            int first = top == null ? -1 : IndexOfItem(top);
             if (first >= 0) _grid.FirstDisplayedScrollingRowIndex = first;
+            _grid.Invalidate();
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException)
         {
@@ -618,16 +618,15 @@ internal sealed class ScanQueueControl : UserControl
         finally { _rebindingView = false; }
     }
 
-    /// <summary>The item in the top visible row of the grid, read from the bound list.</summary>
-    ScanItem? TopItem()
+    int FirstDataColumn()
     {
-        try
-        {
-            int index = _grid.FirstDisplayedScrollingRowIndex;
-            return index >= 0 && _grid.DataSource is IList<ScanItem> rows && index < rows.Count ? rows[index] : null;
-        }
-        catch (InvalidOperationException) { return null; }
+        foreach (DataGridViewColumn c in _grid.Columns)
+            if (c.Name != EntityGrid.MarkColumn && c.Visible) return c.Index;
+        return 0;
     }
+
+    /// <summary>The file in the top visible row.</summary>
+    ScanItem? TopItem() => RowItem(FirstDisplayedRow());
 
     void UpdateChipCounts()
     {
@@ -669,8 +668,8 @@ internal sealed class ScanQueueControl : UserControl
         SetChip(Bucket.Malicious, Strings.ChipMalicious, mal);
         SetChip(Bucket.Skipped, Strings.ChipSkipped, skip);
         SetChip(Bucket.Error, Strings.ChipError, err);
-        string filterText = FilterActive ? string.Format(Strings.FilterCountFormat, _grid.Rows.Count, all) : "";
-        if (!string.Equals(_filterCount.Text, filterText, StringComparison.Ordinal)) SetFilterCount(filterText, Math.Max(_grid.Rows.Count, all));
+        string filterText = FilterActive ? string.Format(Strings.FilterCountFormat, _view.Count, all) : "";
+        if (!string.Equals(_filterCount.Text, filterText, StringComparison.Ordinal)) SetFilterCount(filterText, Math.Max(_view.Count, all));
     }
 
     int _filterCountDigits = -1; // -1: still auto-sized; 0: empty
@@ -731,8 +730,9 @@ internal sealed class ScanQueueControl : UserControl
     /// </summary>
     void BindLiveView()
     {
+        if (_scheduler.Items.Count == 0) _marks.Clear(); // a run that starts on a cleared queue: the old marks are for files that are gone
         _view.Clear();
-        RebindKeepingPlace(_view, null, null);
+        RebindKeepingPlace(null, [], null);
         RequestSort(force: true);
     }
 
@@ -934,7 +934,8 @@ internal sealed class ScanQueueControl : UserControl
         ThemeManager.StyleGrid(_grid);
         EntityGrid.EnableMultiSelect(_grid);      // StyleGrid forces MultiSelect off — turn it back on
         EntityGrid.EnableRightClickSelect(_grid); // right-click first selects the row, then the menu opens on it
-        _grid.DataSource = _view;
+        EntityGrid.UseVirtualRows(_grid, RowItem, _marks);
+        _grid.CellValueNeeded += Grid_CellValueNeeded;
         _grid.CellPainting += Grid_CellPainting;
         _grid.CellFormatting += Grid_CellFormatting;
         _colHeaders = _grid.Columns.Cast<DataGridViewColumn>().Select(c => c.HeaderText).ToArray();
@@ -1048,11 +1049,25 @@ internal sealed class ScanQueueControl : UserControl
     };
 
     // Tint each row by its verdict so the list scans at a glance (red threat, yellow suspicious, …).
-    /// <summary>The item behind a grid row, read from the bound list. <c>_grid.Rows[i]</c> would do too, but
-    /// indexing a row makes the grid replace its shared row with a full row object — on every paint of
-    /// every visible cell, several times a second while a scan runs.</summary>
-    ScanItem? RowItem(int rowIndex) =>
-        rowIndex >= 0 && _grid.DataSource is IList<ScanItem> rows && rowIndex < rows.Count ? rows[rowIndex] : null;
+    /// <summary>The file behind a grid row. Read from the list, never through <c>_grid.Rows[i]</c>: indexing a
+    /// row makes the grid build a full row object for it, on every paint of every visible cell.</summary>
+    ScanItem? RowItem(int rowIndex) => rowIndex >= 0 && rowIndex < _view.Count ? _view[rowIndex] : null;
+
+    /// <summary>The value of a data cell, asked for by the virtual grid only for the cells it paints.</summary>
+    void Grid_CellValueNeeded(object? sender, DataGridViewCellValueEventArgs e)
+    {
+        if (RowItem(e.RowIndex) is not ScanItem item) return;
+        e.Value = _grid.Columns[e.ColumnIndex].Name switch
+        {
+            "col_file" => item.DisplayName,
+            "col_ext" => item.Extension,
+            "col_size" => item.SizeText,
+            "col_status" => item.StatusText,
+            "col_activity" => item.ActivityText,
+            "col_added" => item.AddedText,
+            _ => e.Value, // the mark column is answered by EntityGrid, the progress column is painted
+        };
+    }
 
     void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
@@ -1779,16 +1794,16 @@ internal sealed class ScanQueueControl : UserControl
     {
         try
         {
-            var target = FirstMatchingRow(i => i.Status is ScanStatus.CheckingSignature or ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)
-                      ?? FirstMatchingRow(i => i.Status == ScanStatus.AwaitingLookup)
-                      ?? FirstMatchingRow(i => i.Status == ScanStatus.Queued);
-            if (target == null) { _summary.Text = Strings.JumpNothingRunning; return; }
+            int target = FirstMatchingRow(i => i.Status is ScanStatus.CheckingSignature or ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling);
+            if (target < 0) target = FirstMatchingRow(i => i.Status == ScanStatus.AwaitingLookup);
+            if (target < 0) target = FirstMatchingRow(i => i.Status == ScanStatus.Queued);
+            if (target < 0) { _summary.Text = Strings.JumpNothingRunning; return; }
 
             _grid.ClearSelection();
-            target.Selected = true;
-            _grid.CurrentCell = target.Cells[Math.Min(1, target.Cells.Count - 1)];
-            int first = Math.Max(0, target.Index - Math.Max(0, _grid.DisplayedRowCount(false) / 2));
-            _grid.FirstDisplayedScrollingRowIndex = Math.Min(first, Math.Max(0, _grid.Rows.Count - 1));
+            _grid.CurrentCell = _grid.Rows[target].Cells[FirstDataColumn()];
+            _grid.Rows[target].Selected = true;
+            int first = Math.Max(0, target - Math.Max(0, _grid.DisplayedRowCount(false) / 2));
+            _grid.FirstDisplayedScrollingRowIndex = Math.Min(first, Math.Max(0, _grid.RowCount - 1));
             _grid.Focus();
         }
         catch (Exception ex)
@@ -1798,12 +1813,8 @@ internal sealed class ScanQueueControl : UserControl
         }
     }
 
-    DataGridViewRow? FirstMatchingRow(Func<ScanItem, bool> match)
-    {
-        foreach (DataGridViewRow row in _grid.Rows)
-            if (row.DataBoundItem is ScanItem it && match(it)) return row;
-        return null;
-    }
+    /// <summary>Index of the first row whose file matches, or -1.</summary>
+    int FirstMatchingRow(Func<ScanItem, bool> match) => _view.FindIndex(i => match(i));
 
     // ---- event sinks ----
 
@@ -1900,12 +1911,8 @@ internal sealed class ScanQueueControl : UserControl
     {
         // Rows added straight to the scheduler's list reach the grid only through a sort.
         ShowSorted(SortRows(_scheduler.Items.ToArray(), _sortMode, _sortDescending, _bucket, _search.Text.Trim()));
-        if (_grid.Rows.Count == 0) return;
-        _grid.ClearSelection();
-        _grid.CurrentCell = _grid.Rows[0].Cells[0];
-        _grid.Rows[0].Selected = true;
-        _detailItem = SelectedItem();
-        _detail.Show(_detailItem);
+        if (_view.Count == 0) return;
+        FocusItem(_view[0]);
     }
 
     /// <summary>Select and reveal a specific item (e.g. jumped to from a threat toast).</summary>
@@ -1917,11 +1924,11 @@ internal sealed class ScanQueueControl : UserControl
     {
         _grid.ClearSelection();
         int n = 0, first = -1;
-        foreach (DataGridViewRow row in _grid.Rows)
-            if (row.DataBoundItem is ScanItem it && IsThreatish(it))
+        for (int i = 0; i < _view.Count; i++)
+            if (IsThreatish(_view[i]))
             {
-                row.Selected = true;
-                if (first < 0) first = row.Index;
+                _grid.Rows[i].Selected = true;
+                if (first < 0) first = i;
                 n++;
             }
         if (n == 0) { _summary.Text = Strings.NoVisibleThreatsInfo; return; }
@@ -1933,19 +1940,18 @@ internal sealed class ScanQueueControl : UserControl
     /// (wrapping at the ends), scroll it into view, and show a "3/12" position hint in the status line.</summary>
     void JumpVerdict(bool forward, Func<ScanItem, bool> match)
     {
-        int n = _grid.Rows.Count;
+        int n = _view.Count;
         if (n == 0) return;
         int cur = EntityGrid.CurrentIndex(_grid) ?? (forward ? -1 : 0);
         for (int step = 1; step <= n; step++)
         {
             int idx = (((forward ? cur + step : cur - step) % n) + n) % n;
-            if (_grid.Rows[idx].DataBoundItem is ScanItem it && match(it))
+            if (match(_view[idx]))
             {
-                FocusItem(it);
+                FocusItem(_view[idx]);
                 try { _grid.FirstDisplayedScrollingRowIndex = idx; } catch { }
-                var rows = _grid.Rows.Cast<DataGridViewRow>().ToList();
-                int total = rows.Count(r => r.DataBoundItem is ScanItem s && match(s));
-                int rank = rows.Take(idx + 1).Count(r => r.DataBoundItem is ScanItem s && match(s));
+                int total = _view.Count(s => match(s));
+                int rank = _view.Take(idx + 1).Count(s => match(s));
                 _summary.Text = string.Format(Strings.JumpVerdictPositionFormat, rank, total);
                 return;
             }
@@ -1954,14 +1960,13 @@ internal sealed class ScanQueueControl : UserControl
 
     public void FocusItem(ScanItem item)
     {
-        foreach (DataGridViewRow row in _grid.Rows)
-            if (ReferenceEquals(row.DataBoundItem, item))
-            {
-                _grid.ClearSelection();
-                _grid.CurrentCell = row.Cells[0];
-                row.Selected = true;
-                break;
-            }
+        int at = _view.IndexOf(item);
+        if (at >= 0)
+        {
+            _grid.ClearSelection();
+            _grid.CurrentCell = _grid.Rows[at].Cells[FirstDataColumn()];
+            _grid.Rows[at].Selected = true;
+        }
         _detailItem = item;
         _detail.Show(item);
     }
