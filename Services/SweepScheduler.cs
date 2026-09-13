@@ -14,10 +14,23 @@ internal static class SweepScheduler
     public static string ReportPath => Path.Combine(ConfigPathResolver.DataFolder, "sweep-report.html");
     public static string ResultPath => Path.Combine(ConfigPathResolver.DataFolder, "sweep-result.json");
 
+    static readonly object InstalledLock = new();
+    static bool? _installed;
+
+    /// <summary>
+    /// Whether the task exists. Asked once and remembered; <see cref="Install"/> and <see cref="Uninstall"/>
+    /// keep the answer current. Each question starts schtasks.exe and waits for it, and the overview asks
+    /// on every refresh from the UI thread — during a scan that was a process start per finished file.
+    /// </summary>
     public static bool IsInstalled()
     {
-        try { return Run(["/Query", "/TN", TaskName], out _) == 0; }
-        catch { return false; }
+        lock (InstalledLock)
+        {
+            if (_installed is { } known) return known;
+            try { _installed = Run(["/Query", "/TN", TaskName], out _) == 0; }
+            catch (Exception ex) { Log("Scheduled sweep query failed: " + ex.Message, LogLevel.Warning); _installed = false; }
+            return _installed.Value;
+        }
     }
 
     /// <summary><paramref name="schedule"/> is the schtasks /SC group, e.g. ["/SC","DAILY","/ST","03:00"].</summary>
@@ -36,6 +49,7 @@ internal static class SweepScheduler
             int code = Run([.. args], out string output);
             if (code != 0) { error = string.IsNullOrWhiteSpace(output) ? string.Format(Strings.SweepSchtasksExitFormat, code) : output.Trim(); return false; }
 
+            lock (InstalledLock) _installed = true;
             Settings.SweepFolder.Value = folder;
             SettingsManager.SaveSettings();
             Log("Scheduled sweep installed for: " + folder, LogLevel.Info);
@@ -51,6 +65,7 @@ internal static class SweepScheduler
         {
             int code = Run(["/Delete", "/TN", TaskName, "/F"], out string o);
             if (code != 0) { error = o.Trim(); return false; }
+            lock (InstalledLock) _installed = false;
             Log("Scheduled sweep removed.", LogLevel.Info);
             return true;
         }
