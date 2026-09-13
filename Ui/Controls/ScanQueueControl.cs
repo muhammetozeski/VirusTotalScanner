@@ -30,15 +30,27 @@ internal sealed class ScanQueueControl : UserControl
     readonly TextBox _search = new() { Width = 200 };
     readonly Dictionary<Bucket, Button> _chips = [];
     readonly Label _filterCount = new() { AutoSize = true, Margin = new Padding(10, 8, 0, 0) };
-    System.ComponentModel.BindingList<ScanItem>? _view;
+    /// <summary>
+    /// The rows the grid shows. A plain list on purpose, not a BindingList: a BindingList listens to every
+    /// row's PropertyChanged and passes it to the grid on whatever thread raised it. Scan threads write row
+    /// state directly, so the grid then reacted on a scan thread, moved its selection there and made the
+    /// detail pane create its window handles on that thread; the next time the UI thread read one of those
+    /// labels it waited forever for a thread that never pumps messages. The grid repaints on its own timer
+    /// and is re-bound only here, on the UI thread.
+    /// </summary>
+    readonly List<ScanItem> _view = [];
     readonly System.Windows.Forms.Timer _filterTimer = new() { Interval = 200 }; // debounce search keystrokes
-    string _lastFilterQuery = "";
-    Bucket _lastFilterBucket = Bucket.All;
-    int _sortCol = -1;          // active header-sort column (-1 = arrival order)
-    bool _sortAsc = true;
-    string[] _colHeaders = [];  // base header texts (without the ▲/▼ glyph)
-    readonly HashSet<ScanItem> _viewSet = new(); // O(1) membership for _view (mirrors it on every rebuild)
     Bucket _bucket = Bucket.All;
+
+    // ---- sorting ----
+    enum SortMode { Activity, Added, Extension, Name, Size, Status }
+    SortMode _sortMode = SortMode.Activity;
+    bool _sortDescending = true;
+    readonly ComboBox _sortBox = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 210, Margin = new Padding(0, 5, 8, 4) };
+    string[] _colHeaders = [];  // base header texts (without the ▲/▼ glyph)
+    long _sortedAtSequence = -1; // ScanItem.LatestSequence the view was last sorted at
+    bool _sortRunning, _sortAgain;
+    readonly System.Diagnostics.Stopwatch _sinceSort = System.Diagnostics.Stopwatch.StartNew();
 
     // ---- "have I scanned this before?" recall bar ----
     readonly Panel _recallBar = new() { Dock = DockStyle.Top, Height = 30, Visible = false, Padding = new Padding(10, 4, 4, 4) };
@@ -208,7 +220,7 @@ internal sealed class ScanQueueControl : UserControl
             _grid.Visible = true;
             BindLiveView();
         });
-        _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); UpdateEmptyState(); });
+        _scheduler.Finished += () => SafeUi(() => { UpdateRunningState(false); _repaintTimer.Stop(); _grid.Invalidate(); ApplyFilter(); UpdateEmptyState(); _detail.RefreshLive(); });
         _scheduler.PendingQueued += n => _summary.Text = string.Format(Strings.PendingQueuedFormat, n); // already on the UI thread via UiPost
         _scheduler.Items.ListChanged += (_, e) =>
         {
@@ -220,16 +232,17 @@ internal sealed class ScanQueueControl : UserControl
         AttachStaticTooltips();
         TooltipCatalog.Apply(_tips, this); // catches anything the two lists above did not name
 
-        // Repaint live progress, but do NOT re-sort here. Re-sorting the whole view 4×/sec while verdicts
-        // streamed in was what made a sorted list "go crazy" during a scan (rows jumping, selection/scroll
-        // thrash). New finished rows are appended in place by OnFilterItemFinished; a full re-sort happens
-        // only on a header click and once when the scan finishes (Finished → ApplyFilter → ApplySort).
+        // While a scan runs the list stays sorted live: re-sorted whenever any row changed, at most twice a
+        // second, off the UI thread. The selected row and the scroll position survive each re-sort (see
+        // RebindKeepingPlace), so a sorted list can be watched instead of re-sorted by hand. The detail pane
+        // follows the selected row as its state changes.
         _repaintTimer.Tick += (_, _) =>
         {
             if (!_scheduler.IsRunning) return;
-            UiSlice.Measure($"queue rows flush ({_pendingRows.Count} in, {_view?.Count ?? 0} shown)", FlushPendingRows);
+            if (_sinceSort.ElapsedMilliseconds >= LiveSortIntervalMs) RequestSort(force: false);
             _grid.Invalidate();
             UiSlice.Measure("chip counts", UpdateChipCounts);
+            UiSlice.Measure("detail pane refresh", _detail.RefreshLive);
         };
 
         UpdateRunningState(false);
@@ -255,11 +268,39 @@ internal sealed class ScanQueueControl : UserControl
         AddChip(strip, Bucket.Skipped, Strings.ChipSkipped, null);
         AddChip(strip, Bucket.Error, Strings.ChipError, null);
 
+        // Label and box in one unbreakable group, so a narrow window wraps them together.
+        var sortGroup = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(8, 0, 0, 0) };
+        sortGroup.Controls.Add(new Label { Text = Strings.SortLabel, AutoSize = true, Margin = new Padding(0, 9, 4, 0) });
+        foreach (var (mode, label) in SortChoices) _sortBox.Items.Add(label);
+        _sortBox.SelectedIndex = Array.FindIndex(SortChoices, c => c.Mode == _sortMode);
+        _sortBox.SelectedIndexChanged += (_, _) =>
+        {
+            if (_syncingSortBox || _sortBox.SelectedIndex < 0) return;
+            SetSort(SortChoices[_sortBox.SelectedIndex].Mode, DefaultDescending(SortChoices[_sortBox.SelectedIndex].Mode));
+        };
+        sortGroup.Controls.Add(_sortBox);
+        strip.Controls.Add(sortGroup);
+
         _filterCount.Tag = "subtle";
         strip.Controls.Add(_filterCount);
         SetBucket(Bucket.All);
         return strip;
     }
+
+    static readonly (SortMode Mode, string Label)[] SortChoices =
+    [
+        (SortMode.Activity, Strings.SortActivity),
+        (SortMode.Added, Strings.SortAdded),
+        (SortMode.Extension, Strings.SortExtension),
+        (SortMode.Name, Strings.SortName),
+        (SortMode.Size, Strings.SortSize),
+        (SortMode.Status, Strings.SortStatus),
+    ];
+
+    bool _syncingSortBox;
+
+    /// <summary>Newest first for "last activity"; everything else starts at the top of its natural order.</summary>
+    static bool DefaultDescending(SortMode mode) => mode == SortMode.Activity;
 
     void AddChip(FlowLayoutPanel strip, Bucket b, string label, Color? color)
     {
@@ -347,137 +388,188 @@ internal sealed class ScanQueueControl : UserControl
 
     bool FilterActive => _bucket != Bucket.All || _search.Text.Trim().Length > 0;
 
-    bool Passes(ScanItem i)
+    static bool Passes(ScanItem i, Bucket bucket, string query)
     {
-        if (_bucket != Bucket.All && BucketOf(i) != _bucket) return false;
-        string q = _search.Text.Trim();
-        if (q.Length > 0 &&
-            i.DisplayName.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0 &&
-            (i.FilePath?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0 &&
-            (i.ContainerPath?.IndexOf(q, StringComparison.OrdinalIgnoreCase) ?? -1) < 0)
+        if (bucket != Bucket.All && BucketOf(i) != bucket) return false;
+        if (query.Length > 0 &&
+            i.DisplayName.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0 &&
+            (i.FilePath?.IndexOf(query, StringComparison.OrdinalIgnoreCase) ?? -1) < 0 &&
+            (i.ContainerPath?.IndexOf(query, StringComparison.OrdinalIgnoreCase) ?? -1) < 0)
             return false;
         return true;
     }
 
-    // Header-click sort. Routes through _view (a sorted snapshot) so the live Items order — which the
-    // running Parallel loop + BulkAdd mutate — is never reordered underneath.
+    static readonly Dictionary<string, SortMode> ColumnSort = new()
+    {
+        ["col_file"] = SortMode.Name,
+        ["col_ext"] = SortMode.Extension,
+        ["col_size"] = SortMode.Size,
+        ["col_status"] = SortMode.Status,
+        ["col_activity"] = SortMode.Activity,
+        ["col_added"] = SortMode.Added,
+    };
+
+    /// <summary>A header click picks that column's sort; clicking the sorted column again flips the direction.</summary>
     void OnHeaderClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        if (e.ColumnIndex < 0) return;
-        string name = _grid.Columns[e.ColumnIndex].Name;
-        if (name is EntityGrid.MarkColumn or "col_progress") return; // not sortable
-        if (e.ColumnIndex == _sortCol) _sortAsc = !_sortAsc;
-        else { _sortCol = e.ColumnIndex; _sortAsc = true; }
-        ApplySort();
+        if (e.ColumnIndex < 0 || !ColumnSort.TryGetValue(_grid.Columns[e.ColumnIndex].Name, out var mode)) return;
+        SetSort(mode, mode == _sortMode ? !_sortDescending : DefaultDescending(mode));
     }
 
-    void ApplySort()
+    void SetSort(SortMode mode, bool descending)
     {
-        if (_sortCol < 0) return;
-        _view ??= [];
-        var keep = SelectedItem();
-        var top = TopItem();
-        var src = _scheduler.Items.Where(Passes); // respect the active filter chips/search
-        string sortName = _sortCol >= 0 && _sortCol < _grid.Columns.Count ? _grid.Columns[_sortCol].Name : "";
-        List<ScanItem> list = sortName switch
-        {
-            "col_file" => src.OrderBy(i => i.DisplayName, StringComparer.OrdinalIgnoreCase).ToList(),
-            "col_size" => src.OrderBy(i => i.SizeBytes).ToList(),
-            "col_status" => src.OrderBy(SeverityKey).ToList(),
-            _ => src.OrderBy(i => (int)i.Status).ToList(),
-        };
-        if (!_sortAsc) list.Reverse();
-        _view.RaiseListChangedEvents = false;
-        _view.Clear();
-        foreach (var it in list) _view.Add(it);
-        _view.RaiseListChangedEvents = true;
-        RebindKeepingPlace(_view, keep, top);
-        _viewSet.Clear(); _viewSet.UnionWith(_view);
+        _sortMode = mode;
+        _sortDescending = descending;
+        _syncingSortBox = true;
+        try { _sortBox.SelectedIndex = Array.FindIndex(SortChoices, c => c.Mode == mode); }
+        finally { _syncingSortBox = false; }
         PaintSortGlyph();
+        RequestSort(force: true);
     }
-
-    // Worst-first when ascending: a malicious / high-detection row floats to the top on the first Durum click.
-    static int SeverityKey(ScanItem i) => -((i.Report?.IsMalicious == true ? 100_000 : 0) + (i.Report?.DetectionCount ?? -1));
 
     void PaintSortGlyph()
     {
         for (int c = 0; c < _grid.Columns.Count && c < _colHeaders.Length; c++)
-            _grid.Columns[c].HeaderText = c == _sortCol ? _colHeaders[c] + (_sortAsc ? "  ▲" : "  ▼") : _colHeaders[c];
+        {
+            bool sorted = ColumnSort.TryGetValue(_grid.Columns[c].Name, out var mode) && mode == _sortMode;
+            _grid.Columns[c].HeaderText = sorted ? _colHeaders[c] + (_sortDescending ? "  ▼" : "  ▲") : _colHeaders[c];
+        }
     }
 
     /// <summary>
     /// How many rows the grid is ever given. A bound DataGridView builds a row object for every record,
     /// so handing it a whole-drive sweep — 346,000 files — froze the window before the first file was
-    /// even hashed. Past this many the grid shows a window onto the queue instead: every threat, plus
-    /// the most recent rows. The full set stays in the scheduler, and search still runs over all of it.
+    /// even hashed. Past this many the grid shows the first rows of the sorted order. The full set stays in
+    /// the scheduler, and search and the chips still run over all of it.
     /// </summary>
     const int GridRowBudget = 5000;
 
+    const int LiveSortIntervalMs = 500;
+
     void ApplyFilter()
     {
-        if (_sortCol >= 0) { ApplySort(); return; } // an active sort owns _view (it already filters too)
-        var keep = SelectedItem();
-        var top = TopItem();
-        bool capped = _scheduler.Items.Count > GridRowBudget;
-
-        if (!FilterActive && !capped)
-        {
-            if (!ReferenceEquals(_grid.DataSource, _scheduler.Items)) RebindKeepingPlace(_scheduler.Items, keep, top);
-            _lastFilterQuery = ""; _lastFilterBucket = Bucket.All;
-        }
-        else
-        {
-            _view ??= [];
-            string q = _search.Text.Trim();
-            // Incremental narrowing: if the query only grew within the same bucket and the grid already
-            // shows _view, drop the now-excluded rows in place instead of rebuilding from all of Items.
-            bool canNarrow = !capped && ReferenceEquals(_grid.DataSource, _view) && _bucket == _lastFilterBucket
-                && _lastFilterQuery.Length > 0 && q.StartsWith(_lastFilterQuery, StringComparison.OrdinalIgnoreCase);
-            _view.RaiseListChangedEvents = false;
-            if (canNarrow)
-            {
-                for (int n = _view.Count - 1; n >= 0; n--) if (!Passes(_view[n])) _view.RemoveAt(n);
-            }
-            else
-            {
-                _view.Clear();
-                FillWithinBudget(_view, _scheduler.Items.Where(Passes));
-            }
-            _view.RaiseListChangedEvents = true;
-            RebindKeepingPlace(_view, keep, top);
-            _viewSet.Clear(); _viewSet.UnionWith(_view);
-            _lastFilterQuery = q; _lastFilterBucket = _bucket;
-        }
+        RequestSort(force: true);
         UpdateChipCounts();
     }
 
-    /// <summary>Fills the grid's view with at most <see cref="GridRowBudget"/> rows: every threat-shaped
-    /// row is kept whatever else has to go, and the remaining room goes to the most recent rows — the two
-    /// things anyone looks at during a sweep. Scan order is preserved.</summary>
-    void FillWithinBudget(System.ComponentModel.BindingList<ScanItem> target, IEnumerable<ScanItem> source)
+    /// <summary>
+    /// Re-sorts the list. <paramref name="force"/> sorts even when no row changed (a new sort, filter or search);
+    /// otherwise nothing happens unless some row's state moved since the last sort. The sort itself runs off
+    /// the UI thread on a snapshot of the rows and their keys; only the rebind happens here.
+    /// </summary>
+    void RequestSort(bool force)
     {
-        var all = source as IList<ScanItem> ?? source.ToList();
-        if (all.Count <= GridRowBudget)
+        if (!force && ScanItem.LatestSequence == _sortedAtSequence) return;
+        if (_sortRunning) { _sortAgain = true; return; }
+        _ = RunSortAsync();
+    }
+
+    async Task RunSortAsync()
+    {
+        _sortRunning = true;
+        try
         {
-            foreach (var it in all) target.Add(it);
-            return;
+            do
+            {
+                _sortAgain = false;
+                long sequence = ScanItem.LatestSequence;
+                var rows = _scheduler.Items.ToArray(); // the list only changes on this thread
+                var (mode, descending, bucket, query) = (_sortMode, _sortDescending, _bucket, _search.Text.Trim());
+                var sorted = await Task.Run(() => SortRows(rows, mode, descending, bucket, query));
+                if (IsDisposed) return;
+                UiSlice.Measure($"queue rebind ({sorted.Count} rows)", () => ShowSorted(sorted));
+                _sortedAtSequence = sequence;
+                _sinceSort.Restart();
+            } while (_sortAgain);
+        }
+        catch (Exception ex) { Log("Sorting the scan queue failed: " + ex, LogLevel.Warning); }
+        finally { _sortRunning = false; }
+    }
+
+    /// <summary>One row's sort keys, read once. The scan threads keep changing the rows while they are sorted;
+    /// sorting on live values could compare the same row differently twice.</summary>
+    readonly record struct SortKey(int Group, string Text, long Number, string Text2, long Tie, ScanItem Item);
+
+    static List<ScanItem> SortRows(ScanItem[] rows, SortMode mode, bool descending, Bucket bucket, string query)
+    {
+        var keys = new List<SortKey>(rows.Length);
+        foreach (var i in rows)
+        {
+            if (!Passes(i, bucket, query)) continue;
+            keys.Add(mode switch
+            {
+                SortMode.Activity => new SortKey(0, "", i.ActivitySequence, "", i.AddedSequence, i),
+                SortMode.Added => new SortKey(0, "", i.AddedSequence, "", 0, i),
+                SortMode.Extension => new SortKey(FileClass.RunnableRank(i.Extension), i.Extension, 0, i.DisplayName, i.AddedSequence, i),
+                SortMode.Name => new SortKey(0, i.DisplayName, 0, "", i.AddedSequence, i),
+                SortMode.Size => new SortKey(0, "", i.SizeBytes, i.DisplayName, i.AddedSequence, i),
+                // Grouped by state; inside a group the row the program touched last comes first.
+                _ => new SortKey(StatusGroup(i), "", 0, "", -i.ActivitySequence, i),
+            });
         }
 
-        var threats = new HashSet<ScanItem>();
-        foreach (var it in all)
+        int dir = descending ? -1 : 1;
+        keys.Sort((a, b) =>
         {
-            if (!IsThreatish(it)) continue;
-            threats.Add(it);
-            if (threats.Count >= GridRowBudget) break;
+            int c = a.Group.CompareTo(b.Group);
+            if (c == 0) c = string.Compare(a.Text, b.Text, StringComparison.OrdinalIgnoreCase);
+            if (c == 0) c = a.Number.CompareTo(b.Number);
+            if (c != 0) return c * dir;
+            c = string.Compare(a.Text2, b.Text2, StringComparison.OrdinalIgnoreCase);
+            return c != 0 ? c : a.Tie.CompareTo(b.Tie);
+        });
+
+        int count = Math.Min(keys.Count, GridRowBudget);
+        var result = new List<ScanItem>(count);
+        for (int n = 0; n < count; n++) result.Add(keys[n].Item);
+        return result;
+    }
+
+    /// <summary>Status groups, in the order "Durum (gruplu)" shows them: work in progress first, then waiting,
+    /// then results from the most to the least alarming.</summary>
+    static int StatusGroup(ScanItem i) => i.Status switch
+    {
+        ScanStatus.CheckingSignature or ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling => 0,
+        ScanStatus.AwaitingLookup => 1,
+        ScanStatus.Queued => 2,
+        ScanStatus.Completed when i.Report is { TotalEngines: > 0 } r => r.IsMalicious ? 3 : r.DetectionCount > 0 ? 4 : 6,
+        ScanStatus.Completed => 5,
+        ScanStatus.TrustedSkipped => 7,
+        ScanStatus.Skipped => 8,
+        ScanStatus.Failed => 9,
+        ScanStatus.Cancelled => 10,
+        _ => 11,
+    };
+
+    /// <summary>Puts a sorted snapshot on screen. Nothing is rebuilt when the order did not change. A user
+    /// scrolled to the top stays at the top, so newly active rows come into view; anyone scrolled further
+    /// keeps the row they were looking at.</summary>
+    void ShowSorted(List<ScanItem> rows)
+    {
+        if (ReferenceEquals(_grid.DataSource, _view) && _view.Count == rows.Count)
+        {
+            bool same = true;
+            for (int n = 0; n < rows.Count && same; n++) same = ReferenceEquals(_view[n], rows[n]);
+            if (same) { _grid.Invalidate(); return; }
         }
 
-        int room = Math.Max(0, GridRowBudget - threats.Count);
-        var recent = new HashSet<ScanItem>();
-        for (int i = all.Count - 1; i >= 0 && recent.Count < room; i--)
-            if (!threats.Contains(all[i])) recent.Add(all[i]);
+        var keep = SelectedItem();
+        bool atTop = FirstDisplayedRow() <= 0;
+        var top = atTop ? null : TopItem();
+        _view.Clear();
+        _view.AddRange(rows);
+        RebindKeepingPlace(_view, keep, top);
+        if (atTop && _view.Count > 0)
+        {
+            try { _grid.FirstDisplayedScrollingRowIndex = 0; }
+            catch (InvalidOperationException ex) { Log("Scrolling the queue to the top failed: " + ex.Message, LogLevel.Debug); }
+        }
+    }
 
-        foreach (var it in all)
-            if (threats.Contains(it) || recent.Contains(it)) target.Add(it);
+    int FirstDisplayedRow()
+    {
+        try { return _grid.FirstDisplayedScrollingRowIndex; }
+        catch (InvalidOperationException) { return -1; }
     }
 
     ScanItem? _detailItem;   // the row the detail pane was last built for
@@ -493,13 +585,14 @@ internal sealed class ScanQueueControl : UserControl
     /// The list also jumped back to the top under the user's scroll. Selection changes raised by the
     /// rebuild are now ignored, and the selected row and the top visible row are restored afterwards.
     /// </summary>
-    void RebindKeepingPlace(System.ComponentModel.BindingList<ScanItem> list, ScanItem? keep, ScanItem? top)
+    void RebindKeepingPlace(List<ScanItem> list, ScanItem? keep, ScanItem? top)
     {
         _rebindingView = true;
         try
         {
-            if (ReferenceEquals(_grid.DataSource, list)) list.ResetBindings();
-            else _grid.DataSource = list;
+            // A plain list raises no change events, so the grid is told to read it again.
+            if (!ReferenceEquals(_grid.DataSource, list)) _grid.DataSource = list;
+            else if (_grid.BindingContext?[list] is CurrencyManager manager) manager.Refresh();
 
             // IndexOf on the list, not a walk of grid.Rows: touching a row by index makes the grid build
             // a full row object for it, and the view holds up to 5,000.
@@ -628,74 +721,19 @@ internal sealed class ScanQueueControl : UserControl
         c.Text = text;
     }
 
-    /// <summary>An item just got a verdict: keep counts live and slot it into the active filtered view
-    /// without a full rebuild (so scroll position / selection survive during a running scan).</summary>
-    void OnFilterItemFinished(ScanItem item)
-    {
-        // No UpdateChipCounts() here — the 250ms repaint tick refreshes the chips; calling it per finished
-        // item was an O(n)-per-completion → O(n^2)-across-a-scan rescan on the UI thread. Membership is
-        // O(1) via _viewSet instead of a linear _view.Contains.
-        // Append (don't re-sort) so a newly-finished row shows up live whether a filter OR a sort owns the
-        // view — the stable, no-thrash behaviour; the final ordered sort lands when the scan finishes.
-        // The row is buffered, not added: a sweep finishes thousands of files a second, and one
-        // ListChanged per add is a grid rebuild per file. The repaint tick applies the batch.
-        if (_view != null && ReferenceEquals(_grid.DataSource, _view) && Passes(item))
-            _pendingRows.Add(item);
-    }
-
-    readonly List<ScanItem> _pendingRows = [];
-
     /// <summary>
-    /// Points the grid at an empty live view for the length of a run.
+    /// Points the grid at an empty view when a run starts; the first live sort fills it.
     ///
     /// The scheduler fills its item list with the whole selection before the first file is hashed. While
     /// the grid was bound straight to that list, a drive sweep asked the DataGridView to build 346,000
-    /// row objects in one go and the window stopped answering right there — the queue still looked empty
-    /// because the freeze happened before anything could be drawn. Rows now arrive through the repaint
-    /// tick as files finish, capped at <see cref="GridRowBudget"/>.
+    /// row objects in one go and the window stopped answering right there. The grid only ever gets the
+    /// sorted view, capped at <see cref="GridRowBudget"/>.
     /// </summary>
     void BindLiveView()
     {
-        _view ??= [];
-        _view.RaiseListChangedEvents = false;
         _view.Clear();
-        _view.RaiseListChangedEvents = true;
-        _view.ResetBindings();
-        _viewSet.Clear();
-        _pendingRows.Clear();
-        _grid.DataSource = _view;
-        _lastFilterQuery = ""; _lastFilterBucket = _bucket;
-    }
-
-    /// <summary>Adds the rows that finished since the last tick in one go, then drops the oldest
-    /// non-threat rows to stay inside <see cref="GridRowBudget"/>. One ResetBindings for the batch.</summary>
-    void FlushPendingRows()
-    {
-        if (_pendingRows.Count == 0 || _view == null || !ReferenceEquals(_grid.DataSource, _view)) { _pendingRows.Clear(); return; }
-
-        var keep = SelectedItem();
-        var top = TopItem();
-        _view.RaiseListChangedEvents = false;
-        try
-        {
-            foreach (var it in _pendingRows)
-                if (_viewSet.Add(it)) _view.Add(it);
-            _pendingRows.Clear();
-
-            // Trim from the front, skipping anything worth keeping on screen.
-            int i = 0;
-            while (_view.Count > GridRowBudget && i < _view.Count)
-            {
-                if (IsThreatish(_view[i])) { i++; continue; }
-                _viewSet.Remove(_view[i]);
-                _view.RemoveAt(i);
-            }
-        }
-        finally
-        {
-            _view.RaiseListChangedEvents = true;
-            RebindKeepingPlace(_view, keep, top);
-        }
+        RebindKeepingPlace(_view, null, null);
+        RequestSort(force: true);
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -886,17 +924,21 @@ internal sealed class ScanQueueControl : UserControl
         EntityGrid.AddMarkColumn(_grid); // leading "mark" checkbox at column 0 (before the data columns
                                          // so _progressCol below stays a valid index)
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_file", HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.DisplayName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_ext", HeaderText = Strings.ColExtension, DataPropertyName = nameof(ScanItem.Extension), Width = 60 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_size", HeaderText = Strings.ColSize, DataPropertyName = nameof(ScanItem.SizeText), Width = 80 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_status", HeaderText = Strings.ColStatus, DataPropertyName = nameof(ScanItem.StatusText), Width = 220 });
-        var prog = new DataGridViewTextBoxColumn { Name = "col_progress", HeaderText = Strings.ColProgress, Width = 110, SortMode = DataGridViewColumnSortMode.NotSortable };
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_status", HeaderText = Strings.ColStatus, DataPropertyName = nameof(ScanItem.StatusText), Width = 260 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_activity", HeaderText = Strings.ColActivity, DataPropertyName = nameof(ScanItem.ActivityText), Width = 95 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_added", HeaderText = Strings.ColAdded, DataPropertyName = nameof(ScanItem.AddedText), Width = 130 });
+        var prog = new DataGridViewTextBoxColumn { Name = "col_progress", HeaderText = Strings.ColProgress, Width = 80, SortMode = DataGridViewColumnSortMode.NotSortable };
         _progressCol = _grid.Columns.Add(prog);
         ThemeManager.StyleGrid(_grid);
         EntityGrid.EnableMultiSelect(_grid);      // StyleGrid forces MultiSelect off — turn it back on
         EntityGrid.EnableRightClickSelect(_grid); // right-click first selects the row, then the menu opens on it
-        _grid.DataSource = _scheduler.Items;
+        _grid.DataSource = _view;
         _grid.CellPainting += Grid_CellPainting;
         _grid.CellFormatting += Grid_CellFormatting;
         _colHeaders = _grid.Columns.Cast<DataGridViewColumn>().Select(c => c.HeaderText).ToArray();
+        PaintSortGlyph();
         _grid.ColumnHeaderMouseClick += OnHeaderClick;
 
         var menu = new ContextMenuStrip();
@@ -1205,8 +1247,8 @@ internal sealed class ScanQueueControl : UserControl
             var item = new ScanItem(input) { Report = report, Status = ScanStatus.Completed };
             item.Md5 = report.Md5; item.Sha256 = report.Sha256;
             _scheduler.Items.Add(item);
-            _grid.ClearSelection();
-            if (_grid.Rows.Count > 0) _grid.Rows[^1].Selected = true;
+            ShowSorted(SortRows(_scheduler.Items.ToArray(), _sortMode, _sortDescending, _bucket, _search.Text.Trim()));
+            FocusItem(item);
         }
         catch (Exception ex) { NativeMessageBox.Error(Strings.LookupFailedPrefix + ex.Message); }
     }
@@ -1737,7 +1779,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         try
         {
-            var target = FirstMatchingRow(i => i.Status is ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)
+            var target = FirstMatchingRow(i => i.Status is ScanStatus.CheckingSignature or ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)
                       ?? FirstMatchingRow(i => i.Status == ScanStatus.AwaitingLookup)
                       ?? FirstMatchingRow(i => i.Status == ScanStatus.Queued);
             if (target == null) { _summary.Text = Strings.JumpNothingRunning; return; }
@@ -1840,7 +1882,6 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (ReferenceEquals(item, SelectedItem())) { _detailItem = item; _detail.Show(item); } // its verdict just arrived
         if (item.Report?.IsMalicious == true) ThreatFound?.Invoke(item);
-        OnFilterItemFinished(item);
         ScanHistoryStore.Record(item, "Tarama");
     }
 
@@ -1857,6 +1898,8 @@ internal sealed class ScanQueueControl : UserControl
     /// <summary>Selects the first queue row and shows its detail (used by the dev snapshot).</summary>
     public void SelectFirst()
     {
+        // Rows added straight to the scheduler's list reach the grid only through a sort.
+        ShowSorted(SortRows(_scheduler.Items.ToArray(), _sortMode, _sortDescending, _bucket, _search.Text.Trim()));
         if (_grid.Rows.Count == 0) return;
         _grid.ClearSelection();
         _grid.CurrentCell = _grid.Rows[0].Cells[0];

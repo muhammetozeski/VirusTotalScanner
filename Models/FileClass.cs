@@ -31,6 +31,25 @@ internal static class FileClass
         ".zip", ".7z", ".rar", ".cab", ".iso", ".img", ".vhd", ".vhdx", ".gz", ".tar", ".xz", ".ace", ".arj",
     };
 
+    static readonly HashSet<string> RunnableExts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".com", ".scr", ".pif", ".cpl", ".msi", ".msp", ".msix", ".appx",
+        ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".hta", ".jar", ".lnk", ".reg",
+    };
+
+    static readonly HashSet<string> LibraryExts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".dll", ".sys", ".ocx", ".drv", ".efi", ".node", ".pyd",
+    };
+
+    /// <summary>Sort rank by extension: 0 runs when opened (exe, installers, scripts), 1 is loaded code (dll,
+    /// drivers), 2 is another code-shaped file (macro documents, archives), 3 is everything else.</summary>
+    public static int RunnableRank(string extension) =>
+        RunnableExts.Contains(extension) ? 0
+        : LibraryExts.Contains(extension) ? 1
+        : CodeExts.Contains(extension) ? 2
+        : 3;
+
     /// <summary>Extensions that are code-shaped but so numerous in system folders that a sweep would
     /// drown in them; still classified as code, kept here only for readability of the set above.</summary>
     public static bool IsCodeExtension(string path)
