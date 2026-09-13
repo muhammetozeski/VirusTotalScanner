@@ -343,6 +343,7 @@ internal sealed class ScanScheduler
             foreach (var td in archiveTemps) ArchiveExpander.CleanupTemp(td);
             _cache.Flush();
             FingerprintCache.Flush();
+            PendingOutbox.Flush();
             Log($"Fingerprint cache: {FingerprintCache.Hits} reuse(s), {FingerprintCache.Misses} miss(es), {FingerprintCache.Count} entr(ies) held.", LogLevel.Info);
             try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
             Log("Scan finished.", LogLevel.Info);

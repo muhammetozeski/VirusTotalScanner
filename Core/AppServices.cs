@@ -43,6 +43,7 @@ internal static class AppServices
         try { Vault.Flush(); } catch (Exception ex) { Log("Vault flush failed: " + ex.Message, LogLevel.Warning); }
         try { Cache.Flush(); } catch (Exception ex) { Log("Cache flush failed: " + ex.Message, LogLevel.Warning); }
         try { FingerprintCache.Flush(); } catch (Exception ex) { Log("Fingerprint cache flush failed: " + ex.Message, LogLevel.Warning); }
+        try { PendingOutbox.Flush(); } catch (Exception ex) { Log("Pending outbox flush failed: " + ex.Message, LogLevel.Warning); }
         try { GuiScrapeService.Shutdown(); } catch (Exception ex) { Log("WebView2 shutdown failed: " + ex.Message, LogLevel.Warning); }
         try { TorService.Shutdown(); } catch (Exception ex) { Log("Tor shutdown failed: " + ex.Message, LogLevel.Warning); }
     }

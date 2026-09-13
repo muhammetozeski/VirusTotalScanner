@@ -37,7 +37,8 @@ internal static class PendingOutbox
             if (Entries.Any(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase))) return;
             Entries.Add(new PendingEntry { Path = path, AddedUtc = DateTime.UtcNow });
             if (Entries.Count > MaxEntries) Entries.RemoveRange(0, Entries.Count - MaxEntries);
-            Save();
+            _dirty = true;
+            MaybeSave();
         }
         Changed?.Invoke();
     }
@@ -45,8 +46,31 @@ internal static class PendingOutbox
     public static void Remove(string? path)
     {
         if (string.IsNullOrEmpty(path)) return;
-        lock (Lock) { if (Entries.RemoveAll(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)) == 0) return; Save(); }
+        lock (Lock)
+        {
+            if (Entries.RemoveAll(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)) == 0) return;
+            _dirty = true;
+            MaybeSave();
+        }
         Changed?.Invoke();
+    }
+
+    // A scan with the keys spent adds every file it could not ask about, and each add rewrote the whole
+    // file — up to 2,000 indented entries, half a megabyte, once per file, from every network worker at
+    // once. Adds and removes now mark the store dirty and it is written at most every five seconds, plus
+    // once when a scan ends and when the app exits.
+    static bool _dirty;          // guarded by Lock
+    static DateTime _lastSaveUtc; // guarded by Lock
+
+    static void MaybeSave() // caller holds Lock
+    {
+        if (_dirty && DateTime.UtcNow - _lastSaveUtc >= TimeSpan.FromSeconds(5)) Save();
+    }
+
+    /// <summary>Writes any add or remove still waiting for its throttled save.</summary>
+    public static void Flush()
+    {
+        lock (Lock) { if (_dirty) Save(); }
     }
 
     public static void Clear() { lock (Lock) { if (Entries.Count == 0) return; Entries.Clear(); Save(); } Changed?.Invoke(); }
@@ -73,9 +97,15 @@ internal static class PendingOutbox
         return [];
     }
 
-    static void Save()
+    static void Save() // caller holds Lock
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts)); }
+        _lastSaveUtc = DateTime.UtcNow;
+        try
+        {
+            Directory.CreateDirectory(ConfigPathResolver.DataFolder);
+            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
+            _dirty = false;
+        }
         catch (Exception ex) { Log("Pending outbox save failed: " + ex.Message, LogLevel.Warning); }
     }
 }
