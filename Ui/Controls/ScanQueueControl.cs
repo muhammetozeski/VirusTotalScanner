@@ -1009,17 +1009,24 @@ internal sealed class ScanQueueControl : UserControl
         opts.Automatic = automatic;
 
         var pathList = paths.ToList();
-        opts.ExpandArchives = ShouldExpandArchives(pathList, background || automatic); // nobody is there to answer the archive question
         // Picking files by hand means "check exactly these", so the code-shaped-only scope does not
         // apply to them — only to folder sweeps, where it is the difference between 32,000 lookups
         // and 228,000.
         opts.ExplicitFileSelection = pathList.Count > 0 && pathList.All(File.Exists);
 
-        _ = Task.Run(async () =>
+        _ = StartScanAsync(pathList, opts, unattended: background || automatic);
+    }
+
+    async Task StartScanAsync(List<string> pathList, ScanOptions opts, bool unattended)
+    {
+        try
         {
-            try { await _scheduler.RunAsync(pathList, opts); }
-            catch (Exception ex) { Log("Scan start failed: " + ex, LogLevel.Error); }
-        });
+            opts.ExpandArchives = await ShouldExpandArchivesAsync(pathList, unattended); // nobody is there to answer the archive question
+            // The run itself stays off the UI thread: awaited from here its continuations would come back
+            // to this thread, and the disk stage with them.
+            await Task.Run(() => _scheduler.RunAsync(pathList, opts));
+        }
+        catch (Exception ex) { Log("Scan start failed: " + ex, LogLevel.Error); }
     }
 
     /// <summary>
@@ -1031,7 +1038,7 @@ internal sealed class ScanQueueControl : UserControl
     ///    scale expanding turns a big scan into an enormous one, and there is nobody to ask;
     ///  * otherwise the question is a ConfirmGate, so answering it once with "don't ask again" sticks.
     /// </summary>
-    bool ShouldExpandArchives(List<string> paths, bool background)
+    async Task<bool> ShouldExpandArchivesAsync(List<string> paths, bool background)
     {
         try
         {
@@ -1051,7 +1058,9 @@ internal sealed class ScanQueueControl : UserControl
                 }
             }
 
-            if (!HasArchives(paths)) return false;
+            // Looking for an archive walks up to 5,000 files per selected folder, and it ran on the UI thread
+            // while the window was opening for a right-clicked scan.
+            if (!await Task.Run(() => HasArchives(paths))) return false;
             return ConfirmGates.ExpandArchives.Ask(FindForm(), Strings.ArchivePrompt);
         }
         catch (Exception ex)
