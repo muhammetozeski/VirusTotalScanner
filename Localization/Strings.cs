@@ -433,6 +433,9 @@ internal static class Strings
     public static string FeedbackSource = "Eylem";
     public static string NeedSelectionInfo = "Önce listeden bir satır seç.";
     public static string SelectionFileMissing = "Seçili satırın dosyası artık diskte yok.";
+    public static string OpenVtHashingFormat = "{0} için SHA-256 hesaplanıyor, VirusTotal sayfası sonra açılacak…";
+    public static string OpenVtOpenedFormat = "{0} için VirusTotal sayfası tarayıcıda açıldı.";
+    public static string OpenVtHashFailedPrefix = "SHA-256 hesaplanamadı: ";
     public static string SelectionNoHash = "Seçili satırın hash'i yok — önce taranması gerekir.";
     public static string NothingToCopyInfo = "Kopyalanacak bir değer yok.";
     public static string KeyRowGone = "Bu anahtar artık kasada yok — liste yenilendi.";

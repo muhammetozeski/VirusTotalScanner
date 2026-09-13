@@ -630,6 +630,9 @@
   <s name="FeedbackSource">Action</s>
   <s name="NeedSelectionInfo">Select a row from the list first.</s>
   <s name="SelectionFileMissing">The selected row's file is no longer on disk.</s>
+  <s name="OpenVtHashingFormat">Computing the SHA-256 of {0}; its VirusTotal page opens when that is done…</s>
+  <s name="OpenVtOpenedFormat">Opened the VirusTotal page of {0} in the browser.</s>
+  <s name="OpenVtHashFailedPrefix">Could not compute the SHA-256: </s>
   <s name="SelectionNoHash">The selected row has no hash yet — it needs to be scanned first.</s>
   <s name="NothingToCopyInfo">There is no value to copy.</s>
   <s name="KeyRowGone">That key is no longer in the vault — the list has been refreshed.</s>

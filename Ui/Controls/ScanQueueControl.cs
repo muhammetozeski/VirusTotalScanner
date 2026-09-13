@@ -756,7 +756,7 @@ internal sealed class ScanQueueControl : UserControl
         // Enter/Space only when the grid itself has focus (so buttons keep their normal behavior).
         if (_grid.Focused)
         {
-            if (keyData == Keys.Enter) { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); return true; }
+            if (keyData == Keys.Enter) { OpenOnVirusTotal(SelectedItem()); return true; }
             if (keyData == Keys.Space && _scheduler.IsRunning) { TogglePause(); return true; }
             // J/K walk between the only rows that matter after a big sweep — the threats; Shift+J/K walks errors.
             if (keyData == Keys.J) { JumpVerdict(true, IsThreatish); return true; }
@@ -943,7 +943,7 @@ internal sealed class ScanQueueControl : UserControl
         _grid.ColumnHeaderMouseClick += OnHeaderClick;
 
         var menu = new ContextMenuStrip();
-        var miOpenVt = (ToolStripMenuItem)menu.Items.Add(Strings.MenuOpenVt, null, (_, _) => { var i = SelectedItem(); if (i?.Report != null) OpenUrlInBrowser(i.Report.ReportUrl); });
+        var miOpenVt = (ToolStripMenuItem)menu.Items.Add(Strings.MenuOpenVt, null, (_, _) => OpenOnVirusTotal(SelectedItem()));
 
         var copyMenu = new ToolStripMenuItem(Strings.MenuCopy);
         copyMenu.DropDownItems.Add(Strings.MenuCopySha256, null, (_, _) => CopySafe(string.Join("\n", SelectedItems().Select(i => i.Sha256).Where(s => !string.IsNullOrEmpty(s)))));
@@ -1004,7 +1004,7 @@ internal sealed class ScanQueueControl : UserControl
             var i = SelectedItem();
             if (i == null) { e.Cancel = true; return; }
             bool exists = File.Exists(i.FilePath);
-            miOpenVt.Enabled = i.Report != null;
+            miOpenVt.Enabled = i.Report != null || !string.IsNullOrEmpty(i.Sha256) || exists;
             copyMenu.Enabled = true;
             miReveal.Enabled = exists;
             miNeighbors.Enabled = exists;
@@ -1031,6 +1031,36 @@ internal sealed class ScanQueueControl : UserControl
 
         // Double-click a row -> jump to the file in Explorer.
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) { var i = SelectedItem(); if (i != null && File.Exists(i.FilePath)) RevealInExplorer(i.FilePath); } };
+    }
+
+    /// <summary>
+    /// Opens the file's VirusTotal page in the user's own browser. It needs only the SHA-256, not a finished scan:
+    /// the report, or the hash the scan already computed, is used when there is one; otherwise the hash is
+    /// computed from the file in the background and the page opens when it is ready.
+    /// </summary>
+    void OpenOnVirusTotal(ScanItem? item)
+    {
+        if (item == null) { UiFeedback.NeedSelection(Strings.MenuOpenVt); return; }
+        if (item.Report != null) { OpenUrlInBrowser(item.Report.ReportUrl); return; }
+        if (!string.IsNullOrEmpty(item.Sha256)) { OpenUrlInBrowser(AppConstants.VtGuiFile + item.Sha256); return; }
+        if (!File.Exists(item.FilePath)) { UiFeedback.Refused(Strings.SelectionFileMissing, Strings.MenuOpenVt); return; }
+
+        _summary.Text = string.Format(Strings.OpenVtHashingFormat, item.DisplayName);
+        string path = item.FilePath, name = item.DisplayName;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var (_, sha256) = await HashService.ComputeAsync(path);
+                OpenUrlInBrowser(AppConstants.VtGuiFile + sha256);
+                SafeUi(() => _summary.Text = string.Format(Strings.OpenVtOpenedFormat, name));
+            }
+            catch (Exception ex)
+            {
+                Log($"Hashing '{path}' to open its VirusTotal page failed: {ex}", LogLevel.Warning);
+                SafeUi(() => UiFeedback.Refused(Strings.OpenVtHashFailedPrefix + ex.Message, Strings.MenuOpenVt));
+            }
+        });
     }
 
     static string VerdictLine(ScanItem i) =>
