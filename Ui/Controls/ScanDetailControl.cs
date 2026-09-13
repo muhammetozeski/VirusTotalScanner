@@ -31,6 +31,7 @@ internal sealed class ScanDetailControl : UserControl
     readonly Panel _scroll = new() { Dock = DockStyle.Fill, AutoScroll = true };
 
     ScanItem? _item;
+    readonly FlowLayoutPanel _togglePanel; // engine toggles, report link, comments and behaviour buttons
 
     public ScanDetailControl()
     {
@@ -62,6 +63,7 @@ internal sealed class ScanDetailControl : UserControl
         hashPanel.Controls.Add(HashRow("SHA-256", _sha, () => _item?.Sha256));
 
         var togglePanel = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Margin = new Padding(0, 4, 0, 4) };
+        _togglePanel = togglePanel;
         _showAll.Text = Strings.ShowAllEngines;
         _showAll.AutoSize = true;
         _showAll.Checked = true; // default: show every engine's result, not just detections
@@ -283,8 +285,27 @@ internal sealed class ScanDetailControl : UserControl
 
     public void Show(ScanItem? item)
     {
+        // The pane creates window handles the first time it shows a file. Created on any thread but the UI
+        // thread, those handles hang the UI thread the next time it touches them.
+        if (IsHandleCreated && InvokeRequired) { BeginInvoke(() => Show(item)); return; }
+        if (!ReferenceEquals(item, _item)) { _zoneSummary = null; _zoneRead = false; }
         _item = item;
         Populate();
+    }
+
+    long _shownSequence = -1;   // the item's ActivitySequence when the pane was last built
+    bool _shownLocal;           // the pane shows the local (no verdict yet) view
+    string? _zoneSummary;       // read once per selected file
+    bool _zoneRead;
+
+    /// <summary>
+    /// Keeps the pane in step with the selected row while a scan runs: rebuilt when the row's state changed,
+    /// and the local view (no verdict yet) also every tick so "N seconds ago" stays true.
+    /// </summary>
+    public void RefreshLive()
+    {
+        if (_item is not { } item) return;
+        if (item.ActivitySequence != _shownSequence || _shownLocal) Populate();
     }
 
     void Populate()
@@ -293,10 +314,12 @@ internal sealed class ScanDetailControl : UserControl
         bool trustedSkip = item is { Status: ScanStatus.TrustedSkipped };
         var report = item?.Report;
         bool hasReport = report != null;
-        _behaviourPanel.Visible = false; // collapse last item's digest; the behaviour button re-opens it
+        _shownSequence = item?.ActivitySequence ?? -1;
+        _shownLocal = false;
 
-        if (!hasReport && !trustedSkip)
+        if (item == null)
         {
+            _behaviourPanel.Visible = false;
             _scroll.Visible = false;
             _empty.Visible = true;
             _actionStrip.Visible = false;
@@ -305,6 +328,14 @@ internal sealed class ScanDetailControl : UserControl
         }
         _empty.Visible = false;
         _scroll.Visible = true;
+
+        if (!hasReport && !trustedSkip)
+        {
+            PopulateLocal(item);
+            return;
+        }
+        _behaviourPanel.Visible = false; // collapse last item's digest; the behaviour button re-opens it
+        SetVerdictPartsVisible(true);
 
         if (trustedSkip)
         {
@@ -373,6 +404,70 @@ internal sealed class ScanDetailControl : UserControl
         // Cached entries keep only the summary (no per-engine list) to stay small.
         if (report.Engines.Count == 0 && report.TotalEngines > 0)
             _stats.Text += Strings.StatsCacheNote;
+    }
+
+    /// <summary>The parts that only mean something with a VirusTotal report: stats, ratio bar, engine table,
+    /// report link and the buttons that fetch more from VirusTotal.</summary>
+    void SetVerdictPartsVisible(bool visible)
+    {
+        _stats.Visible = visible;
+        _ratioBar.Visible = visible;
+        _togglePanel.Visible = visible;
+        _engines.Visible = visible;
+    }
+
+    /// <summary>
+    /// What is known about a file before VirusTotal has answered — or when it never will (skipped, failed,
+    /// cancelled). Everything here is local: where the file is, what it is, when it was added, what the scan is
+    /// doing to it right now and since when, its hashes and signature once those are read. The pane used to
+    /// stay empty until a verdict arrived, which on a quota-starved scan meant hours of "select a file".
+    /// </summary>
+    void PopulateLocal(ScanItem item)
+    {
+        _shownLocal = true;
+        _behaviourPanel.Visible = false;
+        _actionStrip.Visible = false;
+        _engines.DataSource = null;
+        SetVerdictPartsVisible(false);
+
+        bool finished = item.Status is ScanStatus.Completed or ScanStatus.Skipped or ScanStatus.Failed or ScanStatus.Cancelled;
+        string activityAgo = ScanQueueControl.ShortDuration(DateTime.Now - item.ActivityLocal);
+        _hero.Set(finished ? Strings.DetailNoVerdictTitle : Strings.DetailInProgressTitle, item.StatusText,
+            string.Format(Strings.DetailLastActivityFormat, item.ActivityLocal, activityAgo),
+            finished ? "?" : "…", finished ? Theme.Current.SubtleText : Theme.Current.Accent);
+
+        if (!_zoneRead)
+        {
+            try { _zoneSummary = ZoneIdentifier.Read(item.ContainerPath ?? item.FilePath)?.Summary; }
+            catch (Exception ex) { Log("Zone read for the detail pane failed: " + ex.Message, LogLevel.Debug); }
+            _zoneRead = true;
+        }
+
+        string signature = item.Trust is not { } trust ? Strings.DetailSignatureNotChecked
+            : trust.Trusted ? $"{trust.Publisher} — {trust.Reason}"
+            : trust.Reason.Length > 0 ? trust.Reason : Strings.DetailSignatureNone;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(Strings.DetailLblFile).AppendLine(item.MemberPath != null ? Path.GetFileName(item.MemberPath) : item.FileName);
+        if (item.ContainerPath != null)
+        {
+            sb.Append(Strings.DetailLblArchive).AppendLine(item.ContainerPath);
+            sb.Append(Strings.DetailLblMember).AppendLine(item.MemberPath);
+        }
+        else sb.Append(Strings.DetailLblPath).AppendLine(item.FilePath);
+        sb.Append(Strings.DetailLblExtension).Append(item.Extension.Length > 0 ? item.Extension : "-")
+          .Append("   ").Append(Strings.DetailLblSize).AppendLine(item.SizeText);
+        sb.Append(Strings.DetailLblAdded).AppendLine(item.AddedLocal.ToString("dd.MM.yyyy HH:mm:ss"));
+        sb.Append(Strings.DetailLblSignature).AppendLine(signature);
+        if (item.SkipReason is { Length: > 0 } skip) sb.Append(Strings.DetailLblStatus).AppendLine(skip);
+        if (item.Error is { Length: > 0 } error) sb.Append(Strings.DetailLblError).AppendLine(error);
+        if (_zoneSummary != null) sb.AppendLine(_zoneSummary);
+
+        string text = sb.ToString().TrimEnd();
+        if (!string.Equals(_meta.Text, text, StringComparison.Ordinal)) _meta.Text = text;
+        string md5 = item.Md5 ?? "-", sha = item.Sha256 ?? "-";
+        if (_md5.Text != md5) _md5.Text = md5;
+        if (_sha.Text != sha) _sha.Text = sha;
     }
 
     /// <summary>Guided next step: surface the recommended action inline (primary highlighted) so the

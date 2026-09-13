@@ -1829,7 +1829,7 @@ internal sealed class ScanQueueControl : UserControl
         }
     }
 
-    static string ShortDuration(TimeSpan t)
+    internal static string ShortDuration(TimeSpan t)
     {
         if (t.TotalHours >= 1) return string.Format(Strings.DurationHoursMinutesFormat, (int)t.TotalHours, t.Minutes);
         if (t.TotalMinutes >= 1) return string.Format(Strings.DurationMinutesSecondsFormat, t.Minutes, t.Seconds);
