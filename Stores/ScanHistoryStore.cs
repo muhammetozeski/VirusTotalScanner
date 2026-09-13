@@ -158,10 +158,13 @@ internal static class ScanHistoryStore
     {
         try
         {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             Directory.CreateDirectory(ConfigPathResolver.DataFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
             _lastSaveUtc = DateTime.UtcNow;
             _dirty = false;
+            if (clock.ElapsedMilliseconds >= 100)
+                Log($"History save took {clock.ElapsedMilliseconds} ms ({_entries?.Count ?? 0} entries, thread {Environment.CurrentManagedThreadId}).", LogLevel.Warning);
         }
         catch (Exception ex) { Log("History save failed: " + ex.Message, LogLevel.Warning); }
     }

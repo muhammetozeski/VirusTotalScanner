@@ -197,7 +197,7 @@ internal sealed class ScanQueueControl : UserControl
         _detail.MarkCleanRequested += MarkClean;
 
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
-        _scheduler.ProgressChanged += OnProgress;
+        _scheduler.ProgressChanged += p => UiSlice.Measure("progress line", () => OnProgress(p));
         _scheduler.ItemFinished += OnItemFinished;
         _scheduler.Started += () => SafeUi(() =>
         {
@@ -223,7 +223,13 @@ internal sealed class ScanQueueControl : UserControl
         // streamed in was what made a sorted list "go crazy" during a scan (rows jumping, selection/scroll
         // thrash). New finished rows are appended in place by OnFilterItemFinished; a full re-sort happens
         // only on a header click and once when the scan finishes (Finished → ApplyFilter → ApplySort).
-        _repaintTimer.Tick += (_, _) => { if (_scheduler.IsRunning) { FlushPendingRows(); _grid.Invalidate(); UpdateChipCounts(); } };
+        _repaintTimer.Tick += (_, _) =>
+        {
+            if (!_scheduler.IsRunning) return;
+            UiSlice.Measure($"queue rows flush ({_pendingRows.Count} in, {_view?.Count ?? 0} shown)", FlushPendingRows);
+            _grid.Invalidate();
+            UiSlice.Measure("chip counts", UpdateChipCounts);
+        };
 
         UpdateRunningState(false);
     }

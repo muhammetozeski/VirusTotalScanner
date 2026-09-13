@@ -667,11 +667,14 @@ internal sealed class ScanScheduler
         }
         UiPost(() =>
         {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             foreach (var it in batch)
             {
                 try { ItemFinished?.Invoke(it); }
                 catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); }
             }
+            if (clock.ElapsedMilliseconds >= 100)
+                Log($"Announcing {batch.Length} finished file(s) took {clock.ElapsedMilliseconds} ms on the UI thread.", LogLevel.Warning);
         });
     }
 

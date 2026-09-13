@@ -17,6 +17,8 @@ internal sealed class EntityGridView : DataGridView
         catch (IndexOutOfRangeException) { /* empty-bound-grid + unbound first column .NET race */ }
     }
 
+    protected override void OnPaint(PaintEventArgs e) => UiSlice.Measure($"grid paint ({RowCount} rows)", () => base.OnPaint(e));
+
     protected override void SetSelectedRowCore(int rowIndex, bool selected)
     {
         try { base.SetSelectedRowCore(rowIndex, selected); }

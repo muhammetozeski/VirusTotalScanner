@@ -184,7 +184,7 @@ internal sealed partial class MainForm : Form
             TaskbarProgress.Indeterminate();
             UiStatusHub.Report(Strings.StatusSourceScan, Strings.StatusScanRunning);
         });
-        AppServices.Scheduler.ProgressChanged += p => SafeUi(() => TaskbarProgress.Set(p.Done, p.Total));
+        AppServices.Scheduler.ProgressChanged += p => SafeUi(() => UiSlice.Measure("taskbar progress", () => TaskbarProgress.Set(p.Done, p.Total)));
         AppServices.Scheduler.Finished += () => SafeUi(() =>
         {
             ScanHistoryStore.Flush(); // commit the sweep's throttled history rows now that it's done
