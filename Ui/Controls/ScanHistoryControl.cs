@@ -114,11 +114,21 @@ internal sealed class ScanHistoryControl : UserControl
 
         ScanHistoryStore.Changed += OnStoreChanged;
         EscalationStore.Changed += OnEscChanged;
+        VisibleChanged += (_, _) => { if (Visible && _storeDirty) Reload(); };
+        _storeRefresh.Tick += (_, _) => { if (_storeDirty && Visible) Reload(); };
+        _storeRefresh.Start();
         RefreshEscBanner();
         Reload();
     }
 
-    void OnStoreChanged() { try { if (IsHandleCreated) BeginInvoke(Reload); } catch { } }
+    // Every finished file of a scan adds a history row and raises Changed. Each one used to post a full
+    // Reload — the whole grid rebound to up to 5,000 rows — so a sweep queued a grid rebuild per file on
+    // the UI thread even with this tab hidden. A change now only marks the grid stale; it is rebuilt at
+    // most once a second, and only while the tab is on screen.
+    volatile bool _storeDirty;
+    readonly System.Windows.Forms.Timer _storeRefresh = new() { Interval = 1000 };
+
+    void OnStoreChanged() => _storeDirty = true;
     void OnEscChanged() { try { if (IsHandleCreated) BeginInvoke(RefreshEscBanner); } catch { } }
 
     void OpenReverdict(object? s, EventArgs e)
@@ -144,7 +154,7 @@ internal sealed class ScanHistoryControl : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { ScanHistoryStore.Changed -= OnStoreChanged; EscalationStore.Changed -= OnEscChanged; }
+        if (disposing) { _storeRefresh.Stop(); _storeRefresh.Dispose(); ScanHistoryStore.Changed -= OnStoreChanged; EscalationStore.Changed -= OnEscChanged; }
         base.Dispose(disposing);
     }
 
@@ -230,6 +240,7 @@ internal sealed class ScanHistoryControl : UserControl
 
     void Reload()
     {
+        _storeDirty = false;
         string q = _search.Text.Trim();
         var rows = ScanHistoryStore.All()
             .Reverse() // newest first

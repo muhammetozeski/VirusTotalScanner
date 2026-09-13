@@ -88,15 +88,27 @@ internal sealed class ScanOverviewControl : UserControl
         FolderSuppressionStore.Changed += OnStoreChanged;
         BannerMuteStore.Changed += OnStoreChanged;
         VisibleChanged += (_, _) => { if (Visible) Refresh2(); };
+        _storeRefresh.Tick += (_, _) => { if (_storeDirty && Visible) Refresh2(); };
+        _storeRefresh.Start();
         Refresh2();
     }
 
-    void OnStoreChanged() { try { if (IsHandleCreated) BeginInvoke(Refresh2); } catch { } }
+    // A scan records one history row per finished file, and every row raised Changed. Each one used to
+    // post a full Refresh2 — a walk of all 5,000 history rows plus eight freshly built rows of controls —
+    // so a sweep finishing a hundred files a second queued a hundred rebuilds a second on the UI thread
+    // and the window, and the machine with it, stopped answering. Now a change only marks the tab stale;
+    // it is rebuilt at most once a second, and only while it is on screen.
+    volatile bool _storeDirty;
+    readonly System.Windows.Forms.Timer _storeRefresh = new() { Interval = 1000 };
+
+    void OnStoreChanged() => _storeDirty = true;
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            _storeRefresh.Stop();
+            _storeRefresh.Dispose();
             ScanHistoryStore.Changed -= OnStoreChanged;
             AllowlistStore.Changed -= OnStoreChanged;
             FolderSuppressionStore.Changed -= OnStoreChanged;
@@ -309,6 +321,7 @@ internal sealed class ScanOverviewControl : UserControl
 
     void Refresh2()
     {
+        _storeDirty = false;
         var all = ScanHistoryStore.All();
         int tehdit = 0, supheli = 0, temiz = 0;
         foreach (var e in all)
@@ -322,7 +335,9 @@ internal sealed class ScanOverviewControl : UserControl
         _supheliNum.Text = supheli.ToString();
         _temizNum.Text = temiz.ToString();
 
-        _recent.Controls.Clear();
+        // Clear() only detaches: the old rows kept their window handles and fonts alive, eight rows of
+        // them per refresh, for the life of the process.
+        while (_recent.Controls.Count > 0) _recent.Controls[0].Dispose();
         foreach (var e in all.Reverse().Take(8))
             _recent.Controls.Add(RecentRow(e));
         if (all.Count == 0)
