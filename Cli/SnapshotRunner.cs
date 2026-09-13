@@ -48,6 +48,14 @@ internal static class SnapshotRunner
                                 { Status = ScanStatus.TrustedSkipped, SkipReason = t.Reason, Publisher = t.Publisher, Md5 = md5, Sha256 = sha256 });
                                 continue;
                             }
+                            if (!AppServices.Rotator.HasUsableKeys)
+                            {
+                                // No key to ask with: show the file as a row still waiting for VirusTotal, so the
+                                // snapshot covers the detail pane's local (no verdict yet) view.
+                                AppServices.Scheduler.Items.Add(new ScanItem(token)
+                                { Md5 = md5, Sha256 = sha256, Trust = t, Detail = Strings.StatusWaitingLookupSlot, Status = ScanStatus.AwaitingLookup });
+                                continue;
+                            }
                         }
                         if (AppServices.Rotator.HasUsableKeys)
                         {
