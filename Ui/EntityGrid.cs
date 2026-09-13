@@ -70,6 +70,60 @@ internal static class EntityGrid
     /// <summary>Column name of the leading "mark" checkbox.</summary>
     public const string MarkColumn = "__mark";
 
+    /// <summary>How a grid in virtual mode finds the item behind a row and keeps its marks. A virtual grid
+    /// has no bound items and no stored cell values, so both come from the owner.</summary>
+    sealed class VirtualRows(Func<int, object?> itemAt, Func<object, bool> isMarked, Action<object, bool> setMark)
+    {
+        public Func<int, object?> ItemAt { get; } = itemAt;
+        public Func<object, bool> IsMarked { get; } = isMarked;
+        public Action<object, bool> SetMark { get; } = setMark;
+    }
+
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DataGridView, VirtualRows> Virtual = new();
+
+    /// <summary>
+    /// Puts a grid in virtual mode: it asks for each visible cell's value instead of holding a row object per
+    /// item, so a list of any length costs the same to show and to reorder. <paramref name="itemAt"/> returns
+    /// the item at a row index; marks are kept per item in <paramref name="marks"/>, so they survive the rows
+    /// being reordered. The owner supplies the data cells' values through CellValueNeeded.
+    /// </summary>
+    public static void UseVirtualRows<T>(DataGridView grid, Func<int, T?> itemAt, HashSet<T> marks) where T : class
+    {
+        grid.DataSource = null;
+        grid.VirtualMode = true;
+        Virtual.AddOrUpdate(grid, new VirtualRows(
+            i => itemAt(i),
+            o => o is T t && marks.Contains(t),
+            (o, mark) => { if (o is T t) { if (mark) marks.Add(t); else marks.Remove(t); } }));
+        grid.CellValueNeeded += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && e.ColumnIndex == MarkIndex(grid) && Virtual.TryGetValue(grid, out var v))
+                e.Value = v.ItemAt(e.RowIndex) is { } item && v.IsMarked(item);
+        };
+    }
+
+    /// <summary>The item behind a row: the owner's item for a virtual grid, the bound item otherwise.</summary>
+    static object? ItemAt(DataGridView grid, int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= grid.RowCount) return null;
+        return Virtual.TryGetValue(grid, out var v) ? v.ItemAt(rowIndex) : grid.Rows[rowIndex].DataBoundItem;
+    }
+
+    static bool IsMarked(DataGridView grid, int rowIndex, int markColumn) =>
+        Virtual.TryGetValue(grid, out var v)
+            ? ItemAt(grid, rowIndex) is { } item && v.IsMarked(item)
+            : grid.Rows[rowIndex].Cells[markColumn].Value is true;
+
+    static void SetMark(DataGridView grid, int rowIndex, int markColumn, bool mark)
+    {
+        if (Virtual.TryGetValue(grid, out var v))
+        {
+            if (ItemAt(grid, rowIndex) is { } item) v.SetMark(item, mark);
+            grid.InvalidateCell(markColumn, rowIndex);
+        }
+        else grid.Rows[rowIndex].Cells[markColumn].Value = mark;
+    }
+
     /// <summary>Wire a configured, data-bound grid into the standard entity-list behaviour. Call this
     /// AFTER <see cref="ThemeManager.StyleGrid"/> (which otherwise overrides MultiSelect/ReadOnly).</summary>
     public static void Standardize<T>(DataGridView grid,
@@ -161,23 +215,29 @@ internal static class EntityGrid
     /// selection" instead of crashing the UI thread.</summary>
     public static T? CurrentItem<T>(DataGridView grid) where T : class
     {
-        try { return grid.CurrentRow?.DataBoundItem as T; }
+        try { return CurrentIndex(grid) is int index ? ItemAt(grid, index) as T : null; }
         catch (IndexOutOfRangeException) { return null; }
     }
 
     /// <summary>grid.CurrentRow?.Index with the same stale-position guard as <see cref="CurrentItem{T}"/>.</summary>
     public static int? CurrentIndex(DataGridView grid)
     {
-        try { return grid.CurrentRow?.Index; }
+        try { return grid.CurrentCell?.RowIndex ?? grid.CurrentRow?.Index; }
         catch (IndexOutOfRangeException) { return null; }
     }
 
-    /// <summary>Rows whose mark checkbox is ticked.</summary>
+    /// <summary>Rows whose mark checkbox is ticked, in row order.</summary>
     public static List<T> Marked<T>(DataGridView grid) where T : class
     {
         int col = MarkIndex(grid);
         var list = new List<T>();
         if (col < 0) return list;
+        if (Virtual.TryGetValue(grid, out var v))
+        {
+            for (int i = 0; i < grid.RowCount; i++)
+                if (v.ItemAt(i) is T t && v.IsMarked(t)) list.Add(t);
+            return list;
+        }
         foreach (DataGridViewRow r in grid.Rows)
             if (r.DataBoundItem is T t && r.Cells[col].Value is true) list.Add(t);
         return list;
@@ -185,7 +245,7 @@ internal static class EntityGrid
 
     /// <summary>Currently highlighted rows.</summary>
     public static List<T> Selected<T>(DataGridView grid) where T : class =>
-        grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem).OfType<T>().ToList();
+        grid.SelectedRows.Cast<DataGridViewRow>().Select(r => ItemAt(grid, r.Index)).OfType<T>().ToList();
 
     /// <summary>The rows an action applies to: marked rows if any, else the highlighted rows,
     /// else the single current row.</summary>
@@ -203,21 +263,26 @@ internal static class EntityGrid
     {
         int col = MarkIndex(grid);
         if (col < 0) return;
-        foreach (DataGridViewRow r in grid.SelectedRows) r.Cells[col].Value = mark;
+        foreach (DataGridViewRow r in grid.SelectedRows) SetMark(grid, r.Index, col, mark);
     }
 
     public static void SetAllMarks(DataGridView grid, bool mark)
     {
         int col = MarkIndex(grid);
         if (col < 0) return;
+        if (Virtual.TryGetValue(grid, out _))
+        {
+            for (int i = 0; i < grid.RowCount; i++) SetMark(grid, i, col, mark);
+            return;
+        }
         foreach (DataGridViewRow r in grid.Rows) r.Cells[col].Value = mark;
     }
 
     static bool AllMarked(DataGridView grid)
     {
         int col = MarkIndex(grid);
-        if (col < 0 || grid.Rows.Count == 0) return false;
-        foreach (DataGridViewRow r in grid.Rows) if (r.Cells[col].Value is not true) return false;
+        if (col < 0 || grid.RowCount == 0) return false;
+        for (int i = 0; i < grid.RowCount; i++) if (!IsMarked(grid, i, col)) return false;
         return true;
     }
 
@@ -310,7 +375,6 @@ internal static class EntityGrid
     {
         int col = MarkIndex(grid);
         if (col < 0) return;
-        var cell = grid.Rows[rowIndex].Cells[col];
-        cell.Value = cell.Value is not true;
+        SetMark(grid, rowIndex, col, !IsMarked(grid, rowIndex, col));
     }
 }
