@@ -32,15 +32,28 @@ internal static class AtomicFile
     public static void WriteAllText(string path, string content)
     {
         lock (PathLocks.GetOrAdd(Path.GetFullPath(path), _ => new object()))
-            WriteLocked(path, content);
+            WriteLocked(path, tmp => File.WriteAllText(tmp, content));
     }
 
-    static void WriteLocked(string path, string content)
+    /// <summary>Same crash-safe swap, but the content is streamed into the file instead of being built as
+    /// one string first. For a large store that string was the size of the file twice over (UTF-16), a
+    /// fresh large-object allocation on every save.</summary>
+    public static void Write(string path, Action<Stream> writeTo)
+    {
+        lock (PathLocks.GetOrAdd(Path.GetFullPath(path), _ => new object()))
+            WriteLocked(path, tmp =>
+            {
+                using var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16);
+                writeTo(fs);
+            });
+    }
+
+    static void WriteLocked(string path, Action<string> writeTemp)
     {
         // Unique temp name: a second writer that slips past the lock (another process holding the same
         // config open) then collides on the swap, which is recoverable, instead of on the write itself.
         string tmp = $"{path}.{Environment.ProcessId:x}-{Environment.CurrentManagedThreadId:x}.tmp";
-        File.WriteAllText(tmp, content);
+        writeTemp(tmp);
         try
         {
             if (File.Exists(path))

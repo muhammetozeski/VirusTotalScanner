@@ -40,16 +40,29 @@ internal static class FingerprintCache
     public static long Hits => Interlocked.Read(ref _hits);
     public static long Misses => Interlocked.Read(ref _misses);
 
-    public static void Load()
+    static Task _loaded = Task.CompletedTask;
+
+    /// <summary>
+    /// Starts reading the store in the background and returns at once. The file holds a quarter of a
+    /// million entries (78 MB) and was read on the start-up thread as one string — over a second before
+    /// the window could appear, and a 150 MB allocation. Until the read finishes a lookup simply misses
+    /// and the file is hashed for real; nothing is written back until it has finished, so a save can
+    /// never replace the store with the few entries added in the meantime.
+    /// </summary>
+    public static void Load() => _loaded = Task.Run(LoadCore);
+
+    static void LoadCore()
     {
         using var op = OpLog.Begin("Fingerprint cache load", FilePath);
         try
         {
             if (!File.Exists(FilePath)) { op.Note("no file yet"); return; }
-            var map = JsonSerializer.Deserialize<Dictionary<string, Entry>>(File.ReadAllText(FilePath), JsonOpts);
+            Dictionary<string, Entry>? map;
+            using (var fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16))
+                map = JsonSerializer.Deserialize<Dictionary<string, Entry>>(fs, JsonOpts);
             if (map != null)
                 foreach (var (k, v) in map)
-                    if (!string.IsNullOrEmpty(v.Md5)) _map[k] = v;
+                    if (!string.IsNullOrEmpty(v.Md5)) _map.TryAdd(k, v); // an entry hashed while loading is newer
             op.Ok($"{_map.Count} entr(ies)");
         }
         catch (Exception ex)
@@ -102,18 +115,29 @@ internal static class FingerprintCache
         catch (Exception ex) { Log($"Fingerprint write failed for '{path}': {ex.Message}", LogLevel.Debug); }
     }
 
+    static int _saveRunning;
+
+    /// <summary>
+    /// Saves in the background when the last save is 30 seconds old. The save used to run right here, on
+    /// the scan worker that happened to add an entry, and every other caller queued on the lock behind
+    /// it: 850 ms of a stopped scan every 30 seconds with the store at 250,000 entries.
+    /// </summary>
     public static void MaybeSave()
     {
-        if (!_dirty) return;
-        lock (_saveLock)
+        if (!_dirty || !_loaded.IsCompleted || DateTime.UtcNow - _lastSaveUtc < TimeSpan.FromSeconds(30)) return;
+        if (Interlocked.Exchange(ref _saveRunning, 1) == 1) return;
+        _ = Task.Run(() =>
         {
-            if (!_dirty || DateTime.UtcNow - _lastSaveUtc < TimeSpan.FromSeconds(30)) return;
-            WriteUnderLock();
-        }
+            try { lock (_saveLock) { if (_dirty) WriteUnderLock(); } }
+            catch (Exception ex) { Log("Fingerprint cache background save failed: " + ex.Message, LogLevel.Warning); }
+            finally { Interlocked.Exchange(ref _saveRunning, 0); }
+        });
     }
 
     public static void Flush()
     {
+        try { _loaded.Wait(); } // the store on disk is only replaced by a map that holds all of it
+        catch (Exception ex) { Log("Fingerprint cache load had failed before the flush: " + ex.Message, LogLevel.Warning); }
         lock (_saveLock)
         {
             if (!_dirty) return;
@@ -127,12 +151,19 @@ internal static class FingerprintCache
         try
         {
             Directory.CreateDirectory(ConfigPathResolver.DataFolder);
-            AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_map, JsonOpts));
-            _lastSaveUtc = DateTime.UtcNow;
+            // Cleared before the write, not after: an entry added while the file is being written marks
+            // the store dirty again instead of being forgotten by the next check.
             _dirty = false;
+            _lastSaveUtc = DateTime.UtcNow;
+            AtomicFile.Write(FilePath, fs => JsonSerializer.Serialize(fs, _map, JsonOpts));
             op.Ok($"hits={Hits} misses={Misses}");
         }
-        catch (Exception ex) { Log("Fingerprint cache save failed: " + ex.Message, LogLevel.Warning); op.Fail(ex.Message); }
+        catch (Exception ex)
+        {
+            _dirty = true; // not on disk; the next save tries again
+            Log("Fingerprint cache save failed: " + ex.Message, LogLevel.Warning);
+            op.Fail(ex.Message);
+        }
     }
 
     /// <summary>Drops entries whose file is gone, so the map does not grow forever across scans.</summary>
@@ -142,6 +173,7 @@ internal static class FingerprintCache
         int removed = 0;
         try
         {
+            _loaded.Wait(); // pruning a half-loaded map would miss everything still being read
             foreach (var path in _map.Keys.ToList())
             {
                 try { if (!File.Exists(path) && _map.TryRemove(path, out _)) removed++; }
