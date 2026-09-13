@@ -773,8 +773,10 @@ internal sealed class ScanScheduler
                 || reset - DateTime.UtcNow <= ApiWaitForKey
                 || !guiAvailable;
 
+            bool apiAsked = false;
             if (report == null && _rotator.HasUsableKeys && apiWorthTrying)
             {
+                apiAsked = true;
                 ItemWrite(() => { item.Detail = Strings.StatusAskingApi; item.Status = ScanStatus.LookingUp; });
                 var (gotKeySlot, existing) = await TryCallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ApiWaitForKey, ct);
                 report = existing;
@@ -820,7 +822,10 @@ internal sealed class ScanScheduler
             if (report == null && guiAvailable && !guiAnswered && !vtHasNeverSeenIt && !ct.IsCancellationRequested
                 && failure is not (LookupFailure.AnalysisTimedOut or LookupFailure.NotSubmitted))
             {
-                ItemWrite(() => { item.Detail = Strings.StatusKeylessLastResort; item.Status = ScanStatus.LookingUp; });
+                // Say which it was: an API that was asked and gave nothing, or keys with no room left, when the
+                // API was never asked at all.
+                string note = apiAsked ? Strings.StatusKeylessLastResort : Strings.StatusKeylessNoKeyRoom;
+                ItemWrite(() => { item.Detail = note; item.Status = ScanStatus.LookingUp; });
                 report = await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
             }
         }

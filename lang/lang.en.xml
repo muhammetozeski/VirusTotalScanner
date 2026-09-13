@@ -351,6 +351,7 @@
   <s name="StatusWaitingKeylessFormat">Waiting for the keyless browser (up to {0} s)</s>
   <s name="StatusAskingApi">Asking through the API (waiting for a free key)</s>
   <s name="StatusKeylessLastResort">The API did not answer, waiting for the keyless browser</s>
+  <s name="StatusKeylessNoKeyRoom">No API key has room right now, waiting for the keyless browser</s>
   <s name="ColExtension">Ext.</s>
   <s name="ColActivity">Last activity</s>
   <s name="SortLabel">Sort:</s>

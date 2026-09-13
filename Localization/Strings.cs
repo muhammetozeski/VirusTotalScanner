@@ -490,6 +490,7 @@ internal static class Strings
     public static string StatusWaitingKeylessFormat = "Anahtarsız tarayıcı bekleniyor (en çok {0} sn)";
     public static string StatusAskingApi = "API ile soruluyor (boş anahtar bekleniyor)";
     public static string StatusKeylessLastResort = "API cevap vermedi, anahtarsız tarayıcı sırası bekleniyor";
+    public static string StatusKeylessNoKeyRoom = "API anahtarlarında şu an yer yok, anahtarsız tarayıcı sırası bekleniyor";
     public static string ColExtension = "Uzantı";
     public static string ColActivity = "Son işlem";
     public static string SortLabel = "Sırala:";
