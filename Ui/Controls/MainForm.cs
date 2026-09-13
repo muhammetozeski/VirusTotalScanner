@@ -373,6 +373,7 @@ internal sealed partial class MainForm : Form
         // Ignore control tokens like "--show"; keep only real existing paths.
         var real = paths.Where(p => !p.StartsWith("--") && (File.Exists(p) || Directory.Exists(p))).ToArray();
         if (real.Length > 0) _externalPathsArrived = true;
+        Log($"External request: {paths.Length} argument(s), {real.Length} existing path(s): {string.Join(", ", real)}", LogLevel.Info);
         SafeUi(() =>
         {
             RestoreFromTray();

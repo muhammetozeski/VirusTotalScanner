@@ -115,8 +115,14 @@ internal static class Program
             lock (handOffLock)
             {
                 target = ready;
-                if (target == null) { early.Add(paths); return; }
+                if (target == null)
+                {
+                    early.Add(paths);
+                    Log($"External path(s) held until the window is shown: {string.Join(", ", paths)}", LogLevel.Info);
+                    return;
+                }
             }
+            Log($"External path(s) handed to the window: {string.Join(", ", paths)}", LogLevel.Info);
             target.EnqueueExternalPaths(paths);
         }
 
