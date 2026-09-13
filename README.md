@@ -30,6 +30,9 @@ searchable history so you can answer "did this turn malicious since I last check
 2. On first run a short wizard lets you add a VirusTotal API key and, optionally, the right‑click menu.
 3. **Settings → "Add to right‑click menu"** registers a *Scan with VirusTotal* entry for files and folders.
 
+The exe is digitally signed with a self-issued certificate; running `Install-Certificate.cmd` from the release's
+`SignatureTrust.zip` once lets Windows verify that signature (it does not remove the SmartScreen warning).
+
 ## Features
 
 **Scanning & queue**
