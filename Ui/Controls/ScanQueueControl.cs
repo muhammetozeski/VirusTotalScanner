@@ -255,6 +255,17 @@ internal sealed class ScanQueueControl : UserControl
         AddChip(strip, Bucket.Error, Strings.ChipError, null);
 
         _filterCount.Tag = "subtle";
+        // Same reason as the chips: with a filter on, this count changes on every refresh of a running scan.
+        _filterCount.HandleCreated += (_, _) =>
+        {
+            if (!_filterCount.AutoSize) return;
+            string text = _filterCount.Text;
+            _filterCount.Text = string.Format(Strings.FilterCountFormat, 8888888, 8888888);
+            var size = _filterCount.GetPreferredSize(Size.Empty);
+            _filterCount.Text = text;
+            _filterCount.AutoSize = false;
+            _filterCount.Size = size;
+        };
         strip.Controls.Add(_filterCount);
         SetBucket(Bucket.All);
         return strip;
@@ -274,8 +285,35 @@ internal sealed class ScanQueueControl : UserControl
         };
         chip.FlatAppearance.BorderSize = 1;
         chip.Click += (_, _) => SetBucket(b);
+        chip.HandleCreated += (_, _) => FreezeChipSize(chip, label);
         _chips[b] = chip;
         strip.Controls.Add(chip);
+    }
+
+    /// <summary>
+    /// Fixes a chip's size to fit its label with a seven-digit count in bold, once the window has been scaled.
+    ///
+    /// The counts change several times a second during a scan. An auto-sizing button answers every text
+    /// change by laying out its parent chain, and here that is the whole scan tab: the chip update measured
+    /// 213 ms with the window minimized, and 1,590 ms once. A fixed-size button only repaints.
+    /// </summary>
+    static void FreezeChipSize(Button chip, string label)
+    {
+        if (!chip.AutoSize) return;
+        try
+        {
+            var font = chip.Font;
+            string text = chip.Text;
+            using var bold = new Font(font, FontStyle.Bold);
+            chip.Font = bold;
+            chip.Text = string.Format(Strings.ChipCountFormat, label, 8888888);
+            var size = chip.GetPreferredSize(Size.Empty);
+            chip.Font = font;
+            chip.Text = text;
+            chip.AutoSize = false;
+            chip.Size = size;
+        }
+        catch (Exception ex) { Log("Chip size could not be fixed: " + ex.Message, LogLevel.Warning); }
     }
 
     void SetBucket(Bucket b)
@@ -539,10 +577,16 @@ internal sealed class ScanQueueControl : UserControl
         SetChip(Bucket.Malicious, Strings.ChipMalicious, mal);
         SetChip(Bucket.Skipped, Strings.ChipSkipped, skip);
         SetChip(Bucket.Error, Strings.ChipError, err);
-        _filterCount.Text = FilterActive ? string.Format(Strings.FilterCountFormat, _grid.Rows.Count, all) : "";
+        string filterText = FilterActive ? string.Format(Strings.FilterCountFormat, _grid.Rows.Count, all) : "";
+        if (!string.Equals(_filterCount.Text, filterText, StringComparison.Ordinal)) _filterCount.Text = filterText;
     }
 
-    void SetChip(Bucket b, string label, int count) { if (_chips.TryGetValue(b, out var c)) c.Text = string.Format(Strings.ChipCountFormat, label, count); }
+    void SetChip(Bucket b, string label, int count)
+    {
+        if (!_chips.TryGetValue(b, out var c)) return;
+        string text = string.Format(Strings.ChipCountFormat, label, count);
+        if (!string.Equals(c.Text, text, StringComparison.Ordinal)) c.Text = text; // an unchanged count costs nothing
+    }
 
     /// <summary>An item just got a verdict: keep counts live and slot it into the active filtered view
     /// without a full rebuild (so scroll position / selection survive during a running scan).</summary>
