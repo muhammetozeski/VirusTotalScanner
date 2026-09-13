@@ -255,17 +255,6 @@ internal sealed class ScanQueueControl : UserControl
         AddChip(strip, Bucket.Error, Strings.ChipError, null);
 
         _filterCount.Tag = "subtle";
-        // Same reason as the chips: with a filter on, this count changes on every refresh of a running scan.
-        _filterCount.HandleCreated += (_, _) =>
-        {
-            if (!_filterCount.AutoSize) return;
-            string text = _filterCount.Text;
-            _filterCount.Text = string.Format(Strings.FilterCountFormat, 8888888, 8888888);
-            var size = _filterCount.GetPreferredSize(Size.Empty);
-            _filterCount.Text = text;
-            _filterCount.AutoSize = false;
-            _filterCount.Size = size;
-        };
         strip.Controls.Add(_filterCount);
         SetBucket(Bucket.All);
         return strip;
@@ -285,35 +274,44 @@ internal sealed class ScanQueueControl : UserControl
         };
         chip.FlatAppearance.BorderSize = 1;
         chip.Click += (_, _) => SetBucket(b);
-        chip.HandleCreated += (_, _) => FreezeChipSize(chip, label);
+        chip.HandleCreated += (_, _) => FreezeChipSize(b, chip);
         _chips[b] = chip;
         strip.Controls.Add(chip);
     }
 
+    /// <summary>What a chip needs to size itself without auto-sizing: the space its button draws around the
+    /// text, its height, and how many count digits its current width was made for.</summary>
+    sealed class ChipMetrics { public int Chrome; public int Height; public int Digits; }
+    readonly Dictionary<Bucket, ChipMetrics> _chipMetrics = [];
+
     /// <summary>
-    /// Fixes a chip's size to fit its label with a seven-digit count in bold, once the window has been scaled.
+    /// Takes a chip off auto-size once the window has been scaled.
     ///
     /// The counts change several times a second during a scan. An auto-sizing button answers every text
     /// change by laying out its parent chain, and here that is the whole scan tab: the chip update measured
-    /// 213 ms with the window minimized, and 1,590 ms once. A fixed-size button only repaints.
+    /// 213 ms with the window minimized, and 1,590 ms once. A fixed-size button only repaints; it is resized
+    /// by <see cref="SetChip"/> when its count needs more digits, which happens a handful of times a scan.
     /// </summary>
-    static void FreezeChipSize(Button chip, string label)
+    void FreezeChipSize(Bucket b, Button chip)
     {
         if (!chip.AutoSize) return;
         try
         {
-            var font = chip.Font;
-            string text = chip.Text;
-            using var bold = new Font(font, FontStyle.Bold);
-            chip.Font = bold;
-            chip.Text = string.Format(Strings.ChipCountFormat, label, 8888888);
-            var size = chip.GetPreferredSize(Size.Empty);
-            chip.Font = font;
-            chip.Text = text;
+            var preferred = chip.GetPreferredSize(Size.Empty);
+            int textWidth = TextRenderer.MeasureText(chip.Text, chip.Font).Width;
+            _chipMetrics[b] = new ChipMetrics { Chrome = preferred.Width - textWidth, Height = preferred.Height, Digits = 0 };
             chip.AutoSize = false;
-            chip.Size = size;
+            chip.Size = preferred;
         }
         catch (Exception ex) { Log("Chip size could not be fixed: " + ex.Message, LogLevel.Warning); }
+    }
+
+    /// <summary>Width that fits the label with a count of <paramref name="digits"/> digits in bold (the active chip).</summary>
+    static int ChipWidth(Button chip, string label, int digits, ChipMetrics m)
+    {
+        using var bold = new Font(chip.Font, FontStyle.Bold);
+        string widest = string.Format(Strings.ChipCountFormat, label, new string('8', digits));
+        return TextRenderer.MeasureText(widest, bold).Width + m.Chrome;
     }
 
     void SetBucket(Bucket b)
@@ -578,14 +576,55 @@ internal sealed class ScanQueueControl : UserControl
         SetChip(Bucket.Skipped, Strings.ChipSkipped, skip);
         SetChip(Bucket.Error, Strings.ChipError, err);
         string filterText = FilterActive ? string.Format(Strings.FilterCountFormat, _grid.Rows.Count, all) : "";
-        if (!string.Equals(_filterCount.Text, filterText, StringComparison.Ordinal)) _filterCount.Text = filterText;
+        if (!string.Equals(_filterCount.Text, filterText, StringComparison.Ordinal)) SetFilterCount(filterText, Math.Max(_grid.Rows.Count, all));
+    }
+
+    int _filterCountDigits = -1; // -1: still auto-sized; 0: empty
+
+    /// <summary>Sets the "shown N of M" label the way <see cref="SetChip"/> sets a chip: sized for the number of
+    /// digits, so a running scan with a filter on does not lay the tab out on every refresh.</summary>
+    void SetFilterCount(string text, int largest)
+    {
+        try
+        {
+            int digits = text.Length == 0 ? 0 : largest.ToString(System.Globalization.CultureInfo.InvariantCulture).Length;
+            if (_filterCountDigits < 0) { _filterCount.AutoSize = false; _filterCountDigits = int.MinValue; }
+            if (digits != _filterCountDigits && (digits > _filterCountDigits || digits == 0 || !_scheduler.IsRunning))
+            {
+                int width = digits == 0 ? 0
+                    : TextRenderer.MeasureText(string.Format(Strings.FilterCountFormat, new string('8', digits), new string('8', digits)), _filterCount.Font).Width
+                      + _filterCount.Padding.Horizontal + 4;
+                int height = TextRenderer.MeasureText("8", _filterCount.Font).Height + _filterCount.Padding.Vertical;
+                _filterCount.Size = new Size(width, height);
+                _filterCountDigits = digits;
+            }
+        }
+        catch (Exception ex) { Log("Filter count resize failed: " + ex.Message, LogLevel.Warning); }
+        _filterCount.Text = text;
     }
 
     void SetChip(Bucket b, string label, int count)
     {
         if (!_chips.TryGetValue(b, out var c)) return;
         string text = string.Format(Strings.ChipCountFormat, label, count);
-        if (!string.Equals(c.Text, text, StringComparison.Ordinal)) c.Text = text; // an unchanged count costs nothing
+        if (string.Equals(c.Text, text, StringComparison.Ordinal)) return; // an unchanged count costs nothing
+
+        // Resize only when the count gains a digit (or loses one while no scan is running): one layout of
+        // the tab per digit instead of one per update.
+        if (_chipMetrics.TryGetValue(b, out var m))
+        {
+            int digits = Math.Max(1, count.ToString(System.Globalization.CultureInfo.InvariantCulture).Length);
+            if (digits > m.Digits || (digits < m.Digits && !_scheduler.IsRunning))
+            {
+                try
+                {
+                    c.Size = new Size(ChipWidth(c, label, digits, m), m.Height);
+                    m.Digits = digits;
+                }
+                catch (Exception ex) { Log("Chip resize failed: " + ex.Message, LogLevel.Warning); }
+            }
+        }
+        c.Text = text;
     }
 
     /// <summary>An item just got a verdict: keep counts live and slot it into the active filtered view
