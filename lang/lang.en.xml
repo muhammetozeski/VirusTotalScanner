@@ -1289,6 +1289,7 @@
   <s name="TorAutoEnableAfterLabel">After how many blocks (within 24 h):</s>
   <s name="TorNewCircuitOnErrorLabel">While Tor is on, change the circuit (exit IP) automatically on an error</s>
   <s name="CaptchaAutoClickLabel">Let the app try the single reCAPTCHA click first</s>
+  <s name="KeylessPoolLabel">Concurrent keyless browsers (0 = auto, follows scan concurrency):</s>
   <s name="TorExePathLabel">Path to tor.exe (empty = search automatically):</s>
   <s name="BtnTorFindExe">Pick tor.exe…</s>
   <s name="BtnTorTest">Test the connection</s>

@@ -1441,6 +1441,7 @@ internal static class Strings
     public static string TorAutoEnableAfterLabel = "Kaç engelden sonra (24 saat içinde):";
     public static string TorNewCircuitOnErrorLabel = "Tor açıkken hata alınca devreyi (çıkış IP'sini) otomatik değiştir";
     public static string CaptchaAutoClickLabel = "reCAPTCHA'da tek tıklamayı önce program denesin";
+    public static string KeylessPoolLabel = "Eşzamanlı anahtarsız tarayıcı sayısı (0 = otomatik, tarama eşzamanlılığına eşit):";
     public static string TorRouteApiLabel = "API isteklerini de Tor üzerinden gönder";
     public static string TorExePathLabel = "tor.exe yolu (boş = otomatik ara):";
     public static string BtnTorFindExe = "tor.exe seç…";

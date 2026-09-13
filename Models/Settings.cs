@@ -126,6 +126,12 @@ internal static class Settings
     /// interrupts the user. If a picture puzzle follows, the window is shown as usual.</summary>
     public static readonly Setting<bool> CaptchaAutoClick = new(true);
 
+    /// <summary>How many keyless (WebView2) browsers run at once — the ceiling on concurrent keyless
+    /// lookups. 0 = auto, which follows <see cref="MaxConcurrentScans"/>. The live count never exceeds
+    /// the scan concurrency (there are only that many network workers), so a value above it has no
+    /// effect. A change applies the next time the keyless pool is idle (a new scan).</summary>
+    public static readonly Setting<int> KeylessBrowserPool = new(0);
+
     /// <summary>Minimize to the system tray instead of closing.</summary>
     public static readonly Setting<bool> MinimizeToTray = new(true);
 

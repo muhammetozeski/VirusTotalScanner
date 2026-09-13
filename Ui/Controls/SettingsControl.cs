@@ -583,6 +583,9 @@ internal sealed class SettingsControl : UserControl
         var autoClick = new CheckBox { Text = Strings.CaptchaAutoClickLabel, AutoSize = true, Checked = Settings.CaptchaAutoClick };
         autoClick.CheckedChanged += (_, _) => { Settings.CaptchaAutoClick.Value = autoClick.Checked; SettingsManager.SaveSettings(); };
 
+        var keylessPool = LabeledNumeric(Strings.KeylessPoolLabel, Settings.KeylessBrowserPool, 0, 32,
+            v => { Settings.KeylessBrowserPool.Value = v; SettingsManager.SaveSettings(); });
+
         var routeApi = new CheckBox { Text = Strings.TorRouteApiLabel, AutoSize = true, Checked = Settings.TorRouteApi };
         routeApi.CheckedChanged += (_, _) => { Settings.TorRouteApi.Value = routeApi.Checked; SettingsManager.SaveSettings(); VtHttpClientFactory.Invalidate(); };
 
@@ -625,6 +628,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(onError);
         body.Controls.Add(routeApi);
         body.Controls.Add(autoClick);
+        body.Controls.Add(keylessPool);
         body.Controls.Add(ThemeManager.MakeLabel(Strings.TorExePathLabel, subtle: true));
         body.Controls.Add(pathRow);
 

@@ -27,11 +27,23 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class GuiScrapeService
 {
-    /// <summary>How many keyless browsers may run at once. Each is a real Chromium process with its own
-    /// window and profile folder, so this is also the ceiling on concurrent keyless lookups and on the
-    /// memory the keyless path costs. A probe measures one exit address at a time, so it never needs
-    /// more than one browser.</summary>
-    const int MaxPoolSize = 3;
+    /// <summary>Absolute ceiling on keyless browsers, whatever the setting says. Each browser is a real
+    /// Chromium process with its own window and profile folder; this caps the memory the keyless path can
+    /// ever cost and bounds the profile-cleanup and slot bookkeeping. The live size is
+    /// <see cref="DesiredPoolSize"/>, chosen by the user's setting within this ceiling.</summary>
+    const int HardMaxPool = 32;
+
+    /// <summary>How many keyless browsers run at once right now: the <see cref="Settings.KeylessBrowserPool"/>
+    /// setting, or — when that is 0 (auto) — the scan concurrency, clamped to [1, <see cref="HardMaxPool"/>].
+    /// The live count never exceeds the scan concurrency anyway, since that is how many network workers
+    /// there are, so auto makes each worker able to hold its own browser.</summary>
+    static int DesiredPoolSize()
+    {
+        if (ProbeMode) return 1; // a probe measures one exit address at a time — a second browser would muddy it
+        int v = Settings.KeylessBrowserPool.Value;
+        if (v <= 0) v = Settings.MaxConcurrentScans.Value;
+        return Math.Clamp(v, 1, HardMaxPool);
+    }
 
     // ---- the browser identity every keyless connection presents ----
 
@@ -54,7 +66,12 @@ internal static class GuiScrapeService
 
     // ---- pool ----
 
-    static readonly SemaphoreSlim _slots = new(MaxPoolSize, MaxPoolSize);
+    // The slot semaphore's permit count is the live pool size. It is rebuilt when the setting changes,
+    // but only while the pool is fully idle (no permits out), so a permit is always released back to the
+    // very semaphore it came from — see AcquireAsync/Release.
+    static SemaphoreSlim _slots = new(1, HardMaxPool);
+    static int _builtPoolSize = -1;
+    static int _inUse;
     static readonly object _poolLock = new();
     static readonly List<KeylessBrowser> _all = [];
     static readonly Stack<KeylessBrowser> _idle = new();
@@ -65,29 +82,51 @@ internal static class GuiScrapeService
 
     static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>Resizes the slot semaphore to the current desired pool size. Only acts while the pool is
+    /// idle (<see cref="_inUse"/> == 0), so no outstanding permit is ever orphaned on an old semaphore;
+    /// a setting change therefore takes effect at the start of the next scan. Call under _poolLock.</summary>
+    static void EnsureSlots()
+    {
+        int desired = DesiredPoolSize();
+        if (desired == _builtPoolSize) return;
+        if (_builtPoolSize >= 0 && _inUse > 0) return; // a live pool is in use; apply the new size when idle
+        _slots = new SemaphoreSlim(desired, HardMaxPool);
+        _builtPoolSize = desired;
+    }
+
     /// <summary>Takes a free browser (reusing an idle one, or building a new instance up to the pool
-    /// size), waiting at most <paramref name="maxWait"/> for a concurrency slot. Null = every browser is
-    /// busy and the caller was not willing to keep waiting.</summary>
+    /// size), waiting at most <paramref name="maxWait"/> for a slot. Null = every browser is busy and the
+    /// caller was not willing to keep waiting.</summary>
     static async Task<KeylessBrowser?> AcquireAsync(TimeSpan maxWait, CancellationToken ct)
     {
-        if (!await _slots.WaitAsync(maxWait, ct)) return null;
+        SemaphoreSlim slots;
+        lock (_poolLock) { EnsureSlots(); slots = _slots; }
+
+        if (!await slots.WaitAsync(maxWait, ct)) return null;
         try
         {
             lock (_poolLock)
             {
+                _inUse++;
                 if (_idle.Count > 0) return _idle.Pop();
                 var b = new KeylessBrowser(_all.Count);
                 _all.Add(b);
                 return b;
             }
         }
-        catch { _slots.Release(); throw; }
+        catch { slots.Release(); throw; }
     }
 
     static void Release(KeylessBrowser b)
     {
-        lock (_poolLock) _idle.Push(b);
-        _slots.Release();
+        // While this browser was checked out _inUse was >= 1, so EnsureSlots could not have swapped the
+        // semaphore; releasing the current _slots is releasing the very one the permit came from.
+        lock (_poolLock)
+        {
+            _idle.Push(b);
+            _inUse--;
+            _slots.Release();
+        }
     }
 
     // ---- shared "parked channel" state (rate-limit hit / unanswered challenge) ----
@@ -185,7 +224,7 @@ internal static class GuiScrapeService
         _ = Task.Run(async () =>
         {
             var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int slot = 0; slot < MaxPoolSize; slot++)
+            for (int slot = 0; slot < HardMaxPool; slot++)
             {
                 keep.Add(ProfileLeaf(false, slot, currentGeneration));
                 keep.Add(ProfileLeaf(true, slot, currentGeneration));
