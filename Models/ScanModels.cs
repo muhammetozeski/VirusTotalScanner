@@ -68,7 +68,6 @@ internal sealed class ScanItem : INotifyPropertyChanged
     public ScanItem(string filePath)
     {
         FilePath = filePath;
-        try { SizeBytes = new FileInfo(filePath).Length; } catch { SizeBytes = -1; }
     }
 
     public string FilePath { get; }
@@ -76,7 +75,18 @@ internal sealed class ScanItem : INotifyPropertyChanged
     /// <summary>Optional context shown next to the file name — e.g. the offending member of an archive
     /// ("› setup.exe") when the threat was found inside a downloaded .zip.</summary>
     public string? OriginNote { get; set; }
-    public long SizeBytes { get; }
+
+    long? _sizeBytes;
+    /// <summary>Read from disk the first time something asks. Reading it in the constructor was a disk
+    /// query per row before a scan could start: 1.2 s for 18,183 rows, over a minute for a whole drive,
+    /// while the grid only ever shows the few rows on screen.</summary>
+    public long SizeBytes => _sizeBytes ??= ReadSize(FilePath);
+
+    static long ReadSize(string path)
+    {
+        try { return new FileInfo(path).Length; }
+        catch { return -1; }
+    }
     public string SizeText => SizeBytes < 0 ? "?" : FormatBytes(SizeBytes);
 
     string? _md5;

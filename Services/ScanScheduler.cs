@@ -241,11 +241,25 @@ internal sealed class ScanScheduler
                 files = await Task.Run(() => ExpandArchives(files, archiveTemps), ct);
 
             // Risk-weighted ordering: scan the likeliest-malicious files first (cheap local signals).
-            if (Settings.RiskWeightedOrdering && files.Count > 1)
-                files = await Task.Run(() => files.OrderByDescending(RiskScorer.Score).ToList(), ct);
+            // Risk ordering scores every file before the first one is scanned, and scoring reads the disk
+            // twice per file: 4.6 s for the 18,183 files of System32, minutes on a whole drive, with nothing
+            // moving on screen. Past the sweep size the files are scanned one by one in walk order instead.
+            if (Settings.RiskWeightedOrdering && files.Count > 1 && files.Count <= SweepSizeThatNeedsToBePolite)
+            {
+                using var orderOp = OpLog.Begin("Risk ordering", $"in: {files.Count} file(s)");
+                var toOrder = files;
+                files = await Task.Run(() => toOrder.OrderByDescending(RiskScorer.Score).ToList(), ct);
+                orderOp.Ok("out: ordered");
+            }
+            else if (Settings.RiskWeightedOrdering && files.Count > SweepSizeThatNeedsToBePolite)
+                runOp.Step($"risk ordering skipped: {files.Count} files are scanned in walk order");
 
             _total = files.Count;
-            items = files.Select(f => new ScanItem(f)).ToList();
+            using (var rowsOp = OpLog.Begin("Build rows", $"in: {files.Count} file(s)"))
+            {
+                items = files.Select(f => new ScanItem(f)).ToList();
+                rowsOp.Ok($"out: {items.Count} row(s)");
+            }
             UiPost(() => BulkAdd(items));
 
             // Ledger: show each size-skipped file as a row so the user sees what was excluded and why.
