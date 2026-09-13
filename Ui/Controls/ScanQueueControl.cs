@@ -183,7 +183,15 @@ internal sealed class ScanQueueControl : UserControl
         root.Controls.Add(bottom, 0, 4);
         Controls.Add(root);
 
-        _grid.SelectionChanged += (_, _) => { var it = SelectedItem(); _detail.Show(it); UpdateRecallBar(it); };
+        _grid.SelectionChanged += (_, _) =>
+        {
+            if (_rebindingView) return; // RebindKeepingPlace puts the selection back itself
+            var it = SelectedItem();
+            if (ReferenceEquals(it, _detailItem)) return; // same row again: the pane already shows it
+            _detailItem = it;
+            _detail.Show(it);
+            UpdateRecallBar(it);
+        };
         _detail.QuarantineRequested += QuarantineItem;
         _detail.RescanRequested += i => { if (File.Exists(i.FilePath)) StartScan([i.FilePath], recurse: false); };
         _detail.MarkCleanRequested += MarkClean;
@@ -324,6 +332,7 @@ internal sealed class ScanQueueControl : UserControl
         if (_sortCol < 0) return;
         _view ??= [];
         var keep = SelectedItem();
+        var top = TopItem();
         var src = _scheduler.Items.Where(Passes); // respect the active filter chips/search
         string sortName = _sortCol >= 0 && _sortCol < _grid.Columns.Count ? _grid.Columns[_sortCol].Name : "";
         List<ScanItem> list = sortName switch
@@ -338,11 +347,9 @@ internal sealed class ScanQueueControl : UserControl
         _view.Clear();
         foreach (var it in list) _view.Add(it);
         _view.RaiseListChangedEvents = true;
-        _view.ResetBindings();
-        if (!ReferenceEquals(_grid.DataSource, _view)) _grid.DataSource = _view;
+        RebindKeepingPlace(_view, keep, top);
         _viewSet.Clear(); _viewSet.UnionWith(_view);
         PaintSortGlyph();
-        Reselect(keep);
     }
 
     // Worst-first when ascending: a malicious / high-detection row floats to the top on the first Durum click.
@@ -366,11 +373,12 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (_sortCol >= 0) { ApplySort(); return; } // an active sort owns _view (it already filters too)
         var keep = SelectedItem();
+        var top = TopItem();
         bool capped = _scheduler.Items.Count > GridRowBudget;
 
         if (!FilterActive && !capped)
         {
-            if (!ReferenceEquals(_grid.DataSource, _scheduler.Items)) _grid.DataSource = _scheduler.Items;
+            if (!ReferenceEquals(_grid.DataSource, _scheduler.Items)) RebindKeepingPlace(_scheduler.Items, keep, top);
             _lastFilterQuery = ""; _lastFilterBucket = Bucket.All;
         }
         else
@@ -392,12 +400,10 @@ internal sealed class ScanQueueControl : UserControl
                 FillWithinBudget(_view, _scheduler.Items.Where(Passes));
             }
             _view.RaiseListChangedEvents = true;
-            _view.ResetBindings();
-            if (!ReferenceEquals(_grid.DataSource, _view)) _grid.DataSource = _view;
+            RebindKeepingPlace(_view, keep, top);
             _viewSet.Clear(); _viewSet.UnionWith(_view);
             _lastFilterQuery = q; _lastFilterBucket = _bucket;
         }
-        Reselect(keep);
         UpdateChipCounts();
     }
 
@@ -430,12 +436,60 @@ internal sealed class ScanQueueControl : UserControl
             if (threats.Contains(it) || recent.Contains(it)) target.Add(it);
     }
 
-    void Reselect(ScanItem? item)
+    ScanItem? _detailItem;   // the row the detail pane was last built for
+    bool _rebindingView;     // set while RebindKeepingPlace rebuilds the rows
+
+    /// <summary>
+    /// Rebuilds the grid's rows from <paramref name="list"/> and puts the user back where they were.
+    ///
+    /// A rebuild makes the grid select its first row, and that raised SelectionChanged. During a scan
+    /// the live view is rebuilt four times a second, so the detail pane was rebuilt four times a second
+    /// for whatever row happened to be first — and building it verifies the file's signature and reads
+    /// its PE headers, on this thread. Stack samples of the stuttering window landed there every time.
+    /// The list also jumped back to the top under the user's scroll. Selection changes raised by the
+    /// rebuild are now ignored, and the selected row and the top visible row are restored afterwards.
+    /// </summary>
+    void RebindKeepingPlace(System.ComponentModel.BindingList<ScanItem> list, ScanItem? keep, ScanItem? top)
     {
-        if (item == null) return;
-        _grid.ClearSelection();
-        foreach (DataGridViewRow row in _grid.Rows)
-            if (ReferenceEquals(row.DataBoundItem, item)) { row.Selected = true; return; }
+        _rebindingView = true;
+        try
+        {
+            if (ReferenceEquals(_grid.DataSource, list)) list.ResetBindings();
+            else _grid.DataSource = list;
+
+            // IndexOf on the list, not a walk of grid.Rows: touching a row by index makes the grid build
+            // a full row object for it, and the view holds up to 5,000.
+            int sel = keep == null ? -1 : list.IndexOf(keep);
+            if (sel >= 0)
+            {
+                _grid.CurrentCell = _grid.Rows[sel].Cells[0];
+                _grid.Rows[sel].Selected = true;
+            }
+            else
+            {
+                _grid.CurrentCell = null; // nothing was selected, or that row left the view: select nothing
+                _grid.ClearSelection();
+            }
+
+            int first = top == null ? -1 : list.IndexOf(top);
+            if (first >= 0) _grid.FirstDisplayedScrollingRowIndex = first;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException)
+        {
+            Log("Restoring the queue selection after a rebuild failed: " + ex.Message, LogLevel.Warning);
+        }
+        finally { _rebindingView = false; }
+    }
+
+    /// <summary>The item in the top visible row of the grid, read from the bound list.</summary>
+    ScanItem? TopItem()
+    {
+        try
+        {
+            int index = _grid.FirstDisplayedScrollingRowIndex;
+            return index >= 0 && _grid.DataSource is IList<ScanItem> rows && index < rows.Count ? rows[index] : null;
+        }
+        catch (InvalidOperationException) { return null; }
     }
 
     void UpdateChipCounts()
@@ -528,6 +582,8 @@ internal sealed class ScanQueueControl : UserControl
     {
         if (_pendingRows.Count == 0 || _view == null || !ReferenceEquals(_grid.DataSource, _view)) { _pendingRows.Clear(); return; }
 
+        var keep = SelectedItem();
+        var top = TopItem();
         _view.RaiseListChangedEvents = false;
         try
         {
@@ -547,7 +603,7 @@ internal sealed class ScanQueueControl : UserControl
         finally
         {
             _view.RaiseListChangedEvents = true;
-            _view.ResetBindings();
+            RebindKeepingPlace(_view, keep, top);
         }
     }
 
@@ -1158,6 +1214,7 @@ internal sealed class ScanQueueControl : UserControl
         }
         item.SkipReason = Strings.SkipReasonUserSaidClean;
         item.Status = ScanStatus.TrustedSkipped;
+        _detailItem = item;
         _detail.Show(item);
     }
 
@@ -1671,7 +1728,7 @@ internal sealed class ScanQueueControl : UserControl
 
     void OnItemFinished(ScanItem item)
     {
-        if (ReferenceEquals(item, SelectedItem())) _detail.Show(item);
+        if (ReferenceEquals(item, SelectedItem())) { _detailItem = item; _detail.Show(item); } // its verdict just arrived
         if (item.Report?.IsMalicious == true) ThreatFound?.Invoke(item);
         OnFilterItemFinished(item);
         ScanHistoryStore.Record(item, "Tarama");
@@ -1694,7 +1751,8 @@ internal sealed class ScanQueueControl : UserControl
         _grid.ClearSelection();
         _grid.CurrentCell = _grid.Rows[0].Cells[0];
         _grid.Rows[0].Selected = true;
-        _detail.Show(SelectedItem());
+        _detailItem = SelectedItem();
+        _detail.Show(_detailItem);
     }
 
     /// <summary>Select and reveal a specific item (e.g. jumped to from a threat toast).</summary>
@@ -1751,6 +1809,7 @@ internal sealed class ScanQueueControl : UserControl
                 row.Selected = true;
                 break;
             }
+        _detailItem = item;
         _detail.Show(item);
     }
 
