@@ -55,8 +55,8 @@ internal static class ConfigPathResolver
     /// <summary>Alias for <see cref="VerdictLedgerPath"/> kept for internal callers.</summary>
     public static string HashCachePath => VerdictLedgerPath;
 
-    /// <summary>Rebuildable local file-fingerprint cache (<c>UserCache\Fingerprints.json</c>).</summary>
-    public static string FingerprintsPath => Path.Combine(UserCacheFolder, "Fingerprints.json");
+    /// <summary>Persistent local file-fingerprint index (<c>UserData\Verdicts\Fingerprints.json</c>).</summary>
+    public static string FingerprintsPath => Path.Combine(VerdictsFolder, "Fingerprints.json");
 
     static string ResolveRootFolder()
     {

@@ -150,7 +150,7 @@ internal static class FingerprintCache
         using var op = OpLog.Begin("Fingerprint cache save", $"{_map.Count} entr(ies)");
         try
         {
-            Directory.CreateDirectory(ConfigPathResolver.UserCacheFolder);
+            Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder);
             // Cleared before the write, not after: an entry added while the file is being written marks
             // the store dirty again instead of being forgotten by the next check.
             _dirty = false;

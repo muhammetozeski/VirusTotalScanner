@@ -55,7 +55,8 @@ internal static class StorageMigration
             MoveDirectoryIfNeeded(Path.Combine(root, "Quarantine"), ConfigPathResolver.QuarantineFolder);
             MoveDirectoryIfNeeded(Path.Combine(root, "cache-backups"), Path.Combine(ConfigPathResolver.BackupsFolder, "VerdictLedger"));
 
-            // UserCache
+            // Fingerprints (from legacy root or v2.1.0 UserCache -> UserData\Verdicts\Fingerprints.json)
+            MoveFileIfNeeded(Path.Combine(ConfigPathResolver.UserCacheFolder, "Fingerprints.json"), ConfigPathResolver.FingerprintsPath);
             MoveFileIfNeeded(Path.Combine(root, "fingerprints.json"), ConfigPathResolver.FingerprintsPath);
 
             // AppCache
