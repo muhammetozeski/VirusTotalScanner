@@ -18,7 +18,7 @@ internal sealed class ScanProfile
 /// </summary>
 internal static class ScanProfileStore
 {
-    static readonly string FilePath = Path.Combine(ConfigPathResolver.DataFolder, "scan-profiles.json");
+    static readonly string FilePath = Path.Combine(ConfigPathResolver.SettingsFolder, "ScanProfiles.json");
     static readonly object Lock = new();
     static List<ScanProfile>? _profiles;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -72,7 +72,7 @@ internal static class ScanProfileStore
 
     static void Persist() // caller holds Lock
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_profiles, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.SettingsFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_profiles, JsonOpts)); }
         catch (Exception ex) { Log("Scan profiles save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

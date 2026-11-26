@@ -57,7 +57,8 @@ internal static partial class KeyPlaintextBackup
                 // retried next to the exe rather than silently dropped.
                 try
                 {
-                    string fallback = Path.Combine(ConfigPathResolver.DataFolder, "api-keys-plaintext.txt");
+                    Directory.CreateDirectory(ConfigPathResolver.BackupsFolder);
+                    string fallback = Path.Combine(ConfigPathResolver.BackupsFolder, "ApiKeysPlaintext.txt");
                     File.WriteAllText(fallback, Render(vaultKeys.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), fallback), new UTF8Encoding(true));
                     error = string.Format(Strings.KeyBackupFellBackFormat, ex.Message, fallback);
                     Log("API key backup fell back to " + fallback, LogLevel.Warning);

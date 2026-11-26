@@ -40,12 +40,47 @@ internal static class TorService
     /// <summary>Raised (on a background thread) whenever any of the state above changes.</summary>
     public static event Action? StateChanged;
 
-    /// <summary>The proxy URL for <see cref="WebProxy"/> / Chromium, or null when Tor is off.</summary>
-    public static string? ProxyUrl => IsActive ? $"socks5://127.0.0.1:{_socksPort}" : null;
+    /// <summary>How many isolated SOCKS5 circuit ports this Tor process exposes so parallel query cells
+    /// can hold distinct exit circuits at the same time without interfering with one another.</summary>
+    public const int CircuitPortCount = 6;
+
+    /// <summary>The primary proxy URL for <see cref="WebProxy"/> / Chromium, or null when Tor is off.</summary>
+    public static string? ProxyUrl => GetCircuitProxy(0);
+
+    /// <summary>Returns the SOCKS5 proxy URL for an isolated Tor circuit slot (0..CircuitPortCount-1),
+    /// or null when Tor is not active.</summary>
+    public static string? GetCircuitProxy(int circuitIndex)
+    {
+        if (!IsActive) return null;
+        int[] ports = _socksPorts;
+        if (ports.Length == 0) return _socksPort > 0 ? $"socks5://127.0.0.1:{_socksPort}" : null;
+        int idx = ((circuitIndex % ports.Length) + ports.Length) % ports.Length;
+        return $"socks5://127.0.0.1:{ports[idx]}";
+    }
+
+    static DateTime _lastExeProbeUtc = DateTime.MinValue;
+    static bool _cachedExeAvailable;
+
+    /// <summary>True when a tor.exe binary is installed on this machine (cached briefly to avoid disk probes).</summary>
+    public static bool IsBinaryAvailable
+    {
+        get
+        {
+            if (IsActive) return true;
+            var now = DateTime.UtcNow;
+            if (now - _lastExeProbeUtc < TimeSpan.FromSeconds(45)) return _cachedExeAvailable;
+            _cachedExeAvailable = FindTorExe() != null;
+            _lastExeProbeUtc = now;
+            return _cachedExeAvailable;
+        }
+    }
 
     static Process? _proc;
     static int _socksPort, _controlPort;
+    static volatile int[] _socksPorts = [];
     static readonly SemaphoreSlim _gate = new(1, 1);
+    static readonly SemaphoreSlim _newnymGate = new(1, 1);
+    static DateTime _lastNewnymUtc = DateTime.MinValue;
     static readonly List<string> _bootLog = [];
 
     // ---- discovery ----
@@ -152,13 +187,22 @@ internal static class TorService
             }
             op.Step("binary: " + exe);
 
-            _socksPort = FreePort();
-            _controlPort = FreePort(_socksPort);
-            string dataDir = Path.Combine(ConfigPathResolver.DataFolder, "tor-data");
-            string torrc = Path.Combine(ConfigPathResolver.DataFolder, "torrc");
+            var used = new HashSet<int>();
+            var ports = new int[CircuitPortCount];
+            for (int i = 0; i < CircuitPortCount; i++)
+            {
+                ports[i] = FreePortExcluding(used, 39050 + i);
+                used.Add(ports[i]);
+            }
+            _socksPorts = ports;
+            _socksPort = ports[0];
+            _controlPort = FreePortExcluding(used, 39050 + CircuitPortCount);
+            string dataDir = ConfigPathResolver.TorDataFolder;
+            string torrc = ConfigPathResolver.TorrcPath;
 
             try
             {
+                Directory.CreateDirectory(ConfigPathResolver.TorFolder);
                 Directory.CreateDirectory(dataDir);
                 File.WriteAllText(torrc, BuildTorrc(exe, dataDir), new UTF8Encoding(false));
             }
@@ -251,7 +295,9 @@ internal static class TorService
     static string BuildTorrc(string torExe, string dataDir)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"SocksPort 127.0.0.1:{_socksPort}");
+        var ports = _socksPorts.Length > 0 ? _socksPorts : [_socksPort];
+        for (int i = 0; i < ports.Length; i++)
+            sb.AppendLine($"SocksPort 127.0.0.1:{ports[i]} IsolateClientPort IsolateDestAddr IsolateDestPort");
         sb.AppendLine($"ControlPort 127.0.0.1:{_controlPort}");
         sb.AppendLine("CookieAuthentication 1");
         sb.AppendLine($"DataDirectory {Quote(dataDir)}");
@@ -423,9 +469,9 @@ internal static class TorService
         return false;
     }
 
-    static int FreePort(int avoid = 0)
+    static int FreePortExcluding(HashSet<int> avoid, int fallback)
     {
-        for (int attempt = 0; attempt < 40; attempt++)
+        for (int attempt = 0; attempt < 60; attempt++)
         {
             try
             {
@@ -433,19 +479,37 @@ internal static class TorService
                 l.Start();
                 int port = ((IPEndPoint)l.LocalEndpoint).Port;
                 l.Stop();
-                if (port != avoid) return port;
+                if (!avoid.Contains(port)) return port;
             }
             catch (Exception ex) { Log("Free-port probe failed: " + ex.Message, LogLevel.Warning); }
         }
-        // Deterministic fallback well away from Tor Browser's 9150/9151.
-        return avoid == 0 ? 39050 : 39051;
+        return fallback;
     }
 
     // ---- circuit control ----
 
-    /// <summary>Asks Tor for a brand-new circuit (new exit IP) over the control port. Returns false
-    /// with <see cref="LastError"/> set when Tor is off or the control port refuses.</summary>
+    /// <summary>Asks Tor for a brand-new circuit (new exit IP) over the control port. Serialised and
+    /// gently rate-limited (Tor itself ignores NEWNYM bursts faster than ~10s) so concurrent query cells
+    /// share a fresh circuit without thrashing Tor.</summary>
     public static async Task<bool> NewCircuitAsync(CancellationToken ct = default)
+    {
+        await _newnymGate.WaitAsync(ct);
+        try
+        {
+            if (!IsActive) { LastError = Strings.TorErrNotRunning; Raise(); return false; }
+            if (DateTime.UtcNow - _lastNewnymUtc < TimeSpan.FromSeconds(10))
+            {
+                Log($"Tor NEWNYM coalesced: circuit #{CircuitCount} was just refreshed {(DateTime.UtcNow - _lastNewnymUtc).TotalSeconds:0.0}s ago.", LogLevel.Debug);
+                return true;
+            }
+            bool ok = await NewCircuitCoreAsync(ct);
+            if (ok) _lastNewnymUtc = DateTime.UtcNow;
+            return ok;
+        }
+        finally { _newnymGate.Release(); }
+    }
+
+    static async Task<bool> NewCircuitCoreAsync(CancellationToken ct)
     {
         using var op = OpLog.Begin("Tor new circuit", $"control=127.0.0.1:{_controlPort} circuits so far={CircuitCount}");
         if (!IsActive) { LastError = Strings.TorErrNotRunning; op.Fail("Tor is not running"); Raise(); return false; }
@@ -523,7 +587,7 @@ internal static class TorService
 
     static string ReadControlCookieHex()
     {
-        string cookiePath = Path.Combine(ConfigPathResolver.DataFolder, "tor-data", "control_auth_cookie");
+        string cookiePath = Path.Combine(ConfigPathResolver.TorDataFolder, "control_auth_cookie");
         byte[] bytes = File.ReadAllBytes(cookiePath);
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }

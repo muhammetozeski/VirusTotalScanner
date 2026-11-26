@@ -58,7 +58,7 @@ internal static class ConfirmGateManager
     }
 
     public static IEnumerable<ConfirmGate> All => _gates.Values;
-    static string FilePath => Path.Combine(ConfigPathResolver.ConfigFolder, "confirm-gates.json");
+    static string FilePath => Path.Combine(ConfigPathResolver.SettingsFolder, "ConfirmGates.json");
 
     sealed class GateState { public bool Suppressed { get; set; } public bool Answer { get; set; } }
 

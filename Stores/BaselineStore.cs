@@ -35,7 +35,7 @@ internal static class BaselineStore
     static readonly object Lock = new();
     static bool _loaded;
 
-    static string FilePath => System.IO.Path.Combine(ConfigPathResolver.ConfigFolder, "baseline.json");
+    static string FilePath => System.IO.Path.Combine(ConfigPathResolver.TrustFolder, "Baseline.json");
 
     static void LoadUnderLock()
     {
@@ -57,7 +57,7 @@ internal static class BaselineStore
     {
         try
         {
-            Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
+            Directory.CreateDirectory(ConfigPathResolver.TrustFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_records.Values.ToList(), JsonOpts));
         }
         catch (Exception ex) { Log("Baseline save failed: " + ex.Message, LogLevel.Warning); }

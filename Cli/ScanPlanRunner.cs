@@ -170,7 +170,8 @@ internal static class ScanPlanRunner
     {
         try
         {
-            string path = Path.Combine(ConfigPathResolver.DataFolder, "scan-plan-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".txt");
+            Directory.CreateDirectory(ConfigPathResolver.DiagnosticsFolder);
+            string path = Path.Combine(ConfigPathResolver.DiagnosticsFolder, "scan-plan-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".txt");
             File.WriteAllText(path, report, new UTF8Encoding(true));
             Console.Error.WriteLine("plan written: " + path);
         }

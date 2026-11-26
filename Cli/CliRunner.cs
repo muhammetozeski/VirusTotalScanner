@@ -11,7 +11,7 @@ internal static class CliRunner
     public static async Task<int> RunAsync(CliOptions opts)
     {
         ConsoleBootstrap.WritePromptNewlineFix();
-        if (opts.Keyless) Settings.KeylessGuiLookup.Value = true; // this run only (not persisted)
+        GuiScrapeService.HeadlessMode = true;
 
         if (opts.ShowHelp) { PrintHelp(); return 0; }
         if (opts.ShowVersion) { Console.WriteLine($"{AppConstants.AppTitle} v{AppConstants.Version}"); return 0; }
@@ -24,7 +24,7 @@ internal static class CliRunner
         if (opts.RemoveKeyValue != null) return RemoveKey(opts.RemoveKeyValue);
         if (opts.ListKeys) { ListKeysCmd(); return 0; }
         if (opts.EnableKeys) return EnableKeysCmd();
-        if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json);
+        if (opts.LookupHash != null) return await LookupAsync(opts.LookupHash, opts.Json, opts.Keyless);
         if (opts.CommentsHash != null) return await CommentsCmd(opts.CommentsHash);
         if (opts.BehaviourHash != null) return await BehaviourCmd(opts.BehaviourHash);
         if (opts.ExpectedHash != null) return await VerifyHashCmd(opts);
@@ -48,7 +48,7 @@ internal static class CliRunner
         }
         if (scanPaths.Count == 0) { PrintHelp(); return 2; }
 
-        bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
+        bool keyless = (opts.Keyless || Settings.KeylessGuiLookup) && GuiScrapeService.IsRuntimeAvailable;
 
         if (!AppServices.Rotator.HasUsableKeys && !Settings.TrustSkipSigned && !keyless)
         {
@@ -57,7 +57,7 @@ internal static class CliRunner
         }
         if (!AppServices.Rotator.HasUsableKeys && !keyless)
             Console.Error.WriteLine(Strings.CliWarnNoKey);
-        if (keyless && !opts.Json && !opts.Quiet)
+        if (keyless && (opts.Keyless || !AppServices.Rotator.HasUsableKeys) && !opts.Json && !opts.Quiet)
             Console.WriteLine(Strings.CliKeylessNote);
 
         var scheduler = AppServices.Scheduler;
@@ -75,6 +75,8 @@ internal static class CliRunner
         var scanOpts = ScanOptions.FromSettings(opts.Recurse);
         scanOpts.BypassTrust = opts.NoTrust;
         scanOpts.ExpandArchives = opts.ExpandArchives;
+        scanOpts.ForceKeyless = opts.Keyless;
+        scanOpts.ExplicitFileSelection = !opts.Running && scanPaths.Count > 0 && scanPaths.All(File.Exists);
         await scheduler.RunAsync(scanPaths, scanOpts);
 
         // A target that is not there was not examined, so it cannot be reported as clean. Every missing
@@ -283,25 +285,29 @@ internal static class CliRunner
         return totalThreats > 0 ? 1 : 0;
     }
 
-    static async Task<int> LookupAsync(string hash, bool json)
+    static async Task<int> LookupAsync(string hash, bool json, bool forceKeyless)
     {
         // A typo is not the same answer as "VirusTotal has no record of this": without this check any
         // garbage string came back as a confident "not found" with a success exit code.
         if (!HashService.IsValidHash(hash)) { Console.Error.WriteLine(Strings.HashInvalidWarn); return 2; }
-        bool keyless = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
-        if (!keyless && !AppServices.Rotator.HasUsableKeys) { Console.Error.WriteLine(Strings.CliErrNoKeyOrKeyless); return 3; }
+        bool keyless = (forceKeyless || Settings.KeylessGuiLookup) && GuiScrapeService.IsRuntimeAvailable;
+        bool hasKeys = AppServices.Rotator.HasUsableKeys;
+        if (!keyless && !hasKeys) { Console.Error.WriteLine(Strings.CliErrNoKeyOrKeyless); return 3; }
         try
         {
-            VtFileReport? report;
-            if (keyless)
-            {
-                report = await GuiScrapeService.LookupAsync(hash);
-            }
-            else
-            {
-                string key = await AppServices.Rotator.AcquireAsync();
-                report = await AppServices.Api.GetFileReportAsync(hash, key);
-            }
+            var cell = new QueryCell(AppServices.ApiCoordinator);
+            var res = await cell.LookupAsync(
+                hash,
+                urgentOrder: 0,
+                fileTier: 0,
+                allowBrowser: keyless,
+                allowApi: !forceKeyless && hasKeys,
+                allowUserCaptcha: false,
+                onStatus: null,
+                ct: default);
+            var report = res.Report;
+
+            AppServices.Shutdown();
             if (report == null) { Console.WriteLine(Strings.CliNotFound); return 0; }
             if (json) { PrintJson([new ScanItem(hash) { Report = report, Md5 = report.Md5, Sha256 = report.Sha256 }]); return report.IsMalicious ? 1 : 0; }
             Console.WriteLine($"[{report.Verdict}] ({report.DetectionCount}/{report.TotalEngines})  {report.MeaningfulName ?? hash}");
@@ -377,6 +383,15 @@ internal static class CliRunner
             return;
         }
 
+        if (item.Status == ScanStatus.Skipped)
+        {
+            try { Console.ForegroundColor = ConsoleColor.DarkGray; } catch { }
+            string reason = string.IsNullOrWhiteSpace(item.SkipReason) ? "" : $"  ({item.SkipReason})";
+            Console.WriteLine($"[{Strings.CliSkippedTag}]  {item.FileName}{reason}");
+            try { Console.ResetColor(); } catch { }
+            return;
+        }
+
         var r = item.Report;
         string verdict = r?.Verdict ?? (item.Status == ScanStatus.Failed ? Strings.CliVerdictError : "?");
         // Color by the verdict CATEGORY logic, not by matching the (user-renamable, localizable) name.
@@ -412,6 +427,7 @@ internal static class CliRunner
             sha256 = i.Sha256,
             report = i.Report?.ReportUrl,
             detections = i.Report?.Detections.Select(d => new { engine = d.EngineName, result = d.Result }).ToArray(),
+            skipReason = i.SkipReason,
             error = i.Error,
         });
         Console.WriteLine(JsonSerializer.Serialize(arr, new JsonSerializerOptions { WriteIndented = true }));

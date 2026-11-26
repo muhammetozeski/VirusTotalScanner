@@ -19,14 +19,14 @@ internal sealed class ScanSession
 internal static class ScanSessionStore
 {
     static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };
-    static string FilePath => Path.Combine(ConfigPathResolver.ConfigFolder, "scan-session.json");
+    static string FilePath => Path.Combine(ConfigPathResolver.SessionFolder, "ScanSession.json");
 
     public static void SaveRunning(IEnumerable<string> paths, bool recurse, bool bypassTrust)
     {
         try
         {
             var s = new ScanSession { Paths = paths.ToArray(), Recurse = recurse, BypassTrust = bypassTrust, StartedUtc = DateTime.UtcNow };
-            Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
+            Directory.CreateDirectory(ConfigPathResolver.SessionFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(s, Opts));
         }
         catch (Exception ex) { Log("Scan session save failed: " + ex.Message, LogLevel.Warning); }

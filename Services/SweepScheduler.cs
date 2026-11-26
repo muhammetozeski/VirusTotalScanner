@@ -11,8 +11,8 @@ internal static class SweepScheduler
 {
     const string TaskName = "VirusTotalScanner Sweep";
 
-    public static string ReportPath => Path.Combine(ConfigPathResolver.DataFolder, "sweep-report.html");
-    public static string ResultPath => Path.Combine(ConfigPathResolver.DataFolder, "sweep-result.json");
+    public static string ReportPath => Path.Combine(ConfigPathResolver.VerdictsFolder, "SweepReport.html");
+    public static string ResultPath => Path.Combine(ConfigPathResolver.VerdictsFolder, "SweepResult.json");
 
     static readonly object InstalledLock = new();
     static bool? _installed;

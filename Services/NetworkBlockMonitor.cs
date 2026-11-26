@@ -81,9 +81,8 @@ internal static class NetworkBlockMonitor
                 bool ok = await TorService.EnableAsync();
                 if (ok)
                 {
-                    Settings.UseTor.Value = true;
-                    SettingsManager.SaveSettings();
-                    // Both channels have to be told, or they keep using the address that was blocked.
+                    // Session-only mitigation: do NOT permanently flip Settings.UseTor on disk, so a brief
+                    // keyless rate-limit burst does not force Tor on for every future launch.
                     VtHttpClientFactory.Invalidate();
                     GuiScrapeService.ResetHard("tor auto-enabled");
                     lock (_lock) _hits.Clear(); // the counter is about the OLD address

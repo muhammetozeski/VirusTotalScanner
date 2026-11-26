@@ -134,10 +134,8 @@ internal static class ThemeManager
         g.RowHeadersVisible = false;
         g.AllowUserToAddRows = false;
         g.AllowUserToDeleteRows = false;
-        g.ReadOnly = true;
         g.AllowUserToResizeRows = false;
         g.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        g.MultiSelect = false;
         g.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
         g.RowTemplate.Height = 26;
         g.ColumnHeadersHeight = 30;

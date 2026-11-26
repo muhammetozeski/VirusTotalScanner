@@ -64,7 +64,6 @@ internal static class VtHttpClientFactory
                 handler.UseProxy = true;
             }
             var c = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(15) };
-            c.DefaultRequestHeaders.UserAgent.ParseAdd($"{AppConstants.AppFolderName}/{AppConstants.Version}");
             _client = c;
             _clientProxy = proxyUrl;
             Log("VirusTotal HTTP client built " + (proxyUrl == null ? "without a proxy." : "through " + proxyUrl), LogLevel.Info);
@@ -76,7 +75,6 @@ internal static class VtHttpClientFactory
             try
             {
                 var c = new HttpClient { Timeout = TimeSpan.FromMinutes(15) };
-                c.DefaultRequestHeaders.UserAgent.ParseAdd($"{AppConstants.AppFolderName}/{AppConstants.Version}");
                 _client = c;
                 _clientProxy = null;
             }

@@ -210,10 +210,11 @@ internal sealed class KeyVault
     static string BackupUndecryptableBlob(string encryptedBlob)
     {
         string name = $"keyvault-backup-{DateTime.Now:yyyyMMdd-HHmmss}.txt";
-        foreach (string folder in new[] { ConfigPathResolver.DataFolder, Path.GetTempPath() })
+        foreach (string folder in new[] { ConfigPathResolver.BackupsFolder, Path.GetTempPath() })
         {
             try
             {
+                Directory.CreateDirectory(folder);
                 string path = Path.Combine(folder, name);
                 File.WriteAllText(path, encryptedBlob);
                 return path;

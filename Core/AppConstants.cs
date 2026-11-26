@@ -21,8 +21,9 @@ internal static class AppConstants
     /// <summary>Folder the executable lives in.</summary>
     public static readonly string ThisExeFolder = Path.GetDirectoryName(ThisExePath) ?? AppContext.BaseDirectory;
 
-    // ---- Config file ----
+    // ---- Config & durable ledger file names ----
     public const string ConfigFileName = "VirusTotalScanner.config";
+    public const string VerdictLedgerFileName = "VerdictLedger.json";
     public const string CommentPrefix = "#";
     public const string KeyValueSeparator = "=";
 
@@ -35,6 +36,9 @@ internal static class AppConstants
 
     /// <summary>Files at or below this size upload directly to /files; larger need an upload_url.</summary>
     public const long DirectUploadLimitBytes = 32L * 1024 * 1024;
+
+    /// <summary>VirusTotal's hard per-file upload ceiling (650 MB). Larger files can only be looked up by hash.</summary>
+    public const long MaxUploadBytes = 650L * 1024 * 1024;
 
     // ---- Free-tier quota, per key ----
     public const int RatePerMinute = 4;

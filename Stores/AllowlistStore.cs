@@ -27,7 +27,7 @@ internal sealed class AllowlistEntry
 /// </summary>
 internal static class AllowlistStore
 {
-    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.DataFolder, "allowlist.json");
+    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.TrustFolder, "Allowlist.json");
     static readonly object Lock = new();
     static List<AllowlistEntry>? _entries;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -148,7 +148,7 @@ internal static class AllowlistStore
 
     static void Save() // caller holds Lock
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.TrustFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts)); }
         catch (Exception ex) { Log("Allowlist save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

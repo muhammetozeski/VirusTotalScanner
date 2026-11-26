@@ -23,7 +23,7 @@ internal static class IocStore
     static readonly object Lock = new();
     static bool _loaded;
 
-    static string FilePath => Path.Combine(ConfigPathResolver.ConfigFolder, "ioc-index.json");
+    static string FilePath => Path.Combine(ConfigPathResolver.VerdictsFolder, "IocIndex.json");
 
     static void Load() // caller holds Lock
     {
@@ -42,7 +42,7 @@ internal static class IocStore
     {
         try
         {
-            Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
+            Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_byHash.Values.ToList()));
         }
         catch (Exception ex) { Log("IOC index save failed: " + ex.Message, LogLevel.Warning); }

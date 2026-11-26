@@ -180,11 +180,11 @@ internal sealed class HashCache
     {
         try
         {
-            Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
-            AtomicFile.WriteAllText(ConfigPathResolver.HashCachePath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
+            Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder);
+            AtomicFile.WriteAllText(ConfigPathResolver.VerdictLedgerPath, JsonSerializer.Serialize(_entries.Values.ToList(), JsonOpts));
             _lastSaveUtc = DateTime.UtcNow;
             _dirty = false;
         }
-        catch (Exception ex) { Log("Hash cache save failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Verdict ledger save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

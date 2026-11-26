@@ -18,7 +18,7 @@ internal sealed class MutedThreat
 /// </summary>
 internal static class BannerMuteStore
 {
-    static readonly string FilePath = Path.Combine(ConfigPathResolver.DataFolder, "banner-mutes.json");
+    static readonly string FilePath = Path.Combine(ConfigPathResolver.SettingsFolder, "BannerMutes.json");
     static readonly object Lock = new();
     static List<MutedThreat>? _muted;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -78,7 +78,7 @@ internal static class BannerMuteStore
 
     static void Save() // caller holds Lock
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_muted, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.SettingsFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_muted, JsonOpts)); }
         catch (Exception ex) { Log("Banner mute list save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

@@ -370,8 +370,8 @@ internal static class Strings
     public static string MenuFindCopies = "🔁  Diğer kopyaları bul (disk)";
     public static string MenuPinBaseline = "📌  Bütünlük izlemesine al";
     public static string MenuHuntPersistence = "🪝  Autostart kancalarını bul";
-    public static string MenuRescan = "🔄  Yeniden tara";
-    public static string MenuRescanNoTrust = "🛡  Güveni yok say, VT ile tara";
+    public static string MenuRescan = "⚡  Yeniden / Şimdi tara (öncelikli)";
+    public static string MenuRescanNoTrust = "🛡  Güveni yok say, şimdi VT ile tara";
     public static string MenuQuarantine = "⚠  Karantinaya al (.VIRUS)";
 
     public static string ProgressSummaryFormat = "Toplam {0} • Tamamlanan {1} • Zararlı {2} • Şüpheli {3} • Temiz {4} • İmzalı↷atlandı {5} • Hata {6} • Bilinmiyor {7}";
@@ -479,6 +479,8 @@ internal static class Strings
 
     // ---- scan item status text ----
     public static string StatusQueued = "Sırada";
+    public static string StatusUrgentQueued = "Öncelikli sırada (en başta)";
+    public static string StatusApiUploadQueuedFormat = "API yükleme kuyruğunda (#{0})…";
     public static string StatusAwaitingLookup = "Hash alındı, VirusTotal sırası bekleniyor";
     public static string StatusRequeuedFormat = "VirusTotal cevap vermedi, yeniden sorulacak (deneme {0}/{1})";
     public static string StatusHashing = "Hash hesaplanıyor…";
@@ -743,7 +745,7 @@ internal static class Strings
     public static string TipFamilyClusters = "Aynı zararlı ailesini paylaşan farklı dosyaları grupla.";
     public static string TipQuarantineVault = "Karantinaya alınanları gör; güvenliyse geri yükle.";
     public static string TipRecheck = "Eski önbellek kayıtlarını kotasız (GUI) yeniden sorgula.";
-    public static string TipBackupCache = "Hash önbelleğinin (cache.json) tarih damgalı bir kopyasını seçtiğin klasöre al. Önbellekteki her kayıt harcanmış VirusTotal kotasıdır; bu yüzden programda önbelleği silen bir düğme yok, sadece yedekleyen var.";
+    public static string TipBackupCache = "Karar defterinin (VerdictLedger.json) tarih damgalı bir kopyasını seçtiğin klasöre al. Defterdeki her kayıt harcanmış VirusTotal kotasıdır; bu yüzden programda karar defterini silen bir düğme yok, sadece yedekleyen var.";
     public static string TipJumpToCurrent = "Listede o an VirusTotal'e sorulan satıra atla ve seç. Aynı anda birkaç dosya işlenebildiği için en üstteki, yani sıranın önündeki gösterilir; hiçbiri işlenmiyorsa henüz başlamamış ilk satıra gider.";
     public static string TipUnstickQueue = "Sıra tıkanıp hiçbir dosya işlenmiyorsa: anahtarsız tarayıcıyı çerezleriyle birlikte silip yeni bir tarayıcı kurar, Tor açıksa çıkış IP'sini değiştirir, beklemeyi kaldırır ve bekleyen dosyaları topluca yeniden sıraya alır. Program bunu tıkanma olunca kendisi de yapar; bu düğme aynısını hemen elle tetikler.";
     public static string UnstickDoneFormat = "Kuyruk canlandırıldı: tarayıcı yeni bir kimlikle sıfırlandı, {0} bekleyen dosya yeniden sıraya alındı.";
@@ -774,7 +776,7 @@ internal static class Strings
     public static string TipChipError = "Sorgunun sonuçlanamadığı satırlar (kota, ağ hatası, analiz zaman aşımı). 'Hatalıları yeniden tara' ile toplu tekrar denenir.";
     public static string CacheBackupPickFolderDescription = "Önbellek yedeklerinin yazılacağı klasörü seç";
     public static string CmdBackupCacheName = "Önbelleği yedekle";
-    public static string CmdBackupCacheDesc = "cache.json'un tarih damgalı bir kopyasını al";
+    public static string CmdBackupCacheDesc = "VerdictLedger.json dosyasının tarih damgalı bir kopyasını al";
     public static string TipAllCommands = "Tüm özelliklere tek yerden ulaş (kopya bul, autostart kancaları, aile kümeleri…).";
     public static string TipPause = "Devam eden taramayı duraklat / sürdür.";
     public static string TipCancel = "Devam eden taramayı iptal et.";
@@ -819,7 +821,7 @@ internal static class Strings
     public static string MenuRescanFailed = "🔁  Yalnızca hatalıları yeniden tara";
     public static string MenuMarkClean = "✓  Temiz olarak işaretle";
     public static string MenuSuppressFolder = "🔇  Bu klasörü sessizleştir";
-    public static string MenuRescanCountFormat = "🔄  {0} dosyayı yeniden tara";
+    public static string MenuRescanCountFormat = "⚡  {0} dosyayı şimdi/yeniden tara (öncelikli)";
     public static string MenuQuarantineCountFormat = "⚠  {0} dosyayı karantinaya al (.VIRUS)";
     public static string OpenFilesDialogTitle = "Taranacak dosyalar";
     public static string ClipboardEmptyInfo = "Pano boş ya da metin içermiyor.";
@@ -1373,6 +1375,11 @@ internal static class Strings
     public static string SkipReasonFileLocked = "Başka bir işlem dosyayı açık tutuyor · okunamadı";
     public static string SkipReasonNoAccess = "Bu hesabın okuma izni yok";
     public static string SkipReasonNotSubmitted = "VT'de kayıtlı değil · gönderilmedi (kod dosyası değil)";
+    public static string SkipReasonNotSubmittedPolicy = "VT'de kayıtlı değil · gönderilmedi (yükleme kapalı)";
+    public static string SkipReasonNotSubmittedSweep = "VT'de kayıtlı değil · toplu taramada yüklenmedi";
+    public static string SkipReasonNotSubmittedTooLarge = "VT'de kayıtlı değil · 650 MB üstü yüklenemez";
+    public static string SkipReasonNotSubmittedEmpty = "VT'de kayıtlı değil · boş dosya";
+    public static string CliSkippedTag = "ATLANDI";
     public static string ItemErrorUnknownNoKey = "VirusTotal'de kayıtlı değil ve yüklemek için kullanılabilir API anahtarı yok.";
     public static string ItemErrorAnalysisTimedOutFormat = "Dosya VirusTotal'e yüklendi ama analiz {0} dakikada bitmedi. Biraz sonra 'Hatalıları yeniden tara' ile sonucu alabilirsin.";
     public static string UploadProgressDetailFormat = "Yükleniyor… {0:F0}%  {1}/{2}  ({3}/s)";
@@ -1383,6 +1390,7 @@ internal static class Strings
     public static string CaptchaBarPrompt = "  VirusTotal reCAPTCHA istedi. Lütfen aşağıda çözün, sonra sağdaki düğmeye basın.";
     public static string CaptchaBtnSolved = "Çözdüm, devam et";
     public static string CaptchaBtnSwitchToApi = "API anahtarına geç";
+    public static string CaptchaBtnNextRoute = "Başka kimlik/rota dene";
     public static string CaptchaBtnUseTor = "Tor'a geç (yeni IP)";
     public static string CaptchaBtnNewCircuit = "Devre değiştir (yeni IP)";
     public static string CaptchaBtnTorWorking = "Tor hazırlanıyor…";
@@ -1441,7 +1449,8 @@ internal static class Strings
     public static string TorAutoEnableAfterLabel = "Kaç engelden sonra (24 saat içinde):";
     public static string TorNewCircuitOnErrorLabel = "Tor açıkken hata alınca devreyi (çıkış IP'sini) otomatik değiştir";
     public static string CaptchaAutoClickLabel = "reCAPTCHA'da tek tıklamayı önce program denesin";
-    public static string KeylessPoolLabel = "Eşzamanlı anahtarsız tarayıcı sayısı (0 = otomatik, tarama eşzamanlılığına eşit):";
+    public static string KeylessPoolLabel = "Eşzamanlı tarayıcı sayısı (0 = otomatik, en fazla 150):";
+    public static string BrowserCacheSlotsLabel = "Maksimum tarayıcı önbellek slotu (1–150, çerez kaydedilmez):";
     public static string TorRouteApiLabel = "API isteklerini de Tor üzerinden gönder";
     public static string TorExePathLabel = "tor.exe yolu (boş = otomatik ara):";
     public static string BtnTorFindExe = "tor.exe seç…";
@@ -1452,7 +1461,7 @@ internal static class Strings
 
     // ---- settings: cache backup card ----
     public static string CardCacheBackup = "Önbellek yedeği";
-    public static string CacheBackupHint = "cache.json içindeki her kayıt bir kez harcanmış VirusTotal kotasıdır; bu yüzden programda önbelleği silen bir düğme yoktur. Buradan periyodik, tarih damgalı kopyalar alabilirsin. Yedekler birbirinin üstüne yazmaz.";
+    public static string CacheBackupHint = "VerdictLedger.json içindeki her kayıt bir kez harcanmış VirusTotal kotasıdır; bu yüzden programda karar defterini silen bir düğme yoktur. Buradan periyodik, tarih damgalı kopyalar alabilirsin. Yedekler birbirinin üstüne yazmaz.";
     public static string CacheBackupFolderLabel = "Yedek klasörü:";
     public static string CacheBackupHoursLabel = "Kaç saatte bir (0 = sadece elle):";
     public static string CacheBackupKeepLabel = "Kaç yedek saklansın (0 = hepsi):";
@@ -1461,7 +1470,7 @@ internal static class Strings
     public static string BtnOpenBackupFolder = "Klasörü aç";
     public static string CacheBackupCountFormat = "{0} yedek · en yenisi: {1}";
     public static string CacheBackupNoneYet = "Henüz yedek yok.";
-    public static string CacheRestoreConfirmFormat = "'{0}' yedeği yüklensin mi?\n\nYedekteki kayıtlar mevcut önbelleğin üzerine eklenir; mevcut kayıtlar silinmez. Yükleme öncesi mevcut cache.json ayrıca bir kopya olarak saklanır.";
+    public static string CacheRestoreConfirmFormat = "'{0}' yedeği yüklensin mi?\n\nYedekteki kayıtlar mevcut karar defterinin üzerine eklenir; mevcut kayıtlar silinmez. Yükleme öncesi mevcut VerdictLedger.json ayrıca bir kopya olarak saklanır.";
     public static string CacheRestoredFormat = "Yedek yüklendi. Önbellekte şu an {0} kayıt var.";
     public static string CacheRestoreFailedPrefix = "Yedek yüklenemedi: ";
     public static string BtnPickKeyBackupFile = "Dosya seç…";
@@ -1522,7 +1531,7 @@ internal static class Strings
     public static string TtCacheBackupHours = "Kaç saatte bir otomatik yedek alınacağı. 0 = sadece elle yedekle.";
     public static string TtCacheBackupKeep = "Klasörde en fazla kaç yedek tutulacağı; fazlası en eskiden başlayarak silinir. 0 = hiçbiri silinmez.";
     public static string TtBackupNow = "Hemen tarih damgalı bir kopya alır.";
-    public static string TtRestoreBackup = "Seçili yedeği yükler. Yedekteki kayıtlar mevcut önbelleğin üzerine EKLENİR (mevcut kayıtlar silinmez), ve yüklemeden önce şu anki cache.json ayrıca kopyalanır.";
+    public static string TtRestoreBackup = "Seçili yedeği yükler. Yedekteki kayıtlar mevcut karar defterinin üzerine EKLENİR (mevcut kayıtlar silinmez), ve yüklemeden önce şu anki VerdictLedger.json ayrıca kopyalanır.";
     public static string TtOpenBackupFolder = "Yedek klasörünü Gezgin'de açar.";
     public static string TtCacheBackupList = "Klasördeki yedekler, en yenisi üstte. Geri yüklemek istediğini seç.";
     public static string TtSweepFolder = "Windows Görev Zamanlayıcı'nın periyodik olarak tarayacağı klasör.";

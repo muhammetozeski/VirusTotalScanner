@@ -210,7 +210,11 @@ internal sealed class ScanQueueControl : UserControl
             UpdateRecallBar(it);
         };
         _detail.QuarantineRequested += QuarantineItem;
-        _detail.RescanRequested += i => { if (File.Exists(i.FilePath)) StartScan([i.FilePath], recurse: false); };
+        _detail.RescanRequested += i =>
+        {
+            if (File.Exists(i.FilePath))
+                _ = Task.Run(() => _scheduler.RescanOrPromoteItemsAsync([i], bypassTrust: false));
+        };
         _detail.MarkCleanRequested += MarkClean;
 
         _scheduler.UiPost = a => { try { if (IsHandleCreated) BeginInvoke(a); else a(); } catch (Exception ex) { Log("UI dispatch failed: " + ex.Message, LogLevel.Warning); } };
@@ -362,17 +366,22 @@ internal sealed class ScanQueueControl : UserControl
         return TextRenderer.MeasureText(widest, bold).Width + m.Chrome;
     }
 
+    Font? _chipFontRegular;
+    Font? _chipFontBold;
+
     void SetBucket(Bucket b)
     {
         _bucket = b;
         foreach (var (key, chip) in _chips)
         {
+            _chipFontRegular ??= new Font(chip.Font, FontStyle.Regular);
+            _chipFontBold ??= new Font(chip.Font, FontStyle.Bold);
             bool active = key == b;
             var color = chip.Tag as Color? ?? Theme.Current.Accent;
             chip.FlatAppearance.BorderColor = color;
             chip.BackColor = active ? color : Theme.Current.Panel;
             chip.ForeColor = active ? Color.White : Theme.Current.Text;
-            chip.Font = new Font(chip.Font, active ? FontStyle.Bold : FontStyle.Regular);
+            chip.Font = active ? _chipFontBold : _chipFontRegular;
         }
         ApplyFilter();
     }
@@ -471,7 +480,7 @@ internal sealed class ScanQueueControl : UserControl
             {
                 _sortAgain = false;
                 long sequence = ScanItem.LatestSequence;
-                var rows = _scheduler.Items.ToArray(); // the list only changes on this thread
+                var rows = _scheduler.SnapshotItems().ToArray(); // thread-safe snapshot
                 var (mode, descending, bucket, query) = (_sortMode, _sortDescending, _bucket, _search.Text.Trim());
                 var sorted = await Task.Run(() => SortRows(rows, mode, descending, bucket, query));
                 if (IsDisposed) return;
@@ -498,7 +507,7 @@ internal sealed class ScanQueueControl : UserControl
             {
                 SortMode.Activity => new SortKey(0, "", i.ActivitySequence, "", i.AddedSequence, i),
                 SortMode.Added => new SortKey(0, "", i.AddedSequence, "", 0, i),
-                SortMode.Extension => new SortKey(FileClass.RunnableRank(i.Extension), i.Extension, 0, i.DisplayName, i.AddedSequence, i),
+                SortMode.Extension => new SortKey(ScanPriorityOrderer.TierOfExtension(i.Extension), i.Extension, -i.UrgentOrder, i.DisplayName, i.AddedSequence, i),
                 SortMode.Name => new SortKey(0, i.DisplayName, 0, "", i.AddedSequence, i),
                 SortMode.Size => new SortKey(0, "", i.SizeBytes, i.DisplayName, i.AddedSequence, i),
                 // Grouped by state; inside a group the row the program touched last comes first.
@@ -652,7 +661,7 @@ internal sealed class ScanQueueControl : UserControl
         else
         {
             all = clean = susp = mal = skip = err = 0;
-            foreach (var i in _scheduler.Items)
+            foreach (var i in _scheduler.SnapshotItems())
             {
                 all++;
                 switch (BucketOf(i))
@@ -734,9 +743,12 @@ internal sealed class ScanQueueControl : UserControl
     /// </summary>
     void BindLiveView()
     {
-        if (_scheduler.Items.Count == 0) _marks.Clear(); // a run that starts on a cleared queue: the old marks are for files that are gone
-        _view.Clear();
-        RebindKeepingPlace(null, [], null);
+        if (_scheduler.SnapshotItems().Count == 0)
+        {
+            _marks.Clear(); // a run that starts on a cleared queue: the old marks are for files that are gone
+            _view.Clear();
+            RebindKeepingPlace(null, [], null);
+        }
         RequestSort(force: true);
     }
 
@@ -926,6 +938,7 @@ internal sealed class ScanQueueControl : UserControl
     {
         _grid.Dock = DockStyle.Fill;
         _grid.AutoGenerateColumns = false;
+        _grid.ReadOnly = true;
         EntityGrid.AddMarkColumn(_grid); // leading "mark" checkbox at column 0 (before the data columns
                                          // so _progressCol below stays a valid index)
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "col_file", HeaderText = Strings.ColFile, DataPropertyName = nameof(ScanItem.DisplayName), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 160 });
@@ -1287,17 +1300,23 @@ internal sealed class ScanQueueControl : UserControl
             NativeMessageBox.Warn(Strings.HashInvalidWarn);
             return;
         }
-        if (!AppServices.Rotator.HasUsableKeys) { NeedApiKey?.Invoke(); return; }
+        bool browserOk = BrowserSessionFactory.IsRuntimeAvailable;
+        bool apiOk = AppServices.Rotator.HasUsableKeys;
+        if (!browserOk && !apiOk) { NeedApiKey?.Invoke(); return; }
 
         try
         {
-            string key = await AppServices.Rotator.AcquireAsync();
-            var report = await AppServices.Api.GetFileReportAsync(input, key);
+            var cell = new QueryCell(AppServices.ApiCoordinator);
+            var res = await Task.Run(() => cell.LookupAsync(
+                input, urgentOrder: 0, fileTier: 0,
+                allowBrowser: browserOk, allowApi: apiOk, allowUserCaptcha: true,
+                onStatus: null, ct: default));
+            var report = res.Report;
             if (report == null) { NativeMessageBox.Info(Strings.HashNotFound); return; }
             var item = new ScanItem(input) { Report = report, Status = ScanStatus.Completed };
             item.Md5 = report.Md5; item.Sha256 = report.Sha256;
-            _scheduler.Items.Add(item);
-            ShowSorted(SortRows(_scheduler.Items.ToArray(), _sortMode, _sortDescending, _bucket, _search.Text.Trim()));
+            _scheduler.AddManualItem(item);
+            ShowSorted(SortRows(_scheduler.SnapshotItems().ToArray(), _sortMode, _sortDescending, _bucket, _search.Text.Trim()));
             FocusItem(item);
         }
         catch (Exception ex) { NativeMessageBox.Error(Strings.LookupFailedPrefix + ex.Message); }
@@ -1341,12 +1360,12 @@ internal sealed class ScanQueueControl : UserControl
                 return;
             }
 
-            var paths = _scheduler.Items
+            var dropped = _scheduler.SnapshotItems()
                 .Where(i => i.Status == ScanStatus.Skipped && i.SkipReason == Strings.SkipReasonNotAskedYet && File.Exists(i.FilePath))
-                .Select(i => i.FilePath).Distinct().ToArray();
-            if (paths.Length == 0) { NativeMessageBox.Info(Strings.UnstickNothingInfo); return; }
-            GuiScrapeService.ResetHard("kullanıcı düğmesi (yeni tarama)");
-            StartScan(paths, recurse: false);
+                .ToList();
+            if (dropped.Count == 0) { NativeMessageBox.Info(Strings.UnstickNothingInfo); return; }
+            GuiScrapeService.ResetHard("kullanıcı düğmesi (yerinde tarama)");
+            _ = Task.Run(() => _scheduler.RescanOrPromoteItemsAsync(dropped, bypassTrust: false));
         }
         catch (Exception ex) { Log("Unstick from the button failed: " + ex, LogLevel.Error); }
         finally { _unstickBtn.Enabled = true; }
@@ -1354,26 +1373,24 @@ internal sealed class ScanQueueControl : UserControl
 
     void RescanSelected()
     {
-        var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
-        if (paths.Length == 0) { NoRowsToActOn(Strings.MenuRescan); return; }
-        StartScan(paths, recurse: false);
+        var items = SelectedItems().Where(i => File.Exists(i.FilePath)).ToList();
+        if (items.Count == 0) { NoRowsToActOn(Strings.MenuRescan); return; }
+        _ = Task.Run(() => _scheduler.RescanOrPromoteItemsAsync(items, bypassTrust: false));
     }
 
     void RescanIgnoringTrust()
     {
-        var paths = SelectedItems().Where(i => File.Exists(i.FilePath)).Select(i => i.FilePath).Distinct().ToArray();
-        if (paths.Length == 0) { NoRowsToActOn(Strings.MenuRescanNoTrust); return; }
-        StartScan(paths, recurse: false, bypassTrust: true);
+        var items = SelectedItems().Where(i => File.Exists(i.FilePath)).ToList();
+        if (items.Count == 0) { NoRowsToActOn(Strings.MenuRescanNoTrust); return; }
+        _ = Task.Run(() => _scheduler.RescanOrPromoteItemsAsync(items, bypassTrust: true));
     }
 
-    /// <summary>Re-run exactly the rows that failed (transient 429s / network blips) — one-click post-sweep
-    /// cleanup instead of hand-multiselecting every red 'Hata' row.</summary>
+    /// <summary>Re-run exactly the rows that failed in place (never clearing the rest of the list).</summary>
     void RescanFailed()
     {
-        var paths = _scheduler.Items.Where(i => BucketOf(i) == Bucket.Error && File.Exists(i.FilePath))
-            .Select(i => i.FilePath).Distinct().ToArray();
-        if (paths.Length == 0) { NativeMessageBox.Info(Strings.NoFailedRowsInfo); return; }
-        StartScan(paths, recurse: false);
+        var items = _scheduler.SnapshotItems().Where(i => BucketOf(i) == Bucket.Error && File.Exists(i.FilePath)).ToList();
+        if (items.Count == 0) { NativeMessageBox.Info(Strings.NoFailedRowsInfo); return; }
+        _ = Task.Run(() => _scheduler.RescanOrPromoteItemsAsync(items, bypassTrust: false));
     }
 
     /// <summary>Quarantine one specific item (from the detail-pane action strip), with the undo bar.</summary>
@@ -1383,6 +1400,10 @@ internal sealed class ScanQueueControl : UserControl
         if (!ConfirmGates.Quarantine.Ask(this, string.Format(Strings.QuarantineConfirmFormat, i.FileName))) return;
         if (TryQuarantineUnlocking(i, out var err))
         {
+            i.SkipReason = Strings.QuarantineDoneInfo;
+            i.Detail = Strings.QuarantineDoneInfo;
+            _grid.Invalidate();
+            _detail.Show(i);
             var entry = QuarantineVault.List().LastOrDefault(e => string.Equals(e.OriginalPath, i.FilePath, StringComparison.OrdinalIgnoreCase));
             if (entry != null) ShowQuarantineUndo(i.FileName, entry); else NativeMessageBox.Info(Strings.QuarantineDoneInfo);
             OfferPersistenceCleanup(i.FilePath, i.FileName);
@@ -1486,8 +1507,14 @@ internal sealed class ScanQueueControl : UserControl
         int ok = 0;
         var errors = new List<string>();
         foreach (var i in items)
-            if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err)) ok++;
+            if (QuarantineVault.Quarantine(i.FilePath, i.Report, i.Sha256, i.Md5, out var err))
+            {
+                i.SkipReason = Strings.QuarantineDoneInfo;
+                i.Detail = Strings.QuarantineDoneInfo;
+                ok++;
+            }
             else errors.Add(Path.GetFileName(i.FilePath) + ": " + err);
+        if (ok > 0) _grid.Invalidate();
 
         if (items.Count == 1 && ok == 1)
         {
@@ -1891,7 +1918,7 @@ internal sealed class ScanQueueControl : UserControl
         if (p.AwaitingLookup > 0) text += string.Format(Strings.ProgressAwaitingLookupFormat, p.AwaitingLookup);
         if (p.AnalysesPending > 0) text += string.Format(Strings.ProgressAnalysesPendingFormat, p.AnalysesPending);
         if (p.NetworkHeldUntilUtc is { } held) text += string.Format(Strings.ProgressNetworkHeldFormat, held.ToLocalTime());
-        if (p.Done < p.Total && p.FilesPerSec > 0)
+        if (p.Done < p.Total && (p.Remaining.HasValue || p.FilesPerSec > 0))
         {
             string eta = p.Remaining is { } rem ? string.Format(Strings.ProgressEtaFormat, ShortDuration(rem)) : "";
             text += string.Format(Strings.ProgressRateFormat, eta, p.FilesPerSec, ShortDuration(p.Elapsed));
@@ -2073,7 +2100,7 @@ internal sealed class ScanQueueControl : UserControl
 
     void UpdateEmptyState()
     {
-        bool empty = _scheduler.Items.Count == 0;
+        bool empty = _scheduler.SnapshotItems().Count == 0;
         // Swap rather than overlay: only one Dock.Fill control is visible at a time, so there is no
         // z-order race between the grid and the card.
         _grid.Visible = !empty;

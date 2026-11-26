@@ -19,9 +19,34 @@ internal static class Settings
     /// <summary>Follow the Windows app theme instead of the fixed Theme value.</summary>
     public static readonly Setting<bool> FollowWindowsTheme = new(true);
 
+    /// <summary>Previous short default kept only to detect and upgrade unedited configs automatically.</summary>
+    internal const string LegacyDefaultSafeExtensions =
+        ".txt;.md;.log;.csv;.png;.jpg;.jpeg;.gif;.bmp;.webp;.ico;.svg;.mp4;.mkv;.avi;.mov;.webm;.mp3;.wav;.flac;.ogg";
+
+    /// <summary>Comprehensive non-executable safe extension list (text, config, data, media, fonts, shaders,
+    /// subtitles, DB/cache/temp). Never includes executables, scripts, shortcuts, archives, PDFs, or Office files.</summary>
+    internal const string DefaultSafeExtensions =
+        // Plain text, docs (non-macro), subtitles
+        ".txt;.md;.markdown;.rst;.log;.csv;.tsv;.nfo;.readme;.license;.lic;.srt;.vtt;.ass;.ssa;.sub;.lrc;.tex;.bib;.epub;.mobi;" +
+        // Config, markup & structured data (non-executable — no .xsl/.xslt/.csproj/.props/.targets/.html/.htm)
+        ".cfg;.conf;.config;.ini;.xml;.xsd;.xaml;.plist;.json;.jsonc;.json5;.jsonl;.ndjson;.yaml;.yml;.toml;.properties;.env;.csettings;.settings;.prefs;.lang;.po;.pot;.mo;.strings;.resx;" +
+        // Databases, indexes, caches & temp/state files
+        ".sqlite;.sqlite3;.db;.db-wal;.db-shm;.db-journal;.ldb;.sst;.idx;.index;.cache;.bak;.old;.tmp;.lock;.pid;.state;" +
+        // Images & textures
+        ".png;.jpg;.jpeg;.jpe;.jfif;.gif;.bmp;.dib;.webp;.avif;.heic;.heif;.ico;.icns;.cur;.ani;.tif;.tiff;.tga;.dds;.psd;.xcf;.raw;.cr2;.nef;.arw;.dng;.exr;.hdr;.ktx;.ktx2;.pvr;.astc;.svg;" +
+        // Audio & music
+        ".mp3;.wav;.wave;.flac;.ogg;.oga;.opus;.aac;.m4a;.wma;.aiff;.aif;.mid;.midi;.mod;.xm;.it;.s3m;.sid;.nsf;.spc;.vgm;.vgz;.psf;.amr;.ac3;.dts;.mka;.m3u;.m3u8;.pls;.cue;.sf2;.sfz;.bank;.fsb;.wem;.bnk;" +
+        // Video
+        ".mp4;.m4v;.mkv;.avi;.mov;.wmv;.webm;.flv;.mpg;.mpeg;.m2ts;.ts;.vob;.3gp;.ogv;.bik;.bk2;.usm;" +
+        // Fonts
+        ".ttf;.otf;.woff;.woff2;.eot;.fon;.fnt;.bdf;.pcf;" +
+        // 3D models, materials & shaders (non-executable)
+        ".obj;.fbx;.gltf;.glb;.stl;.ply;.dae;.3ds;.blend;.mtl;.mesh;.anim;.mat;.prefab;.asset;.bsp;.glsl;.hlsl;.vert;.frag;.spv;.cso;.fxo;.lut;.cube;" +
+        // Stylesheets, source maps & build/VCS metadata
+        ".css;.scss;.sass;.less;.map;.pdb;.ilk;.exp;.suo;.user;.gitignore;.gitattributes;.editorconfig;.gitkeep";
+
     /// <summary>Semicolon-separated extensions treated as "safe" (hidden from the menu / skippable).</summary>
-    public static readonly Setting<string> SafeExtensions =
-        new(".txt;.md;.log;.csv;.png;.jpg;.jpeg;.gif;.bmp;.webp;.ico;.svg;.mp4;.mkv;.avi;.mov;.webm;.mp3;.wav;.flac;.ogg");
+    public static readonly Setting<string> SafeExtensions = new(DefaultSafeExtensions);
 
     /// <summary>Max files scanned concurrently (true throttle is the 4/min key limit).</summary>
     public static readonly Setting<int> MaxConcurrentScans = new(2);
@@ -126,11 +151,12 @@ internal static class Settings
     /// interrupts the user. If a picture puzzle follows, the window is shown as usual.</summary>
     public static readonly Setting<bool> CaptchaAutoClick = new(true);
 
-    /// <summary>How many keyless (WebView2) browsers run at once — the ceiling on concurrent keyless
-    /// lookups. 0 = auto, which follows <see cref="MaxConcurrentScans"/>. The live count never exceeds
-    /// the scan concurrency (there are only that many network workers), so a value above it has no
-    /// effect. A change applies the next time the keyless pool is idle (a new scan).</summary>
+    /// <summary>How many keyless (WebView2) browsers run at once (0 = auto, up to 150).</summary>
     public static readonly Setting<int> KeylessBrowserPool = new(0);
+
+    /// <summary>Maximum number of isolated WebView2 cache profile slots kept under BrowserCache (1..150).
+    /// Cookies/storage are never saved across queries; each query opens a fresh InPrivate browser.</summary>
+    public static readonly Setting<int> BrowserCacheSlots = new(150);
 
     /// <summary>Minimize to the system tray instead of closing.</summary>
     public static readonly Setting<bool> MinimizeToTray = new(true);
@@ -212,7 +238,7 @@ internal static class Settings
     public static readonly Setting<string> SweepFolder = new("");
 
     /// <summary>Skip safe-extension files during scans to save quota.</summary>
-    public static readonly Setting<bool> SkipSafeExtensionsOnScan = new(false);
+    public static readonly Setting<bool> SkipSafeExtensionsOnScan = new(true);
 
     /// <summary>Set once the first-run wizard has completed.</summary>
     public static readonly Setting<bool> FirstRunCompleted = new(false);

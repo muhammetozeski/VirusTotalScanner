@@ -53,7 +53,7 @@ internal static class BehaviourDigestBuilder
 /// re-scrape its sandbox report. Mirrors the other JSON stores: atomic writes, corrupt-file backup.</summary>
 internal static class BehaviourDigestCache
 {
-    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.DataFolder, "behaviour-digest.json");
+    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.VerdictsFolder, "BehaviourDigest.json");
     static readonly object Lock = new();
     static Dictionary<string, BehaviourDigest>? _map;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
@@ -85,7 +85,7 @@ internal static class BehaviourDigestCache
 
     static void Save() // caller holds Lock
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_map, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_map, JsonOpts)); }
         catch (Exception ex) { Log("Behaviour digest cache save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

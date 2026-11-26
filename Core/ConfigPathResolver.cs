@@ -1,44 +1,78 @@
 namespace VirusTotalScanner;
 
 /// <summary>
-/// Resolves where the single config file lives and where auxiliary data (logs, hash
-/// cache, quarantine) goes.
+/// Central portable path resolver following the CSharpProgram layout:
+///   Root\
+///     AppCache\  (disposable session state: Logs, BrowserCache, Tor, Session, Diagnostics)
+///     UserCache\ (rebuildable user cache: Fingerprints.json)
+///     UserData\  (irreplaceable user data grouped into Settings, Language, Verdicts, Trust, Quarantine, Backups)
 ///
-/// The config file is kept next to the exe when that folder is writable (portable:
-/// "one exe + its config file"), otherwise it falls back to %AppData%. Logs / cache /
-/// quarantine always live under %AppData%\VirusTotalScanner so the exe's own folder
-/// stays clean (just the exe and its config).
+/// Resolving a path never creates directories on disk; each writer creates its own folder on demand.
+/// Falls back to %AppData%\VirusTotalScanner only when the executable folder is not writable.
 /// </summary>
 internal static class ConfigPathResolver
 {
-    static string? _configFolder;
-    static string? _configPath;
-    static string? _dataFolder;
+    static string? _rootFolder;
 
-    /// <summary>Folder that holds the config file (exe folder if writable, else %AppData%).</summary>
-    public static string ConfigFolder => _configFolder ??= ResolveConfigFolder();
+    /// <summary>Portable application root (exe folder or parent of AppData payload folder, else %AppData%).</summary>
+    public static string RootFolder => _rootFolder ??= ResolveRootFolder();
 
-    /// <summary>Full path to the single config file.</summary>
-    public static string ConfigPath => _configPath ??= Path.Combine(ConfigFolder, AppConstants.ConfigFileName);
+    // ---- Top-level CSharpProgram portable folders ----
+    public static string AppCacheFolder => Path.Combine(RootFolder, "AppCache");
+    public static string UserDataFolder => Path.Combine(RootFolder, "UserData");
+    public static string UserCacheFolder => Path.Combine(RootFolder, "UserCache");
 
-    /// <summary>Everything (logs, cache, quarantine, webview2) lives next to the exe; falls
-    /// back to %AppData% only if the exe's folder is not writable.</summary>
-    public static string DataFolder => _dataFolder ??= ConfigFolder;
+    // ---- UserData groups (never auto-cleaned) ----
+    public static string SettingsFolder => Path.Combine(UserDataFolder, "Settings");
+    public static string LanguageFolder => Path.Combine(UserDataFolder, "Language");
+    public static string VerdictsFolder => Path.Combine(UserDataFolder, "Verdicts");
+    public static string TrustFolder => Path.Combine(UserDataFolder, "Trust");
+    public static string QuarantineFolder => Path.Combine(UserDataFolder, "Quarantine");
+    public static string BackupsFolder => Path.Combine(UserDataFolder, "Backups");
 
-    public static string LogsFolder => Path.Combine(DataFolder, "Logs");
-    /// <summary>Scan result cache — kept next to the exe, name "cache.json".</summary>
-    public static string HashCachePath => Path.Combine(ConfigFolder, "cache.json");
-    public static string QuarantineFolder => Path.Combine(DataFolder, "Quarantine");
+    // ---- AppCache groups (safe to clean) ----
+    public static string LogsFolder => Path.Combine(AppCacheFolder, "Logs");
+    public static string BrowserCacheFolder => Path.Combine(AppCacheFolder, "BrowserCache");
+    public static string TorFolder => Path.Combine(AppCacheFolder, "Tor");
+    public static string TorDataFolder => Path.Combine(TorFolder, "Data");
+    public static string TorrcPath => Path.Combine(TorFolder, "torrc");
+    public static string SessionFolder => Path.Combine(AppCacheFolder, "Session");
+    public static string DiagnosticsFolder => Path.Combine(AppCacheFolder, "Diagnostics");
 
-    static string ResolveConfigFolder()
+    // ---- Key file paths ----
+    /// <summary>Folder holding the main config file (<c>UserData\Settings</c>).</summary>
+    public static string ConfigFolder => SettingsFolder;
+
+    /// <summary>Full path to the main configuration file.</summary>
+    public static string ConfigPath => Path.Combine(SettingsFolder, AppConstants.ConfigFileName);
+
+    /// <summary>Default durable user data root (<c>UserData</c>).</summary>
+    public static string DataFolder => UserDataFolder;
+
+    /// <summary>Permanent VirusTotal verdict ledger (formerly <c>cache.json</c>).</summary>
+    public static string VerdictLedgerPath => Path.Combine(VerdictsFolder, AppConstants.VerdictLedgerFileName);
+
+    /// <summary>Alias for <see cref="VerdictLedgerPath"/> kept for internal callers.</summary>
+    public static string HashCachePath => VerdictLedgerPath;
+
+    /// <summary>Rebuildable local file-fingerprint cache (<c>UserCache\Fingerprints.json</c>).</summary>
+    public static string FingerprintsPath => Path.Combine(UserCacheFolder, "Fingerprints.json");
+
+    static string ResolveRootFolder()
     {
         try
         {
-            string exeFolder = AppConstants.ThisExeFolder;
-            if (!string.IsNullOrEmpty(exeFolder) && IsWritable(exeFolder))
-                return exeFolder;
+            string exeFolder = Path.TrimEndingDirectorySeparator(AppConstants.ThisExeFolder);
+            if (!string.IsNullOrEmpty(exeFolder))
+            {
+                string candidate = string.Equals(Path.GetFileName(exeFolder), "AppData", StringComparison.OrdinalIgnoreCase)
+                    ? (Directory.GetParent(exeFolder)?.FullName ?? exeFolder)
+                    : exeFolder;
+                if (IsWritable(candidate))
+                    return candidate;
+            }
         }
-        catch (Exception ex) { Log("Config folder probe failed: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Root folder probe failed: " + ex.Message, LogLevel.Warning); }
         return EnsureAppData();
     }
 

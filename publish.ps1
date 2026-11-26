@@ -5,12 +5,20 @@ $ErrorActionPreference = 'Stop'
 $proj = Join-Path $PSScriptRoot 'VirusTotalScanner.csproj'
 $root = Join-Path $PSScriptRoot 'publish'
 
-Write-Host '== Small (framework-dependent, single file) =='
-dotnet publish $proj -c Release -r win-x64 --self-contained false -o (Join-Path $root 'small') --nologo
+$smallDir = Join-Path $root 'small'
+$portableDir = Join-Path $root 'portable'
 
-Write-Host '== Portable (self-contained, single file) =='
-dotnet publish $proj -c Release -r win-x64 --self-contained true -o (Join-Path $root 'portable') --nologo
+Write-Host '== Small (framework-dependent, single file) =='
+dotnet publish $proj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o $smallDir --nologo
+$smallSrc = Join-Path $smallDir 'VirusTotalScanner.exe'
+$smallDst = Join-Path $smallDir 'VirusTotalScanner-FrameworkDependent-RequiresNET10.exe'
+if (Test-Path $smallSrc) {
+    Move-Item $smallSrc $smallDst -Force
+}
+
+Write-Host '== Portable (self-contained, single file, ReadyToRun) =='
+dotnet publish $proj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -o $portableDir --nologo
 
 Write-Host "`nDone. Output:"
-Get-ChildItem (Join-Path $root 'small') -Filter *.exe | ForEach-Object { "  small/$($_.Name)    {0:N1} MB" -f ($_.Length/1MB) }
-Get-ChildItem (Join-Path $root 'portable') -Filter *.exe | ForEach-Object { "  portable/$($_.Name) {0:N1} MB" -f ($_.Length/1MB) }
+Get-ChildItem $smallDir -Filter *.exe | ForEach-Object { "  small/$($_.Name)    {0:N1} MB" -f ($_.Length/1MB) }
+Get-ChildItem $portableDir -Filter *.exe | ForEach-Object { "  portable/$($_.Name) {0:N1} MB" -f ($_.Length/1MB) }

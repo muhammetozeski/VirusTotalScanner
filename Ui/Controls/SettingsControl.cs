@@ -92,6 +92,7 @@ internal sealed class SettingsControl : UserControl
         _keysGrid.Dock = DockStyle.Top;
         _keysGrid.Height = 150;
         _keysGrid.AutoGenerateColumns = false;
+        _keysGrid.ReadOnly = true;
         _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColLabel, DataPropertyName = nameof(KeyRow.Label), Width = 160 });
         _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColKey, DataPropertyName = nameof(KeyRow.Anahtar), Width = 160 });
         _keysGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColStatus, DataPropertyName = nameof(KeyRow.Durum), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
@@ -268,6 +269,7 @@ internal sealed class SettingsControl : UserControl
         _watchGrid.Dock = DockStyle.Top;
         _watchGrid.Height = 110;
         _watchGrid.AutoGenerateColumns = false;
+        _watchGrid.ReadOnly = true;
         _watchGrid.AllowUserToAddRows = false;
         _watchGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColFolder, DataPropertyName = nameof(WatchFolderRow.Folder), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         ThemeManager.StyleGrid(_watchGrid);
@@ -537,9 +539,11 @@ internal sealed class SettingsControl : UserControl
         var use = new CheckBox { Text = Strings.TorToggleLabel, AutoSize = true, Checked = Settings.UseTor };
         var circuit = ThemeManager.MakeButton(Strings.TorNewCircuitBtn, null);
         circuit.Enabled = TorService.IsActive;
+        bool torSyncing = false;
 
         use.CheckedChanged += async (_, _) =>
         {
+            if (torSyncing) return;
             use.Enabled = false;
             try
             {
@@ -554,7 +558,14 @@ internal sealed class SettingsControl : UserControl
                 GuiScrapeService.InvalidateSession("settings toggle");
             }
             catch (Exception ex) { Log("Tor settings toggle failed: " + ex, LogLevel.Error); NativeMessageBox.Error(ex.Message); }
-            finally { use.Enabled = true; use.Checked = TorService.IsActive; circuit.Enabled = TorService.IsActive; RefreshTorCard(); }
+            finally
+            {
+                torSyncing = true;
+                try { use.Checked = TorService.IsActive; } finally { torSyncing = false; }
+                use.Enabled = true;
+                circuit.Enabled = TorService.IsActive;
+                RefreshTorCard();
+            }
         };
         circuit.Click += async (_, _) =>
         {
@@ -583,8 +594,10 @@ internal sealed class SettingsControl : UserControl
         var autoClick = new CheckBox { Text = Strings.CaptchaAutoClickLabel, AutoSize = true, Checked = Settings.CaptchaAutoClick };
         autoClick.CheckedChanged += (_, _) => { Settings.CaptchaAutoClick.Value = autoClick.Checked; SettingsManager.SaveSettings(); };
 
-        var keylessPool = LabeledNumeric(Strings.KeylessPoolLabel, Settings.KeylessBrowserPool, 0, 32,
+        var keylessPool = LabeledNumeric(Strings.KeylessPoolLabel, Settings.KeylessBrowserPool, 0, BrowserSessionFactory.HardMaxCacheSlots,
             v => { Settings.KeylessBrowserPool.Value = v; SettingsManager.SaveSettings(); });
+        var cacheSlots = LabeledNumeric(Strings.BrowserCacheSlotsLabel, Settings.BrowserCacheSlots, 1, BrowserSessionFactory.HardMaxCacheSlots,
+            v => { Settings.BrowserCacheSlots.Value = v; SettingsManager.SaveSettings(); });
 
         var routeApi = new CheckBox { Text = Strings.TorRouteApiLabel, AutoSize = true, Checked = Settings.TorRouteApi };
         routeApi.CheckedChanged += (_, _) => { Settings.TorRouteApi.Value = routeApi.Checked; SettingsManager.SaveSettings(); VtHttpClientFactory.Invalidate(); };
@@ -629,6 +642,7 @@ internal sealed class SettingsControl : UserControl
         body.Controls.Add(routeApi);
         body.Controls.Add(autoClick);
         body.Controls.Add(keylessPool);
+        body.Controls.Add(cacheSlots);
         body.Controls.Add(ThemeManager.MakeLabel(Strings.TorExePathLabel, subtle: true));
         body.Controls.Add(pathRow);
 

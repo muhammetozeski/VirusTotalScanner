@@ -27,7 +27,7 @@ internal sealed class EscalationRecord
 /// </summary>
 internal static class EscalationStore
 {
-    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.DataFolder, "escalations.json");
+    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.VerdictsFolder, "Escalations.json");
     static readonly object Lock = new();
     static List<EscalationRecord>? _records;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -68,7 +68,7 @@ internal static class EscalationStore
 
     static void Save() // caller holds Lock
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_records, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_records, JsonOpts)); }
         catch (Exception ex) { Log("Escalation store save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

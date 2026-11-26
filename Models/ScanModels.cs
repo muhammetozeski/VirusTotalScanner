@@ -69,6 +69,7 @@ internal sealed class ScanItem : INotifyPropertyChanged
     public ScanItem(string filePath)
     {
         FilePath = filePath;
+        PriorityTier = ScanPriorityOrderer.TierOfPath(filePath);
         AddedUtcTicks = DateTime.UtcNow.Ticks;
         AddedSequence = Interlocked.Increment(ref _sequence);
         _activityUtcTicks = AddedUtcTicks;
@@ -77,6 +78,65 @@ internal sealed class ScanItem : INotifyPropertyChanged
 
     public string FilePath { get; }
     public string FileName => Path.GetFileName(FilePath);
+
+    /// <summary>Strict extension priority tier (exe=0 &lt; dll=1 &lt; bat=2 &lt; cmd=3 &lt; ps1=4 &lt; lnk=6 &lt; ...).</summary>
+    public int PriorityTier { get; }
+
+    static long _urgentSeq;
+    long _urgentOrder;
+    /// <summary>Non-zero when the user promoted/rescanned this item; higher value = closer to the front of the queue.</summary>
+    public long UrgentOrder => Interlocked.Read(ref _urgentOrder);
+    public bool IsPriorityBoosted => UrgentOrder > 0;
+
+    /// <summary>Monotonically incremented on each in-place rescan/promotion so stale queue entries are skipped cleanly.</summary>
+    int _scanGeneration;
+    public int ScanGeneration => Volatile.Read(ref _scanGeneration);
+
+    /// <summary>Latest resistance score (0..100) reported by this item's QueryCell.</summary>
+    public double ResistanceScore { get; set; }
+
+    /// <summary>Per-item flags honored during an in-place rescan or urgent promotion.</summary>
+    public bool BypassCacheForThisItem { get; set; }
+    public bool BypassTrustForThisItem { get; set; }
+
+    /// <summary>Pre-computed off the UI thread so the detail pane never blocks on disk I/O.</summary>
+    public string? CachedZoneSummary { get; set; }
+    public long? CachedOverlayBytes { get; set; }
+    public bool LocalMetaComputed { get; set; }
+
+    /// <summary>Moves this item to the absolute front of pending queues without cancelling active uploads.</summary>
+    public long PromoteUrgent()
+    {
+        long order = Interlocked.Increment(ref _urgentSeq);
+        Interlocked.Exchange(ref _urgentOrder, order);
+        Interlocked.Increment(ref _scanGeneration);
+        Touch();
+        OnPropertyChanged(nameof(StatusText));
+        return order;
+    }
+
+    /// <summary>Clears previous verdict/error state in place so this row can be re-scanned without clearing the list.</summary>
+    public void ResetForRescan(bool bypassTrust)
+    {
+        Interlocked.Increment(ref _scanGeneration);
+        long order = Interlocked.Increment(ref _urgentSeq);
+        Interlocked.Exchange(ref _urgentOrder, order);
+        BypassCacheForThisItem = true;
+        BypassTrustForThisItem = bypassTrust;
+        ResistanceScore = 0;
+        FromCache = false;
+        SkipReason = null;
+        Publisher = null;
+        _report = null;
+        _error = null;
+        _progress = 0;
+        _detail = Strings.StatusUrgentQueued;
+        _status = ScanStatus.Queued;
+        Touch();
+        OnPropertyChanged(nameof(Status));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(Verdict));
+    }
 
     /// <summary>One counter for both "added" and "something happened", so ties inside the same clock tick
     /// still sort in the order things really happened.</summary>
@@ -197,11 +257,11 @@ internal sealed class ScanItem : INotifyPropertyChanged
 
     public string StatusText => _status switch
     {
-        ScanStatus.Queued => Strings.StatusQueued,
-        ScanStatus.AwaitingLookup => Detail ?? Strings.StatusAwaitingLookup,
+        ScanStatus.Queued => IsPriorityBoosted ? "⚡ " + (Detail ?? Strings.StatusQueued) : Strings.StatusQueued,
+        ScanStatus.AwaitingLookup => (IsPriorityBoosted ? "⚡ " : "") + (Detail ?? Strings.StatusAwaitingLookup),
         ScanStatus.CheckingSignature => Strings.StatusCheckingSignature,
         ScanStatus.Hashing => Strings.StatusHashing,
-        ScanStatus.LookingUp => Detail ?? Strings.StatusLookingUp,
+        ScanStatus.LookingUp => (IsPriorityBoosted ? "⚡ " : "") + (Detail ?? Strings.StatusLookingUp),
         ScanStatus.Uploading => Detail ?? Strings.StatusUploading,
         ScanStatus.Polling => Detail ?? Strings.StatusPolling,
         ScanStatus.Completed => Report == null ? Strings.StatusCompleted :
@@ -286,6 +346,15 @@ internal sealed class ScanOptions
     public bool SkipTrusted { get; set; } = true;
     /// <summary>When true, force every file through VT even if trusted (re-scan ignoring trust).</summary>
     public bool BypassTrust { get; set; }
+
+    /// <summary>When true, ignore the local hash/fingerprint cache for this scan without necessarily bypassing trust.</summary>
+    public bool BypassCache { get; set; }
+
+    /// <summary>When true (CLI -k/--keyless), never consult API keys for hash lookups during this run.</summary>
+    public bool ForceKeyless { get; set; }
+
+    /// <summary>When true, never clear existing rows from the queue (used for in-place rescans and live appends).</summary>
+    public bool PreserveExistingList { get; set; }
 
     /// <summary>Started by the app on its own (pending-outbox retry, auto-resume, USB auto-scan), not by
     /// the user. A scan the user asks for replaces a running automatic one instead of waiting behind it.</summary>

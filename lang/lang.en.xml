@@ -233,8 +233,8 @@
   <s name="MenuFindCopies">🔁  Find other copies (disk)</s>
   <s name="MenuPinBaseline">📌  Add to integrity watch</s>
   <s name="MenuHuntPersistence">🪝  Find autostart hooks</s>
-  <s name="MenuRescan">🔄  Rescan</s>
-  <s name="MenuRescanNoTrust">🛡  Ignore trust, scan with VT</s>
+  <s name="MenuRescan">⚡  Rescan / Scan now (priority)</s>
+  <s name="MenuRescanNoTrust">🛡  Ignore trust, scan now with VT</s>
   <s name="MenuQuarantine">⚠  Quarantine (.VIRUS)</s>
   <s name="ProgressSummaryFormat">Total {0} • Done {1} • Malicious {2} • Suspicious {3} • Clean {4} • Signed↷skipped {5} • Errors {6} • Unknown {7}</s>
   <s name="PendingQueuedFormat">{0} item(s) queued — they will be scanned automatically when this scan finishes.</s>
@@ -339,6 +339,8 @@
   <s name="ColFirstSeen">First seen</s>
   <s name="ColPaths">Paths</s>
   <s name="StatusQueued">Queued</s>
+  <s name="StatusUrgentQueued">Priority queued (front)</s>
+  <s name="StatusApiUploadQueuedFormat">In API upload queue (#{0})…</s>
   <s name="StatusAwaitingLookup">Hashed, waiting for its turn at VirusTotal</s>
   <s name="StatusRequeuedFormat">VirusTotal did not answer, will ask again (attempt {0}/{1})</s>
   <s name="StatusHashing">Hashing…</s>
@@ -625,7 +627,7 @@
   <s name="MenuRescanFailed">🔁  Rescan only the failed ones</s>
   <s name="MenuMarkClean">✓  Mark as clean</s>
   <s name="MenuSuppressFolder">🔇  Mute this folder</s>
-  <s name="MenuRescanCountFormat">🔄  Rescan {0} files</s>
+  <s name="MenuRescanCountFormat">⚡  Rescan / Scan now ({0} files, priority)</s>
   <s name="MenuQuarantineCountFormat">⚠  Quarantine {0} files (.VIRUS)</s>
   <s name="OpenFilesDialogTitle">Files to scan</s>
   <s name="ClipboardEmptyInfo">The clipboard is empty or contains no text.</s>
@@ -1161,6 +1163,7 @@
   <s name="CaptchaBarPrompt">  VirusTotal requested a reCAPTCHA. Please solve it below, then press the button on the right.</s>
   <s name="CaptchaBtnSolved">I solved it, continue</s>
   <s name="CaptchaBtnSwitchToApi">Switch to API key</s>
+  <s name="CaptchaBtnNextRoute">Try another route/identity</s>
   <!-- DownloadsTriageService -->
   <s name="DownloadsTriageSignedFormat">✓ {0}</s>
   <!-- AllowlistStore -->
@@ -1216,7 +1219,7 @@
   <s name="JumpNothingRunning">Nothing is being scanned right now, and nothing is waiting either.</s>
   <s name="JumpFailed">Could not jump to the row (the list may have changed).</s>
   <s name="StatusSourceCacheBackup">Cache backup</s>
-  <s name="TipBackupCache">Writes a timestamped copy of the hash cache (cache.json) to the folder you pick. Every entry in it is VirusTotal quota already spent, which is why the app has no button that deletes the cache — only one that backs it up.</s>
+  <s name="TipBackupCache">Writes a timestamped copy of the verdict ledger (VerdictLedger.json) to the folder you pick. Every entry in it is VirusTotal quota already spent, which is why the app has no button that deletes it — only one that backs it up.</s>
   <s name="TipJumpToCurrent">Jumps to and selects the row VirusTotal is working on right now. Several files can be in flight at once, so the topmost one — the front of the queue — is shown; if none are in flight it goes to the first row that has not started.</s>
   <s name="TipUndoQuarantine">Puts the file that was just quarantined back where it came from.</s>
   <s name="TorToggleLabel">Use Tor</s>
@@ -1240,7 +1243,7 @@
   <s name="TipChipError">Rows whose lookup could not finish (quota, network error, analysis timeout). "Rescan failed" retries them all.</s>
   <s name="CacheBackupPickFolderDescription">Pick the folder cache backups are written to</s>
   <s name="CmdBackupCacheName">Back up cache</s>
-  <s name="CmdBackupCacheDesc">Take a timestamped copy of cache.json</s>
+  <s name="CmdBackupCacheDesc">Take a timestamped copy of VerdictLedger.json</s>
   <s name="CaptchaBtnUseTor">Switch to Tor (new IP)</s>
   <s name="CaptchaBtnNewCircuit">New circuit (new IP)</s>
   <s name="CaptchaBtnTorWorking">Starting Tor…</s>
@@ -1289,7 +1292,8 @@
   <s name="TorAutoEnableAfterLabel">After how many blocks (within 24 h):</s>
   <s name="TorNewCircuitOnErrorLabel">While Tor is on, change the circuit (exit IP) automatically on an error</s>
   <s name="CaptchaAutoClickLabel">Let the app try the single reCAPTCHA click first</s>
-  <s name="KeylessPoolLabel">Concurrent keyless browsers (0 = auto, follows scan concurrency):</s>
+  <s name="KeylessPoolLabel">Concurrent browsers (0 = auto, up to 150):</s>
+  <s name="BrowserCacheSlotsLabel">Max browser cache slots (1–150, zero cookies saved):</s>
   <s name="TorExePathLabel">Path to tor.exe (empty = search automatically):</s>
   <s name="BtnTorFindExe">Pick tor.exe…</s>
   <s name="BtnTorTest">Test the connection</s>
@@ -1297,7 +1301,7 @@
   <s name="TorFoundAtFormat">Found at: {0}</s>
   <s name="TorNotFoundHint">tor.exe was not found. To install: scoop install tor — or install Tor Browser and point at its tor.exe here.</s>
   <s name="CardCacheBackup">Cache backup</s>
-  <s name="CacheBackupHint">Every entry in cache.json is VirusTotal quota already spent, which is why the app has no button that deletes the cache. Here you can take periodic, timestamped copies. Backups never overwrite each other.</s>
+  <s name="CacheBackupHint">Every entry in VerdictLedger.json is VirusTotal quota already spent, which is why the app has no button that deletes it. Here you can take periodic, timestamped copies. Backups never overwrite each other.</s>
   <s name="CacheBackupFolderLabel">Backup folder:</s>
   <s name="CacheBackupHoursLabel">How many hours between backups (0 = manual only):</s>
   <s name="CacheBackupKeepLabel">How many backups to keep (0 = all):</s>
@@ -1306,7 +1310,7 @@
   <s name="BtnOpenBackupFolder">Open folder</s>
   <s name="CacheBackupCountFormat">{0} backups · newest: {1}</s>
   <s name="CacheBackupNoneYet">No backups yet.</s>
-  <s name="CacheRestoreConfirmFormat">Load the backup "{0}"?\n\nIts entries are merged into the current cache; nothing already there is deleted. The current cache.json is copied aside first.</s>
+  <s name="CacheRestoreConfirmFormat">Load the backup "{0}"?\n\nIts entries are merged into the current verdict ledger; nothing already there is deleted. The current VerdictLedger.json is copied aside first.</s>
   <s name="CacheRestoredFormat">Backup loaded. The cache now holds {0} entries.</s>
   <s name="CacheRestoreFailedPrefix">The backup could not be loaded: </s>
   <s name="BtnPickKeyBackupFile">Pick file…</s>
@@ -1362,7 +1366,7 @@
   <s name="TtCacheBackupHours">How many hours between automatic backups. 0 = manual only.</s>
   <s name="TtCacheBackupKeep">The most backups kept in the folder; older ones are removed first. 0 = never remove any.</s>
   <s name="TtBackupNow">Takes a timestamped copy right away.</s>
-  <s name="TtRestoreBackup">Loads the selected backup. Its entries are MERGED into the current cache (nothing already there is deleted), and the current cache.json is copied aside first.</s>
+  <s name="TtRestoreBackup">Loads the selected backup. Its entries are MERGED into the current verdict ledger (nothing already there is deleted), and the current VerdictLedger.json is copied aside first.</s>
   <s name="TtOpenBackupFolder">Opens the backup folder in Explorer.</s>
   <s name="TtCacheBackupList">The backups in the folder, newest first. Select the one you want to restore.</s>
   <s name="TtSweepFolder">The folder the Windows Task Scheduler job scans periodically.</s>
@@ -1449,6 +1453,11 @@
   <s name="KeyDuplicateWarn">That key is already in the list.\n\nAdding the same key twice does not double the quota: VirusTotal counts it per key. The second row only makes the app believe it has quota it does not have, and the extra requests come back 429.</s>
   <s name="KeylessParkedFormat">A reCAPTCHA went unanswered - the keyless route is parked for {0} minutes; the scan carries on over the API.</s>
   <s name="SkipReasonNotSubmitted">Not in VT, not submitted (not a code file)</s>
+  <s name="SkipReasonNotSubmittedPolicy">Not in VT, not submitted (uploads disabled)</s>
+  <s name="SkipReasonNotSubmittedSweep">Not in VT, not submitted during bulk sweep</s>
+  <s name="SkipReasonNotSubmittedTooLarge">Not in VT, exceeds 650 MB upload limit</s>
+  <s name="SkipReasonNotSubmittedEmpty">Not in VT, empty file</s>
+  <s name="CliSkippedTag">SKIPPED</s>
   <s name="ScanUploadPolicyLabel">Submit a file VirusTotal has not seen:</s>
   <s name="UploadPolicyNever">Never submit (hash lookups only)</s>
   <s name="UploadPolicyCodeOnly">Only code files (default)</s>

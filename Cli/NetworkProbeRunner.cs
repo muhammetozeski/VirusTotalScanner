@@ -208,7 +208,8 @@ internal static class NetworkProbeRunner
     {
         try
         {
-            string path = Path.Combine(ConfigPathResolver.DataFolder,
+            Directory.CreateDirectory(ConfigPathResolver.DiagnosticsFolder);
+            string path = Path.Combine(ConfigPathResolver.DiagnosticsFolder,
                 "route-probe-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".txt");
             File.WriteAllText(path, report, new UTF8Encoding(true));
             Console.Error.WriteLine("report written: " + path);

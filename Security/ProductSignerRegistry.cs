@@ -18,7 +18,7 @@ internal static class ProductSignerRegistry
     static readonly object Lock = new();
     static bool _loaded;
 
-    static string FilePath => Path.Combine(ConfigPathResolver.ConfigFolder, "product-signers.json");
+    static string FilePath => Path.Combine(ConfigPathResolver.TrustFolder, "ProductSigners.json");
 
     public static void Load()
     {
@@ -40,7 +40,7 @@ internal static class ProductSignerRegistry
     {
         try
         {
-            Directory.CreateDirectory(ConfigPathResolver.ConfigFolder);
+            Directory.CreateDirectory(ConfigPathResolver.TrustFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_map));
         }
         catch (Exception ex) { Log("Product-signer registry save failed: " + ex.Message, LogLevel.Warning); }

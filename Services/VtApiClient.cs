@@ -52,14 +52,30 @@ internal sealed class VtApiClient
             : AppConstants.VtApiBase + "/files";
         op.Step("-> POST " + url);
 
-        using var fs = File.OpenRead(path);
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, useAsync: true);
         var streamContent = new ProgressableStreamContent(fs, fi.Length, progress);
         streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-        using var form = new MultipartFormDataContent { { streamContent, "file", fi.Name } };
+        // .NET wraps MultipartFormDataContent's boundary in quotes and emits unquoted Content-Disposition
+        // parameters + filename*=. Google App Engine's /_ah/upload/ endpoint (>32 MB uploads) rejects
+        // that with HTTP 400 "Malformed multipart body". Use an unquoted boundary and standard quoted fields.
+        string boundary = "----VTFormBoundary" + Guid.NewGuid().ToString("N");
+        var safeChars = fi.Name.Select(c => c is >= ' ' and <= '~' && c is not '"' and not '\\' and not ';' ? c : '_').ToArray();
+        string safeName = safeChars.Length > 0 ? new string(safeChars) : "file.bin";
+        streamContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
+        {
+            Name = "\"file\"",
+            FileName = $"\"{safeName}\"",
+        };
+
+        using var form = new MultipartFormDataContent(boundary);
+        form.Headers.ContentType = MediaTypeHeaderValue.Parse("multipart/form-data; boundary=" + boundary);
+        form.Add(streamContent);
+
         using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
         req.Headers.Add("x-apikey", apiKey);
         req.Headers.Accept.ParseAdd("application/json");
+        req.Headers.TryAddWithoutValidation("User-Agent", UserAgentPool.Pick());
 
         using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         op.Step($"<- HTTP {(int)resp.StatusCode} {resp.StatusCode}");
@@ -113,6 +129,7 @@ internal sealed class VtApiClient
         var req = new HttpRequestMessage(method, AppConstants.VtApiBase + relativeUrl);
         req.Headers.Add("x-apikey", apiKey);
         req.Headers.Accept.ParseAdd("application/json");
+        req.Headers.TryAddWithoutValidation("User-Agent", UserAgentPool.Pick());
         return req;
     }
 

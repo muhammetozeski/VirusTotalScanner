@@ -8,7 +8,8 @@ namespace VirusTotalScanner;
 /// </summary>
 internal static class CacheBackupService
 {
-    const string Prefix = "cache-";
+    const string Prefix = "VerdictLedger-";
+    const string LegacyPrefix = "cache-";
     const string Suffix = ".json";
 
     static System.Threading.Timer? _timer;
@@ -98,13 +99,13 @@ internal static class CacheBackupService
         {
             error = ex.Message;
             Log("Cache backup failed: " + ex, LogLevel.Error);
-            // Last-ditch: try the app's own data folder so the copy exists SOMEWHERE.
+            // Last-ditch: try UserData\Backups\VerdictLedger so the copy exists SOMEWHERE safe.
             try
             {
-                string fallbackDir = Path.Combine(ConfigPathResolver.DataFolder, "cache-backups");
+                string fallbackDir = Path.Combine(ConfigPathResolver.BackupsFolder, "VerdictLedger");
                 Directory.CreateDirectory(fallbackDir);
                 string fallback = Path.Combine(fallbackDir, Prefix + DateTime.Now.ToString("yyyyMMdd-HHmmss") + Suffix);
-                File.Copy(ConfigPathResolver.HashCachePath, fallback, overwrite: false);
+                File.Copy(ConfigPathResolver.VerdictLedgerPath, fallback, overwrite: false);
                 writtenPath = fallback;
                 LastBackupPath = fallback;
                 LastBackupLocal = DateTime.Now;
@@ -127,7 +128,9 @@ internal static class CacheBackupService
         {
             int keep = Settings.CacheBackupKeep.Value;
             if (keep <= 0) return;
-            var files = new DirectoryInfo(folder).GetFiles(Prefix + "*" + Suffix)
+            var files = new DirectoryInfo(folder).GetFiles("*" + Suffix)
+                .Where(f => f.Name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)
+                         || f.Name.StartsWith(LegacyPrefix, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(f => f.LastWriteTimeUtc).ToList();
             for (int i = keep; i < files.Count; i++)
             {
@@ -145,7 +148,9 @@ internal static class CacheBackupService
         {
             string folder = (Settings.CacheBackupFolder.Value ?? "").Trim();
             if (folder.Length == 0 || !Directory.Exists(folder)) return [];
-            return new DirectoryInfo(folder).GetFiles(Prefix + "*" + Suffix)
+            return new DirectoryInfo(folder).GetFiles("*" + Suffix)
+                .Where(f => f.Name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)
+                         || f.Name.StartsWith(LegacyPrefix, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(f => f.LastWriteTimeUtc).ToList();
         }
         catch (Exception ex) { Log("Cache backup listing failed: " + ex.Message, LogLevel.Warning); return []; }

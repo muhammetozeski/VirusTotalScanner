@@ -53,6 +53,7 @@ internal static class Program
 
     static void InitCore()
     {
+        StorageMigration.MigrateLegacyLayoutIfNeeded();
         SettingsManager.LoadSettings();
         LoggerHost.Initialize();
         Theme.ApplyFromSettings();

@@ -51,6 +51,38 @@ internal sealed class KeyRotator
         }
     }
 
+    /// <summary>Point-in-time snapshot of key quota availability for the ETA model.</summary>
+    public KeyQuotaSnapshot GetQuotaSnapshot()
+    {
+        lock (_lock)
+        {
+            var now = DateTime.UtcNow;
+            var usable = _vault.Keys.Where(k => !k.Disabled).ToList();
+            if (usable.Count == 0) return new KeyQuotaSnapshot(0, 0, 0, 0, 0, 0, null);
+
+            long immediate = 0, minuteAllowed = 0, dailyRem = 0, dailyAllowed = 0;
+            int keysWithDaily = 0;
+            DateTime? soonest = null;
+            foreach (var k in usable)
+            {
+                k.Minute.Roll(now); k.Daily.Roll(now); k.Monthly.Roll(now);
+                long dm = Math.Min(k.Daily.Remaining, k.Monthly.Remaining);
+                dailyRem += dm;
+                dailyAllowed += Math.Max(0, k.Daily.Allowed);
+                if (dm > 0)
+                {
+                    keysWithDaily++;
+                    minuteAllowed += Math.Max(1, k.Minute.Allowed);
+                }
+                immediate += Math.Min(k.Minute.Remaining, dm);
+
+                var r = k.SoonestResetUtc(now);
+                if (soonest == null || r < soonest.Value) soonest = r;
+            }
+            return new KeyQuotaSnapshot(usable.Count, keysWithDaily, immediate, minuteAllowed, dailyRem, dailyAllowed, soonest);
+        }
+    }
+
     /// <summary>When the next key frees up, or null when there are no keys at all.</summary>
     public DateTime? SoonestResetUtc
     {

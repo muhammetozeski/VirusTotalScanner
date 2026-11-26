@@ -147,8 +147,17 @@ internal sealed class DownloadsWatcher : IDisposable
         { Interlocked.Increment(ref Cleared); return; }
 
         var (md5, sha) = await HashService.ComputeAsync(path);
-        var report = _cache.TryGet(md5, Settings.HashCacheDays)
-            ?? (GuiScrapeService.IsRuntimeAvailable ? await GuiScrapeService.LookupAsync(sha) : null);
+        var report = _cache.TryGet(md5, Settings.HashCacheDays);
+        if (report == null)
+        {
+            var cell = new QueryCell(AppServices.ApiCoordinator);
+            var res = await cell.LookupAsync(
+                sha, urgentOrder: 0, fileTier: ScanPriorityOrderer.TierOfPath(path),
+                allowBrowser: BrowserSessionFactory.IsRuntimeAvailable,
+                allowApi: AppServices.ApiCoordinator.HasUsableKeys,
+                allowUserCaptcha: false, onStatus: null, ct: default);
+            report = res.Report;
+        }
         if (report != null && report.TotalEngines > 0) _cache.Put(md5, report, path);
 
         if (report == null || report.TotalEngines == 0)

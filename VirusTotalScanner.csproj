@@ -7,7 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>VirusTotalScanner</AssemblyName>
-    <Version>1.7.0</Version>
+    <Version>2.1.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>app.ico</ApplicationIcon>
@@ -36,13 +36,10 @@
     <PackageReference Include="System.Management" Version="9.0.0" />
   </ItemGroup>
 
-  <!-- Language files live under lang\ in the repo. Link copies lang.en.xml to the output
-       ROOT (next to the exe) so LocManager finds it in the exe folder at runtime.
-       Turkish uses the compiled-in Strings defaults; lang.tr.xml is written on first run. -->
+  <!-- English language pack is embedded inside the single-file exe and extracted to UserData\Language\
+       on first run so the program root stays clean (exe + AppCache/UserCache/UserData only). -->
   <ItemGroup>
-    <Content Include="lang\lang.en.xml" Link="lang.en.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <EmbeddedResource Include="lang\lang.en.xml" LogicalName="VirusTotalScanner.lang.en.xml" WithCulture="false" />
   </ItemGroup>
 
 </Project>

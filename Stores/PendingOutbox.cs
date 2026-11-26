@@ -16,7 +16,7 @@ internal sealed class PendingEntry
 /// </summary>
 internal static class PendingOutbox
 {
-    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.DataFolder, "pending.json");
+    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.VerdictsFolder, "PendingOutbox.json");
     const int MaxEntries = 2000;
     static readonly object Lock = new();
     static List<PendingEntry>? _entries;
@@ -102,7 +102,7 @@ internal static class PendingOutbox
         _lastSaveUtc = DateTime.UtcNow;
         try
         {
-            Directory.CreateDirectory(ConfigPathResolver.DataFolder);
+            Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts));
             _dirty = false;
         }

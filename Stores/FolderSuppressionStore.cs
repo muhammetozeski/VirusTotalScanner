@@ -16,7 +16,7 @@ internal sealed class FolderRule
 /// </summary>
 internal static class FolderSuppressionStore
 {
-    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.DataFolder, "folder-allowlist.json");
+    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.TrustFolder, "FolderAllowlist.json");
     static readonly object Lock = new();
     static List<FolderRule>? _rules;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -79,7 +79,7 @@ internal static class FolderSuppressionStore
 
     static void Save() // caller holds Lock
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_rules, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.TrustFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_rules, JsonOpts)); }
         catch (Exception ex) { Log("Folder allowlist save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

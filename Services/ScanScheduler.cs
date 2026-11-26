@@ -10,55 +10,147 @@ internal sealed class ActionProgress<T>(Action<T> action) : IProgress<T>
 }
 
 /// <summary>
-/// Drives the whole scan: enumerate selection -> hash (MD5+SHA256) -> cache check ->
-/// VT lookup (rotating keys) -> upload with progress -> poll -> fetch report. Honors the
-/// 4/min per-key limit through <see cref="KeyRotator"/>, supports pause/resume/cancel, and
-/// marshals all UI-bound mutations through <see cref="UiPost"/>.
+/// Thread-safe, priority-ordered async work queue supporting live mid-run urgent injection.
+/// Lower priority key = dequeued first.
+/// </summary>
+internal sealed class PriorityWorkQueue<T, TKey> where TKey : IComparable<TKey>
+{
+    readonly object _lock = new();
+    readonly PriorityQueue<T, TKey> _pq = new();
+    readonly SemaphoreSlim _signal = new(0, int.MaxValue);
+    bool _completed;
+
+    public int Count { get { lock (_lock) return _pq.Count; } }
+
+    public bool TryEnqueue(T item, TKey priority)
+    {
+        lock (_lock)
+        {
+            if (_completed) return false;
+            _pq.Enqueue(item, priority);
+        }
+        _signal.Release();
+        return true;
+    }
+
+    public void Complete()
+    {
+        lock (_lock)
+        {
+            if (_completed) return;
+            _completed = true;
+        }
+        // Wake any waiting readers so they observe completion.
+        _signal.Release(64);
+    }
+
+    public async Task<(bool HasItem, T? Item)> TryDequeueAsync(CancellationToken ct)
+    {
+        while (true)
+        {
+            lock (_lock)
+            {
+                if (_pq.TryDequeue(out var item, out _))
+                    return (true, item);
+                if (_completed)
+                    return (false, default);
+            }
+            await _signal.WaitAsync(ct);
+        }
+    }
+}
+
+/// <summary>
+/// Drives the whole scan:
+///   enumerate -> strict priority ordering (exe > dll > bat > ps1 > lnk > ...) ->
+///   local stage (signature/hash/cache/meta) -> autonomous per-file QueryCell (browser-first, zero-cookie,
+///   cross-route resistance 0..100, mid-resistance ApiCoordinator consultation) ->
+///   unknown (404) files queued to ApiCoordinator upload + background analysis polling.
+///
+/// Supports three clean session modes:
+///   - Fresh scan (replaces the grid),
+///   - Live append (adds files to a running session without wiping existing rows or counters),
+///   - In-place urgent rescan / promote (never clears the list, never cancels active uploads, puts the
+///     chosen row(s) at the very front of pending disk, browser, and API queues).
 /// </summary>
 internal sealed class ScanScheduler
 {
     readonly KeyRotator _rotator;
     readonly VtApiClient _api;
+    readonly ApiCoordinator _apiCoord;
     readonly HashCache _cache;
     readonly PauseTokenSource _pause = new();
 
     CancellationTokenSource? _cts;
-    SemaphoreSlim? _uploadGate; // MaxUploads: how many files may be SENDING bytes at once (bandwidth)
-    SemaphoreSlim? _lookupGate; // MaxConcurrency: how many files may be in the VT network stage at once.
-                                // Released before the analysis poll — waiting for VirusTotal to finish is
-                                // not work, and holding a slot through it serialized the whole scan.
-                                // The local pipeline (hash/trust/cache) runs wider, at core count.
-    ConcurrentDictionary<string, SemaphoreSlim>? _md5Gates; // per-run: one lookup per identical content
+    ConcurrentDictionary<string, SemaphoreSlim>? _md5Gates;
+    ConcurrentDictionary<string, string>? _runNotSubmittedByMd5;
+    ConcurrentDictionary<string, Task<(VtFileReport? Report, LookupFailure Failure)>>? _runPendingUploadByMd5;
+    bool _isLargeSweep;
+    long _watcherSeq;
+
+    const int LargeSweepUploadCap = 500;
+    const int SweepSizeThatNeedsToBePolite = 5000;
 
     /// <summary>Marshals an action to the UI thread (set by the GUI; direct call by default/CLI).</summary>
     public Action<Action> UiPost { get; set; } = a => a();
 
+    /// <summary>UI-bound row collection. Only mutated on the UI thread via <see cref="UiPost"/>.</summary>
     public BindingList<ScanItem> Items { get; } = [];
 
-    /// <summary>Targets of the last run that could not be found on disk. Empty on a normal run; the CLI
-    /// turns a fully-missing selection into a non-zero exit so a script never reads it as "clean".</summary>
+    /// <summary>Authoritative thread-safe mirror of all rows currently in the session.</summary>
+    readonly object _itemsLock = new();
+    readonly List<ScanItem> _allItems = [];
+
+    /// <summary>Returns a thread-safe point-in-time snapshot of all rows in the session.</summary>
+    public IReadOnlyList<ScanItem> SnapshotItems() { lock (_itemsLock) return [.. _allItems]; }
+
     public IReadOnlyList<string> MissingPaths { get; private set; } = [];
 
     public event Action<OverallProgress>? ProgressChanged;
     public event Action<ScanItem>? ItemFinished;
     public event Action? Started;
     public event Action? Finished;
+    public event Action<int>? PendingQueued;
+    public event Action<int>? QueueUnstuck;
 
     public bool IsRunning { get; private set; }
     public bool IsPaused => _pause.IsPaused;
+    public bool HasUiThread { get; set; }
 
-    // aggregate counters
+    // Aggregate counters (always reconciled against real _allItems state)
     int _total, _done, _malicious, _suspicious, _clean, _unknown, _failed, _skipped, _signedSkipped;
 
-    // live throughput / ETA
     readonly System.Diagnostics.Stopwatch _stopwatch = new();
-    readonly Queue<long> _recent = new(); // ElapsedMs at each of the last ~30 completions
-    readonly object _rateLock = new();
+    readonly ScanEtaEstimator _eta = new();
+    long _lastProgressEmitMs;
 
-    public ScanScheduler(KeyRotator rotator, VtApiClient api, HashCache cache)
+    // Live work queues for the active run
+    readonly record struct DiskJob(ScanItem Item, int Generation, ScanOptions Options);
+    readonly record struct NetworkJob(ScanItem Item, int Generation, string Md5, string Sha256, ScanOptions Options, int Attempt = 0);
+    readonly record struct QueueKey(long NegUrgent, int Tier, long Seq) : IComparable<QueueKey>
+    {
+        public int CompareTo(QueueKey other)
+        {
+            int c = NegUrgent.CompareTo(other.NegUrgent);
+            if (c != 0) return c;
+            c = Tier.CompareTo(other.Tier);
+            return c != 0 ? c : Seq.CompareTo(other.Seq);
+        }
+    }
+
+    PriorityWorkQueue<DiskJob, QueueKey>? _diskQueue;
+    PriorityWorkQueue<NetworkJob, QueueKey>? _netQueue;
+    ScanOptions? _currentOpts;
+    readonly ConcurrentDictionary<string, Task> _pendingAnalyses = new(StringComparer.Ordinal);
+
+    public int NetworkQueueDepth => _netQueue?.Count ?? 0;
+    public int PendingAnalysisCount => _pendingAnalyses.Count;
+
+    public ScanScheduler(KeyRotator rotator, VtApiClient api, ApiCoordinator apiCoordinator, HashCache cache)
     {
         _rotator = rotator;
         _api = api;
+        _apiCoord = apiCoordinator;
         _cache = cache;
     }
 
@@ -67,106 +159,241 @@ internal sealed class ScanScheduler
     public void Cancel()
     {
         try { _cts?.Cancel(); } catch (Exception ex) { Log("Cancel failed: " + ex.Message, LogLevel.Warning); }
-        // A cancelled run is not a paused one. Left closed, the gate outlived the run and every worker of
-        // the NEXT scan stopped on its first line, forever: 24 files "started", none ended, 0 done.
         if (_pause.IsPaused) { _pause.Resume(); Log("Pause lifted by the cancel.", LogLevel.Info); }
         Log("Scan cancel requested.", LogLevel.Info);
     }
 
-    // Paths that arrived while a run was active, drained into an automatic follow-up run —
-    // a drop / right-click / forwarded path during a scan is queued, never silently discarded.
+    // ---- pending / follow-up batch coordination ----
     readonly object _pendingLock = new();
     readonly List<string> _pendingPaths = [];
+    readonly List<(ScanItem Item, bool BypassTrust)> _pendingRescanItems = [];
     ScanOptions? _pendingOpts;
-    /// <summary>Targets of the pass currently running, used to drop a queued request the running pass
-    /// already covers.</summary>
     string[] _activeTargets = [];
+    bool _runIsAutomatic;
+    bool _preempting;
 
-    /// <summary>Raised (marshalled via <see cref="UiPost"/>) when a scan request arrives while a run
-    /// is active and gets queued behind it. Carries the total pending path count.</summary>
-    public event Action<int>? PendingQueued;
-
-    bool _runIsAutomatic; // the pass running now was started by the app, not the user
-    bool _preempting;     // a user request cancelled that automatic pass and waits in _pendingPaths
-
-    /// <summary>True while the running pass is one the app started on its own.</summary>
     public bool IsRunningAutomatic { get { lock (_pendingLock) return IsRunning && _runIsAutomatic; } }
 
+    /// <summary>Starts a path-based scan (or appends to an already-running scan without clearing the list).</summary>
     public async Task RunAsync(IEnumerable<string> paths, ScanOptions opts, CancellationToken externalCt = default)
     {
+        var pathArray = paths.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+        if (pathArray.Length == 0) return;
+
+        bool replaceRunningAuto = false;
         lock (_pendingLock)
         {
             if (IsRunning && _runIsAutomatic && !opts.Automatic)
             {
-                // The user asked for a scan while the app was busy with one of its own (a retry of the
-                // pending outbox, an auto-resumed session). Queueing behind it put the user's folder at
-                // the back of an unrelated list that could run for hours; the window showed that list
-                // instead of the folder that was right-clicked. The automatic pass stops and the user's
-                // request runs next, on a cleared table. Files the automatic pass did not reach stay in
-                // their store and are retried another time.
                 _pendingPaths.Clear();
-                _pendingPaths.AddRange(paths);
+                _pendingPaths.AddRange(pathArray);
                 _pendingOpts = opts;
                 _preempting = true;
-                Log($"User scan request replaces the running automatic scan: {string.Join(", ", paths.Take(4))}", LogLevel.Info);
+                replaceRunningAuto = true;
+                Log($"User scan request replaces the running automatic scan: {string.Join(", ", pathArray.Take(4))}", LogLevel.Info);
                 try { _cts?.Cancel(); } catch (Exception ex) { Log("Stopping the automatic scan failed: " + ex.Message, LogLevel.Warning); }
                 return;
             }
             if (IsRunning)
             {
-                // Anything the running pass already walks is dropped, not queued. An auto-resumed
-                // session and the path on the command line are the same drive; queueing the second one
-                // scheduled a whole second sweep of C:\ to start the moment the first one ended.
-                // A forced re-check or a hand-picked file is never dropped: those mean "this one, now",
-                // and the running pass would answer them from the cache or not reach them for hours.
-                var (fresh, covered) = opts.BypassTrust || opts.ExplicitFileSelection
-                    ? (paths.ToList(), new List<string>())
-                    : SplitAlreadyCovered(paths);
+                var (fresh, covered) = opts.BypassTrust || opts.BypassCache || opts.ExplicitFileSelection
+                    ? (pathArray.ToList(), new List<string>())
+                    : SplitAlreadyCovered(pathArray);
                 if (covered.Count > 0)
-                    Log($"Scan request covered by the running pass; {covered.Count} path(s) dropped: {string.Join(", ", covered.Take(5))}", LogLevel.Info);
+                    Log($"Scan request covered by the running pass; {covered.Count} path(s) dropped.", LogLevel.Info);
                 if (fresh.Count == 0) return;
 
                 _pendingPaths.AddRange(fresh);
-                // An automatic request joining a queued user request must not turn the user's batch into
-                // an automatic one (which the next user request would then cancel).
                 if (!(opts.Automatic && _pendingOpts is { Automatic: false })) _pendingOpts = opts;
                 int pending = _pendingPaths.Count;
-                Log($"Scan already running; queued {pending} path(s) for an automatic follow-up run.", LogLevel.Info);
-                UiPost(() => { try { PendingQueued?.Invoke(pending); } catch (Exception ex) { Log("PendingQueued handler failed: " + ex.Message, LogLevel.Warning); } });
+                Log($"Scan already running; queued {pending} path(s) to append without clearing.", LogLevel.Info);
+                UiPost(() => { try { PendingQueued?.Invoke(pending); } catch { } });
                 return;
             }
-            IsRunning = true; // reserved inside the lock, so two racing requests can't both start
+
+            IsRunning = true;
             _runIsAutomatic = opts.Automatic;
-            _activeTargets = paths.ToArray();
+            _activeTargets = pathArray;
         }
 
-        var runPaths = paths;
-        var runOpts = opts;
-        bool clearQueue = true; // only the user-initiated first run clears the grid; follow-ups append
+        if (replaceRunningAuto) return;
+
+        bool clearQueue = !opts.PreserveExistingList;
+        await RunLoopAsync(initialPaths: pathArray, initialRescans: null, initialOpts: opts, clearQueue: clearQueue, externalCt: externalCt);
+    }
+
+    /// <summary>
+    /// Promotes or rescans the selected existing rows IN PLACE with top priority:
+    ///   - NEVER clears the existing scan list,
+    ///   - NEVER cancels any in-flight upload or active lookup,
+    ///   - Works even for rows that haven't been scanned yet (Queued / AwaitingLookup) by jumping them
+    ///     to the absolute front of pending disk, browser, and API queues.
+    /// </summary>
+    public async Task RescanOrPromoteItemsAsync(IReadOnlyList<ScanItem> targets, bool bypassTrust, CancellationToken externalCt = default)
+    {
+        var valid = targets.Where(i => i != null && File.Exists(i.FilePath)).Distinct(ReferenceEqualityComparer.Instance).Cast<ScanItem>().ToList();
+        if (valid.Count == 0) return;
+
+        List<ScanItem>? startNowWhenIdle = null;
+        lock (_pendingLock)
+        {
+            if (IsRunning)
+            {
+                var opts = _currentOpts ?? ScanOptions.FromSettings(recurse: false);
+                var needFollowUp = new List<ScanItem>();
+                int promotedLive = 0;
+
+                foreach (var item in valid)
+                {
+                    if (item.Status is ScanStatus.CheckingSignature or ScanStatus.Hashing or ScanStatus.LookingUp or ScanStatus.Uploading or ScanStatus.Polling)
+                    {
+                        // Active work is NEVER cancelled; just mark urgent so any subsequent stage (upload/API) prioritizes it.
+                        item.PromoteUrgent();
+                        if (bypassTrust) item.BypassTrustForThisItem = true;
+                        promotedLive++;
+                        continue;
+                    }
+
+                    if (item.Status == ScanStatus.AwaitingLookup && !string.IsNullOrEmpty(item.Md5) && !string.IsNullOrEmpty(item.Sha256))
+                    {
+                        item.PromoteUrgent();
+                        if (bypassTrust) item.BypassTrustForThisItem = true;
+                        var netQ = _netQueue;
+                        if (netQ != null && netQ.TryEnqueue(new NetworkJob(item, item.ScanGeneration, item.Md5!, item.Sha256!, opts), MakeQueueKey(item)))
+                        {
+                            promotedLive++;
+                            continue;
+                        }
+                    }
+
+                    if (item.Status == ScanStatus.Queued)
+                    {
+                        item.PromoteUrgent();
+                        item.Detail = Strings.StatusUrgentQueued;
+                        if (bypassTrust) item.BypassTrustForThisItem = true;
+                        var diskQ = _diskQueue;
+                        if (diskQ != null && diskQ.TryEnqueue(new DiskJob(item, item.ScanGeneration, opts), MakeQueueKey(item)))
+                        {
+                            promotedLive++;
+                            continue;
+                        }
+                    }
+
+                    // Completed / Failed / Skipped / TrustedSkipped / Cancelled (or disk queue already closed):
+                    // Reset in place and inject into the front of the live disk queue (or follow-up in-place pass).
+                    item.ResetForRescan(bypassTrust);
+                    var dq = _diskQueue;
+                    if (dq != null && dq.TryEnqueue(new DiskJob(item, item.ScanGeneration, opts), MakeQueueKey(item)))
+                    {
+                        _eta.AddPendingWork([item]);
+                        promotedLive++;
+                    }
+                    else
+                    {
+                        needFollowUp.Add(item);
+                    }
+                }
+
+                if (needFollowUp.Count > 0)
+                {
+                    foreach (var it in needFollowUp) _pendingRescanItems.Add((it, bypassTrust));
+                }
+
+                if (promotedLive > 0 || needFollowUp.Count > 0)
+                {
+                    RecountCounters();
+                    ReportProgress();
+                    Log($"Urgent rescan/promote: {promotedLive} injected live, {needFollowUp.Count} queued for immediate in-place pass.", LogLevel.Info);
+                }
+                return;
+            }
+
+            // Idle: reset selected items IN PLACE (keep the entire existing grid intact!) and run only them.
+            IsRunning = true;
+            _runIsAutomatic = false;
+            _activeTargets = valid.Select(i => i.FilePath).ToArray();
+            startNowWhenIdle = valid;
+        }
+
+        var rescanOpts = ScanOptions.FromSettings(recurse: false);
+        rescanOpts.BypassCache = true;
+        rescanOpts.BypassTrust = bypassTrust;
+        rescanOpts.ExplicitFileSelection = true;
+        rescanOpts.PreserveExistingList = true;
+
+        foreach (var item in startNowWhenIdle)
+            item.ResetForRescan(bypassTrust);
+
+        // Ensure items exist in _allItems (defensive, e.g. if invoked from an external dialog)
+        lock (_itemsLock)
+        {
+            foreach (var item in startNowWhenIdle)
+                if (!_allItems.Contains(item)) _allItems.Add(item);
+        }
+
+        await RunLoopAsync(initialPaths: null, initialRescans: startNowWhenIdle, initialOpts: rescanOpts, clearQueue: false, externalCt: externalCt);
+    }
+
+    async Task RunLoopAsync(string[]? initialPaths, List<ScanItem>? initialRescans, ScanOptions initialOpts, bool clearQueue, CancellationToken externalCt)
+    {
+        var runPaths = initialPaths;
+        var runRescans = initialRescans;
+        var runOpts = initialOpts;
+        bool clear = clearQueue;
+
         while (true)
         {
-            await RunCoreAsync(runPaths, runOpts, clearQueue, externalCt);
+            await RunCoreAsync(runPaths, runRescans, runOpts, clear, externalCt);
+
             lock (_pendingLock)
             {
                 bool preempted = _preempting;
                 _preempting = false;
-                if (!preempted && _cts?.IsCancellationRequested == true) { _pendingPaths.Clear(); _pendingOpts = null; } // Cancel covers the queued batch too
-                if (_pendingPaths.Count == 0) { IsRunning = false; _runIsAutomatic = false; _activeTargets = []; return; }
+                if (!preempted && _cts?.IsCancellationRequested == true)
+                {
+                    _pendingPaths.Clear();
+                    _pendingRescanItems.Clear();
+                    _pendingOpts = null;
+                }
+
+                // In-place urgent rescans queued while disk stage was draining run first, without clearing the grid.
+                if (_pendingRescanItems.Count > 0)
+                {
+                    var batch = _pendingRescanItems.ToList();
+                    _pendingRescanItems.Clear();
+                    runPaths = null;
+                    runRescans = batch.Select(x => x.Item).ToList();
+                    runOpts = ScanOptions.FromSettings(recurse: false);
+                    runOpts.BypassCache = true;
+                    runOpts.BypassTrust = batch.Any(x => x.BypassTrust);
+                    runOpts.ExplicitFileSelection = true;
+                    runOpts.PreserveExistingList = true;
+                    _runIsAutomatic = false;
+                    clear = false;
+                    continue;
+                }
+
+                if (_pendingPaths.Count == 0)
+                {
+                    IsRunning = false;
+                    _runIsAutomatic = false;
+                    _activeTargets = [];
+                    return;
+                }
+
                 var next = _pendingPaths.ToArray();
                 runPaths = next;
+                runRescans = null;
                 _activeTargets = next;
                 _pendingPaths.Clear();
                 runOpts = _pendingOpts ?? runOpts;
                 _pendingOpts = null;
                 _runIsAutomatic = runOpts.Automatic;
-                clearQueue = preempted; // the user's request replaces the automatic list; a follow-up appends
+                clear = preempted; // only preempting an automatic pass replaces the grid; follow-ups append!
             }
         }
     }
 
-    /// <summary>Splits a request into the paths the running pass does not already cover and the ones it
-    /// does. A path is covered when it IS an active target or sits under one; the recursive walk of that
-    /// target will reach it anyway. Caller holds <see cref="_pendingLock"/>.</summary>
     (List<string> Fresh, List<string> Covered) SplitAlreadyCovered(IEnumerable<string> paths)
     {
         var fresh = new List<string>();
@@ -176,7 +403,7 @@ internal sealed class ScanScheduler
             if (string.IsNullOrWhiteSpace(p)) continue;
             string full;
             try { full = Path.GetFullPath(p); }
-            catch (Exception ex) { Log($"Queued path '{p}' could not be normalised ({ex.Message}); treating it as new.", LogLevel.Warning); fresh.Add(p); continue; }
+            catch { fresh.Add(p); continue; }
 
             bool inside = _activeTargets.Any(t =>
             {
@@ -186,145 +413,161 @@ internal sealed class ScanScheduler
                 if (!tf.EndsWith(Path.DirectorySeparatorChar)) tf += Path.DirectorySeparatorChar;
                 return full.StartsWith(tf, StringComparison.OrdinalIgnoreCase);
             });
-
             (inside ? covered : fresh).Add(p);
         }
         return (fresh, covered);
     }
 
-    /// <summary>One scan pass over one batch of paths. Never touches <see cref="IsRunning"/> — the
-    /// pending-queue loop in <see cref="RunAsync"/> owns that flag.</summary>
-    async Task RunCoreAsync(IEnumerable<string> paths, ScanOptions opts, bool clearQueue, CancellationToken externalCt)
+    async Task RunCoreAsync(string[]? paths, List<ScanItem>? inPlaceItems, ScanOptions opts, bool clearQueue, CancellationToken externalCt)
     {
+        bool isInPlace = inPlaceItems != null;
         using var runOp = OpLog.Begin("Scan run",
-            $"targets=[{string.Join(", ", paths.Take(4))}{(paths.Count() > 4 ? ", …" : "")}] recurse={opts.Recurse} "
-            + $"concurrency={opts.MaxConcurrency} uploads={opts.MaxUploads} uploadPolicy={opts.UploadPolicy} "
-            + $"cacheDays={opts.CacheDays}/{opts.ThreatCacheDays} clearQueue={clearQueue}");
+            isInPlace
+                ? $"in-place rescan of {inPlaceItems!.Count} item(s) bypassTrust={opts.BypassTrust}"
+                : $"targets=[{string.Join(", ", (paths ?? []).Take(4))}] recurse={opts.Recurse} concurrency={opts.MaxConcurrency} uploads={opts.MaxUploads} clearQueue={clearQueue}");
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
         var ct = _cts.Token;
-        // A user request that arrived between two passes cancelled the previous pass's token, not this
-        // one. This automatic pass must not start in its place.
         lock (_pendingLock) if (_preempting) _cts.Cancel();
-        // Pause belongs to the run it was pressed in. A new run always starts moving.
-        if (_pause.IsPaused) { _pause.Resume(); runOp.Step("pause left over from the previous run lifted"); }
-        ResetCounters();
+        if (_pause.IsPaused) { _pause.Resume(); runOp.Step("pause lifted"); }
+
+        _apiCoord.ConfigureConcurrency(opts.MaxUploads);
         _stopwatch.Restart();
-        lock (_rateLock) _recent.Clear();
-        if (clearQueue) UiPost(() => Items.Clear());
+        _lastProgressEmitMs = 0;
+
+        if (clearQueue)
+        {
+            lock (_itemsLock) _allItems.Clear();
+            ResetCounters();
+            UiPost(() => Items.Clear());
+        }
+        else
+        {
+            RecountCounters();
+        }
+
         try { Started?.Invoke(); } catch (Exception ex) { Log("Started handler failed: " + ex.Message, LogLevel.Warning); }
 
-        var archiveTemps = new List<string>(); // temp folders from archive expansion, cleaned in finally
-        List<ScanItem> items = [];             // this run's rows, so a cancel can close the ones never reached
+        var archiveTemps = new List<string>();
+        List<ScanItem> batchItems = [];
         try
         {
-            if (Settings.ResumeInterruptedScans) ScanSessionStore.SaveRunning(paths, opts.Recurse, opts.BypassTrust);
+            if (!isInPlace && Settings.ResumeInterruptedScans && paths != null)
+                ScanSessionStore.SaveRunning(paths, opts.Recurse, opts.BypassTrust);
             KnownGoodDb.Reload();
-            var safe = SelectionEnumerator.ParseExtensions(Settings.SafeExtensions);
-            var oversize = new List<string>();
-            var missing = new List<string>();
-            var files = await Task.Run(() => SelectionEnumerator.Expand(
-                paths, safe, opts.Recurse, opts.ApplySafeFilter, opts.MaxFileSizeBytes, oversize, missing), ct);
-            MissingPaths = missing;
-            if (missing.Count > 0)
-            {
-                // Never let a vanished target read as "scanned, nothing found": a scheduled sweep of a
-                // folder that was renamed or is on an unplugged drive would report all-clean forever.
-                string list = string.Join(", ", missing.Take(5));
-                Log($"Scan target(s) not found ({missing.Count}): {list}", LogLevel.Warning);
-                UiStatusHub.Report(Strings.StatusSourceScan,
-                    string.Format(Strings.ScanTargetsMissingFormat, missing.Count, list), StatusSeverity.Warning);
-            }
 
-            // Archive expansion: swap each ZIP-family archive for its extracted members so each member
-            // is hashed and looked up on its own (no upload). Archives we cannot open stay as-is.
-            var origins = new Dictionary<string, (string Archive, string Member)>(StringComparer.OrdinalIgnoreCase);
-            if (opts.ExpandArchives)
+            if (isInPlace)
             {
-                var toExpand = files;
-                files = await Task.Run(() => ExpandArchives(toExpand, archiveTemps, origins), ct);
+                batchItems = [.. inPlaceItems!];
+                batchItems.Sort(ScanPriorityOrderer.CompareItems);
             }
-
-            // Risk-weighted ordering: scan the likeliest-malicious files first (cheap local signals).
-            // Risk ordering scores every file before the first one is scanned, and scoring reads the disk
-            // twice per file: 4.6 s for the 18,183 files of System32, minutes on a whole drive, with nothing
-            // moving on screen. Past the sweep size the files are scanned one by one in walk order instead.
-            if (Settings.RiskWeightedOrdering && files.Count > 1 && files.Count <= SweepSizeThatNeedsToBePolite)
+            else
             {
-                using var orderOp = OpLog.Begin("Risk ordering", $"in: {files.Count} file(s)");
-                var toOrder = files;
-                files = await Task.Run(() => toOrder.OrderByDescending(RiskScorer.Score).ToList(), ct);
-                orderOp.Ok("out: ordered");
-            }
-            else if (Settings.RiskWeightedOrdering && files.Count > SweepSizeThatNeedsToBePolite)
-                runOp.Step($"risk ordering skipped: {files.Count} files are scanned in walk order");
+                var safe = SelectionEnumerator.ParseExtensions(Settings.SafeExtensions);
+                var oversize = new List<string>();
+                var missing = new List<string>();
+                var files = await Task.Run(() => SelectionEnumerator.Expand(
+                    paths ?? [], safe, opts.Recurse, opts.ApplySafeFilter, opts.MaxFileSizeBytes, oversize, missing), ct);
+                MissingPaths = missing;
+                if (missing.Count > 0)
+                {
+                    string list = string.Join(", ", missing.Take(5));
+                    Log($"Scan target(s) not found ({missing.Count}): {list}", LogLevel.Warning);
+                    UiStatusHub.Report(Strings.StatusSourceScan,
+                        string.Format(Strings.ScanTargetsMissingFormat, missing.Count, list), StatusSeverity.Warning);
+                }
 
-            _total = files.Count;
-            using (var rowsOp = OpLog.Begin("Build rows", $"in: {files.Count} file(s)"))
-            {
-                items = files.Select(f => origins.TryGetValue(f, out var o)
+                var origins = new Dictionary<string, (string Archive, string Member)>(StringComparer.OrdinalIgnoreCase);
+                if (opts.ExpandArchives)
+                {
+                    var toExpand = files;
+                    files = await Task.Run(() => ExpandArchives(toExpand, archiveTemps, origins), ct);
+                }
+
+                // Always enforce strict primary extension order: exe > dll > bat > ps1 > lnk > ...
+                // Risk signals break ties inside each tier for <= 5000 files without ever reordering tiers.
+                if (files.Count > 1)
+                {
+                    using var orderOp = OpLog.Begin("Priority ordering", $"in: {files.Count} file(s)");
+                    var toOrder = files;
+                    files = await Task.Run(() => ScanPriorityOrderer.OrderPaths(toOrder, Settings.RiskWeightedOrdering), ct);
+                    orderOp.Ok("out: ordered (exe > dll > bat > ps1 > lnk)");
+                }
+
+                batchItems = files.Select(f => origins.TryGetValue(f, out var o)
                     ? new ScanItem(f) { ContainerPath = o.Archive, MemberPath = o.Member }
                     : new ScanItem(f)).ToList();
-                rowsOp.Ok($"out: {items.Count} row(s)");
-            }
-            UiPost(() => BulkAdd(items));
 
-            // Ledger: show each size-skipped file as a row so the user sees what was excluded and why.
-            if (oversize.Count > 0)
-            {
-                int capMb = (int)(opts.MaxFileSizeBytes / (1024 * 1024));
-                var skipped = oversize.Select(f => new ScanItem(f) { Status = ScanStatus.Skipped, SkipReason = string.Format(Strings.SkipReasonTooLargeFormat, capMb) }).ToList();
-                UiPost(() => BulkAdd(skipped));
-                for (int n = 0; n < oversize.Count; n++) Bump(ref _skipped);
-                Log($"{oversize.Count} file(s) skipped by the {capMb} MB size cap.", LogLevel.Info);
+                lock (_itemsLock) _allItems.AddRange(batchItems);
+                UiPost(() => BulkAdd(batchItems));
+
+                if (oversize.Count > 0)
+                {
+                    int capMb = (int)(opts.MaxFileSizeBytes / (1024 * 1024));
+                    var skipped = oversize.Select(f => new ScanItem(f) { Status = ScanStatus.Skipped, SkipReason = string.Format(Strings.SkipReasonTooLargeFormat, capMb) }).ToList();
+                    lock (_itemsLock) _allItems.AddRange(skipped);
+                    UiPost(() => BulkAdd(skipped));
+                    Log($"{oversize.Count} file(s) skipped by the {capMb} MB size cap.", LogLevel.Info);
+                }
             }
+
+            RecountCounters();
             ReportProgress();
 
-            if (items.Count == 0)
+            if (batchItems.Count == 0)
             {
                 Log("Nothing to scan.", LogLevel.Warning);
                 return;
             }
 
-            _uploadGate = new SemaphoreSlim(Math.Max(1, opts.MaxUploads));
-            _lookupGate = new SemaphoreSlim(Math.Max(1, opts.MaxConcurrency));
             _md5Gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
-            _pendingAnalyses.Clear(); // a cancelled run can leave watchers behind; they are not this run's
+            _runNotSubmittedByMd5 = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            _runPendingUploadByMd5 = new ConcurrentDictionary<string, Task<(VtFileReport? Report, LookupFailure Failure)>>(StringComparer.OrdinalIgnoreCase);
+            _isLargeSweep = !isInPlace && (opts.Automatic || (!opts.ExplicitFileSelection && (batchItems.Count > LargeSweepUploadCap || IsWholeDriveTarget(paths ?? []))));
+            _pendingAnalyses.Clear();
+            _eta.Reset(batchItems, opts, _isLargeSweep);
+            ReportProgress();
 
-            // The disk stage takes the files one at a time. It used to run two dozen wide (the concurrency
-            // setting plus the core count), and two dozen workers reading whole files and verifying
-            // signatures at once made the whole machine stall. A worker no longer waits on VirusTotal —
-            // it hands the file to the network stage below and moves on — so nothing is gained by more of
-            // them except load.
             const int localDegree = 1;
-            using var heartbeat = StartHeartbeat(items.Count, localDegree, ct);
+            using var heartbeat = StartHeartbeat(localDegree, ct);
             using var quietList = SuspendItemNotifications();
             using var finishedFlush = StartFinishedFlush();
-            using var politeCpu = YieldToTheRestOfTheMachine(items.Count);
+            using var politeCpu = YieldToTheRestOfTheMachine(batchItems.Count);
 
-            _netQueue = System.Threading.Channels.Channel.CreateUnbounded<NetworkJob>(
-                new System.Threading.Channels.UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
-            _currentOpts = opts; // so a manual/auto "unstick" can build fresh jobs for dropped files
+            _diskQueue = new PriorityWorkQueue<DiskJob, QueueKey>();
+            _netQueue = new PriorityWorkQueue<NetworkJob, QueueKey>();
+            _currentOpts = opts;
             Interlocked.Exchange(ref _consecutiveEmpty, 0);
-            int netWorkers = Math.Max(1, opts.MaxConcurrency);
-            var netTasks = Enumerable.Range(0, netWorkers).Select(i => NetworkWorkerAsync(i, ct)).ToArray();
-            Log($"Network stage started with {netWorkers} worker(s); disk stage runs {localDegree} wide.", LogLevel.Info);
 
-            foreach (var item in items)
+            foreach (var item in batchItems)
+                _diskQueue.TryEnqueue(new DiskJob(item, item.ScanGeneration, opts), MakeQueueKey(item));
+
+            int netWorkers = Math.Max(2, Math.Max(opts.MaxConcurrency, BrowserSessionFactory.DesiredConcurrency()));
+            var netTasks = Enumerable.Range(0, netWorkers).Select(i => NetworkWorkerAsync(i, ct)).ToArray();
+            Log($"Network stage started with {netWorkers} cell worker(s); disk stage runs {localDegree} wide (browser-first).", LogLevel.Info);
+
+            // Drain priority-ordered disk queue; live urgent promotions/rescans can jump to the front mid-run!
+            while (!ct.IsCancellationRequested)
             {
-                ct.ThrowIfCancellationRequested(); // ProcessAsync absorbs a cancel per file; the run must stop here
-                await ProcessAsync(item, opts, ct);
+                if (_diskQueue.Count == 0)
+                {
+                    // Check once under _pendingLock: no more disk jobs arriving unless a live rescan arrives later.
+                    _diskQueue.Complete();
+                    break;
+                }
+                var (hasJob, job) = await _diskQueue.TryDequeueAsync(ct);
+                if (!hasJob) break;
+                if (job.Generation != job.Item.ScanGeneration) continue; // superseded by an urgent promotion
+                await ProcessAsync(job.Item, job.Options, job.Generation, ct);
             }
 
-            // The disk is done; tell the network stage no more files are coming and let it finish.
-            using (var drainNet = OpLog.Begin("Drain network queue", $"in: {_netQueue.Reader.Count} file(s) still queued"))
+            using (var drainNet = OpLog.Begin("Drain network queue", $"in: {_netQueue.Count} file(s) still queued"))
             {
-                _netQueue.Writer.TryComplete();
+                _netQueue.Complete();
                 await Task.WhenAll(netTasks);
                 drainNet.Ok("out: network stage closed");
             }
 
-            // Uploaded files whose analysis is still running finish on the background watcher; the run
-            // is not over until they land, or the whole sweep would report them as never answered.
             if (!_pendingAnalyses.IsEmpty)
             {
                 using var drain = OpLog.Begin("Drain pending analyses", $"in: {_pendingAnalyses.Count} still running");
@@ -344,14 +587,14 @@ internal sealed class ScanScheduler
         }
         finally
         {
-            // Keep the session if the user stopped (cancelled) so it can be resumed; clear it on
-            // a natural finish. A crash also leaves it (finally never runs) -> resume offered.
             if (!ct.IsCancellationRequested) ScanSessionStore.Clear();
-            else MarkUnfinishedCancelled(items, runOp);
+            else MarkUnfinishedCancelled(batchItems, runOp);
             foreach (var td in archiveTemps) ArchiveExpander.CleanupTemp(td);
             _cache.Flush();
             FingerprintCache.Flush();
             PendingOutbox.Flush();
+            RecountCounters();
+            ReportProgress();
             Log($"Fingerprint cache: {FingerprintCache.Hits} reuse(s), {FingerprintCache.Misses} miss(es), {FingerprintCache.Count} entr(ies) held.", LogLevel.Info);
             try { Finished?.Invoke(); } catch (Exception ex) { Log("Finished handler failed: " + ex.Message, LogLevel.Warning); }
             Log("Scan finished.", LogLevel.Info);
@@ -360,12 +603,8 @@ internal sealed class ScanScheduler
         }
     }
 
-    /// <summary>
-    /// Closes every row a cancelled run never finished. Files the workers had not reached, and files
-    /// still waiting in the network queue, kept the status they had when the run stopped, so the table
-    /// said "Sırada" for thousands of files that nothing was ever going to touch again. One trip to the
-    /// UI thread and one grid reset for the whole batch.
-    /// </summary>
+    static QueueKey MakeQueueKey(ScanItem item) => new(-item.UrgentOrder, item.PriorityTier, item.AddedSequence);
+
     void MarkUnfinishedCancelled(List<ScanItem> items, OpLog runOp)
     {
         if (items.Count == 0) return;
@@ -384,7 +623,7 @@ internal sealed class ScanScheduler
                     closed++;
                 }
             }
-            catch (Exception ex) { Log("Closing the unfinished rows failed: " + ex.Message, LogLevel.Warning); }
+            catch (Exception ex) { Log("Closing unfinished rows failed: " + ex.Message, LogLevel.Warning); }
             finally
             {
                 Items.RaiseListChangedEvents = raising;
@@ -392,11 +631,9 @@ internal sealed class ScanScheduler
                 Log($"Run cancelled: {closed} unfinished row(s) marked cancelled.", LogLevel.Info);
             }
         });
-        runOp.Step("unfinished rows handed to the UI to be marked cancelled");
+        runOp.Step("unfinished rows marked cancelled");
     }
 
-    /// <summary>Replaces each expandable archive with its extracted member paths (tracking the temp
-    /// folders for cleanup). Archives that fail to open are scanned as the archive file itself.</summary>
     static List<string> ExpandArchives(List<string> files, List<string> tempDirs, Dictionary<string, (string Archive, string Member)> origins)
     {
         var result = new List<string>();
@@ -417,25 +654,34 @@ internal sealed class ScanScheduler
         return result;
     }
 
-    async Task ProcessAsync(ScanItem item, ScanOptions opts, CancellationToken ct)
+    async Task ProcessAsync(ScanItem item, ScanOptions opts, int generation, CancellationToken ct)
     {
-        // Per file, at Debug: on a 300k-file sweep this is the only way to answer "what was it doing
-        // when it stopped?" — the aggregate counters cannot point at a single stuck file.
         using var op = OpLog.Begin("File", $"{item.DisplayName} ({item.SizeText}) — {item.FilePath}");
         bool handedOff = false;
+        System.Diagnostics.Stopwatch? localSw = null;
+        double hashSec = 0;
+        bool hashedFromDisk = false;
+        bool bypassTrust = opts.BypassTrust || item.BypassTrustForThisItem;
+        bool bypassCache = opts.BypassCache || bypassTrust || item.BypassCacheForThisItem;
+
         try
         {
             await _pause.WaitWhilePausedAsync(ct);
+            localSw = System.Diagnostics.Stopwatch.StartNew();
 
-            // Cheapest signal first: a trusted code signature is read from the file handle and needs
-            // NO hash, so check it before reading the whole file end-to-end. A trusted-signed file
-            // then skips without ever being hashed — a big win on signed-heavy install trees.
-            // (Trusted = vouched-for provenance, NOT "clean" — it never shows the green banner.)
-            if (opts.SkipTrusted && !opts.BypassTrust)
+            // Pre-compute zone & overlay metadata off the UI thread so the detail pane never freezes.
+            if (!item.LocalMetaComputed)
             {
-                SetStatus(item, ScanStatus.CheckingSignature); // verifying can take seconds on a large file
+                try { item.CachedZoneSummary = ZoneIdentifier.Read(item.ContainerPath ?? item.FilePath)?.Summary; } catch { }
+                try { item.CachedOverlayBytes = OverlayDetector.OverlayBytes(item.FilePath); } catch { }
+                item.LocalMetaComputed = true;
+            }
+
+            if (opts.SkipTrusted && !bypassTrust)
+            {
+                SetStatus(item, ScanStatus.CheckingSignature);
                 var trust = TrustService.Evaluate(item.FilePath);
-                item.Trust = trust; // keep the signature signal even when the file is still sent to VT
+                item.Trust = trust;
                 if (trust.Trusted) ProductSignerRegistry.RecordTrusted(item.FilePath, trust.Publisher);
                 if (TrustService.ShouldSkip(trust, Settings.TrustMicrosoftOnly, Settings.TrustPublisherAllowList))
                 {
@@ -447,24 +693,23 @@ internal sealed class ScanScheduler
 
             SetStatus(item, ScanStatus.Hashing);
             string md5, sha256;
-            // Reading the file end-to-end is the whole cost of the local stage, and on a repeat sweep
-            // the answer is almost always the one from last time. A deliberate re-check (BypassTrust)
-            // still hashes for real.
-            var known = (Settings.UseFingerprintCache && !opts.BypassTrust) ? FingerprintCache.TryGet(item.FilePath) : null;
+            var known = (Settings.UseFingerprintCache && !bypassCache) ? FingerprintCache.TryGet(item.FilePath) : null;
             if (known is { } fp)
             {
                 (md5, sha256) = (fp.Md5, fp.Sha256);
-                op.Step("hashes reused from the fingerprint cache");
+                op.Step("hashes reused from fingerprint cache");
             }
             else
             {
+                var hashSw = System.Diagnostics.Stopwatch.StartNew();
                 (md5, sha256) = await HashService.ComputeAsync(item.FilePath, ct);
+                hashSec = hashSw.Elapsed.TotalSeconds;
+                hashedFromDisk = true;
                 if (Settings.UseFingerprintCache) FingerprintCache.Put(item.FilePath, md5, sha256);
             }
             ItemWrite(() => { item.Md5 = md5; item.Sha256 = sha256; });
 
-            // --no-trust (BypassTrust) forces a fresh scan: ignore the local cache too.
-            if (opts.UseCache && !opts.BypassTrust)
+            if (opts.UseCache && !bypassCache)
             {
                 var cached = _cache.TryGet(md5, opts.CacheDays, opts.ThreatCacheDays);
                 if (cached != null)
@@ -476,60 +721,44 @@ internal sealed class ScanScheduler
                 }
             }
 
-            // Known-good list check needs the hash, so it stays after hashing.
-            if (opts.SkipTrusted && !opts.BypassTrust && KnownGoodDb.Contains(md5, sha256))
+            if (opts.SkipTrusted && !bypassTrust && KnownGoodDb.Contains(md5, sha256))
             {
                 TrustSkip(item, Strings.SkipReasonKnownGoodList, null);
                 op.Ok("known-good list");
                 return;
             }
 
-            // User allowlist ("I marked this clean"): an explicit per-file override, honored unless the
-            // user forced a full re-scan with BypassTrust.
-            if (!opts.BypassTrust && AllowlistStore.Contains(md5, sha256))
+            if (!bypassTrust && AllowlistStore.Contains(md5, sha256))
             {
                 TrustSkip(item, Strings.SkipReasonUserSaidClean, null);
-                op.Ok("allowlisted by the user");
+                op.Ok("allowlisted by user");
                 return;
             }
 
-            // Folder suppression: dev/build-output dirs whose ever-changing hashes the per-file allowlist
-            // can't cover.
-            if (!opts.BypassTrust && FolderSuppressionStore.Contains(item.FilePath))
+            if (!bypassTrust && FolderSuppressionStore.Contains(item.FilePath))
             {
                 TrustSkip(item, Strings.SkipReasonDevFolder, null);
                 op.Ok("suppressed folder");
                 return;
             }
 
-            // Scope: on a folder sweep set to code-shaped files only, a font or a Store icon does not
-            // get a lookup. It still went through hashing and the cache, so a KNOWN verdict above would
-            // already have been reported; this only stops spending quota to be told "never seen it".
-            if (opts.LookupPolicy == 1 && !opts.ExplicitFileSelection && !opts.BypassTrust
+            if (opts.LookupPolicy == 1 && !opts.ExplicitFileSelection && !bypassTrust && !item.IsPriorityBoosted
                 && !FileClass.IsWorthUploading(item.FilePath))
             {
                 ItemWrite(() => { item.SkipReason = Strings.SkipReasonNotCodeFile; item.Status = ScanStatus.Skipped; });
-                Bump(ref _skipped);
                 op.Ok("not a code file — no lookup spent");
                 return;
             }
 
-            // Everything above was local and costs milliseconds. What is left needs VirusTotal, which
-            // costs seconds to minutes and is rate-limited to about a lookup a second across every key.
-            // A worker that carries a file through that stage is a worker not hashing the next one, and
-            // there are only two dozen of them: the sweep dropped from 2,587 files a minute to 20 the
-            // moment they were all queued on the network. So the file is handed to the network stage,
-            // which runs on its own bounded set of tasks, and this worker goes back to the disk.
             SetStatus(item, ScanStatus.AwaitingLookup);
-            if (!_netQueue!.Writer.TryWrite(new NetworkJob(item, md5, sha256, opts)))
+            if (!_netQueue!.TryEnqueue(new NetworkJob(item, item.ScanGeneration, md5, sha256, opts), MakeQueueKey(item)))
             {
-                // An unbounded channel only refuses after it is completed, i.e. the run is ending.
                 Log($"Network queue closed; {item.FileName} was not looked up.", LogLevel.Warning);
                 op.Note("network queue closed");
                 return;
             }
             handedOff = true;
-            op.Note("local stage done — handed to the network queue");
+            op.Note("local stage done — handed to query cell queue");
         }
         catch (OperationCanceledException)
         {
@@ -538,12 +767,8 @@ internal sealed class ScanScheduler
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A disk sweep walks live temp files and folders this account cannot open. Neither is a
-            // scan error, and reporting them as failures painted the whole run red. The row says which
-            // one it was and the file is counted as not examined — it is not quietly called clean.
             string reason = ex is UnauthorizedAccessException ? Strings.SkipReasonNoAccess : Strings.SkipReasonFileLocked;
             ItemWrite(() => { item.SkipReason = reason; item.Status = ScanStatus.Skipped; });
-            Bump(ref _skipped);
             Log($"Not readable, skipped: {item.FilePath} — {ex.Message}", LogLevel.Warning);
             op.Note("not readable — " + reason);
         }
@@ -551,39 +776,29 @@ internal sealed class ScanScheduler
         {
             ItemWrite(() => item.Error = ex.Message);
             SetStatus(item, ScanStatus.Failed);
-            Bump(ref _failed);
             if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
             Log($"Scan failed for {item.FileName}: {ex}", LogLevel.Error);
             op.Fail(ex.Message);
         }
         finally
         {
+            _eta.RecordLocalStage(item.SizeBytes, localSw?.Elapsed.TotalSeconds ?? 0, hashSec, hashedFromDisk, handedOff);
             if (!handedOff) FinishItem(item);
         }
     }
 
-    /// <summary>Turns a lookup result into the item's visible outcome and bumps the matching counter.
-    /// Shared by the inline path and by the background analysis watcher, so a file that finished late
-    /// is reported exactly like one that finished on its worker.</summary>
     void RecordOutcome(ScanItem item, VtFileReport? report, LookupFailure failure, OpLog op)
     {
         if (report == null && failure == LookupFailure.NotSubmitted)
         {
-            // Not a failure: VirusTotal has never seen it and it is not the kind of file a
-            // submission would be spent on. Saying "error" here would paint a disk sweep red.
-            ItemWrite(() => { item.SkipReason = Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
-            Bump(ref _skipped);
+            ItemWrite(() => { item.SkipReason ??= Strings.SkipReasonNotSubmitted; item.Status = ScanStatus.Skipped; });
             op.Ok("not in VirusTotal, not submitted");
         }
         else if (report == null && failure is LookupFailure.LookupEmpty or LookupFailure.UnknownNoKey)
         {
-            // Never asked, rather than asked and got a bad answer: the keys were spent and the keyless
-            // channel was blocked. Calling that a scan failure would report a file as broken when
-            // nothing about it was ever checked. It is queued for the next run instead.
             ItemWrite(() => { item.SkipReason = Strings.SkipReasonNotAskedYet; item.Status = ScanStatus.Skipped; });
-            Bump(ref _skipped);
             PendingOutbox.Add(item.FilePath);
-            op.Note("not asked yet — no channel could serve it; queued for the next run");
+            op.Note("not asked yet — queued for next run");
         }
         else if (report == null)
         {
@@ -594,10 +809,7 @@ internal sealed class ScanScheduler
             };
             ItemWrite(() => item.Error = reason);
             SetStatus(item, ScanStatus.Failed);
-            Bump(ref _failed);
             Log($"No report for {item.FileName} ({failure}): {reason}", LogLevel.Warning);
-            // Offline self-heal: if we're offline, remember the file to retry when connectivity returns
-            // (a real "not found" while online is NOT queued, so 404s don't pile up).
             if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) PendingOutbox.Add(item.FilePath);
             op.Fail(failure + " — " + reason);
         }
@@ -609,32 +821,16 @@ internal sealed class ScanScheduler
         }
     }
 
-    /// <summary>A sweep large enough that the machine has to keep being usable while it runs.</summary>
-    const int SweepSizeThatNeedsToBePolite = 5000;
-
-    /// <summary>Set by the GUI: <see cref="UiPost"/> reaches a window's UI thread. The command line posts inline,
-    /// onto a scan thread, whose priority must not be raised.</summary>
-    public bool HasUiThread { get; set; }
-
     static void SetCurrentThreadPriority(System.Threading.ThreadPriority priority)
     {
         try
         {
-            // UiPost runs the action inline when the window has no handle yet; only a thread that runs a
-            // message loop is the UI thread.
             if (!System.Windows.Forms.Application.MessageLoop) return;
             System.Threading.Thread.CurrentThread.Priority = priority;
-            Log($"UI thread priority set to {priority}.", LogLevel.Info);
         }
-        catch (Exception ex) { Log("Could not set the UI thread priority: " + ex.Message, LogLevel.Warning); }
+        catch { }
     }
 
-    /// <summary>
-    /// Drops the process to below-normal priority for the length of a large sweep, and puts it back
-    /// afterwards. Two dozen workers reading the disk flat out at normal priority make the whole machine
-    /// lag — windows stop coming to the front, everything else waits behind the scan. Below-normal keeps
-    /// every bit of idle capacity for the sweep while whatever the user is doing goes first.
-    /// </summary>
     IDisposable? YieldToTheRestOfTheMachine(int fileCount)
     {
         if (fileCount < SweepSizeThatNeedsToBePolite) return null;
@@ -642,49 +838,35 @@ internal sealed class ScanScheduler
         {
             var me = System.Diagnostics.Process.GetCurrentProcess();
             var previous = me.PriorityClass;
-            if (previous != System.Diagnostics.ProcessPriorityClass.Normal) return null; // the user set it; leave it
+            if (previous != System.Diagnostics.ProcessPriorityClass.Normal) return null;
             me.PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
-            Log($"Sweep of {fileCount} file(s): process priority lowered to BelowNormal so the machine stays usable.", LogLevel.Info);
-
-            // The priority class covers every thread, the window's too. Scanning the Bannerlord folders the
-            // machine sat at 55-100% CPU (Defender reading the same files, the keyless browser, System), and a
-            // below-normal UI thread lost to all of it: eight grid rows took 900 ms to paint while the process
-            // itself used almost no CPU. Highest inside a below-normal process is the base priority of an
-            // ordinary window's thread, so the window keeps its place and only the scan work steps back.
             if (HasUiThread) UiPost(() => SetCurrentThreadPriority(System.Threading.ThreadPriority.Highest));
-
             return new Restore(() =>
             {
                 try
                 {
                     System.Diagnostics.Process.GetCurrentProcess().PriorityClass = previous;
                     if (HasUiThread) UiPost(() => SetCurrentThreadPriority(System.Threading.ThreadPriority.Normal));
-                    Log("Sweep finished: process priority restored to " + previous + ".", LogLevel.Info);
                 }
-                catch (Exception ex) { Log("Could not restore process priority: " + ex.Message, LogLevel.Warning); }
+                catch { }
             });
         }
-        catch (Exception ex) { Log("Could not lower process priority: " + ex.Message, LogLevel.Warning); return null; }
+        catch { return null; }
     }
 
     readonly List<ScanItem> _finished = [];
     readonly object _finishedLock = new();
 
-    /// <summary>
-    /// Counts one item done and queues its announcement.
-    ///
-    /// <see cref="ItemFinished"/> is marshalled to the UI thread because subscribers mutate the grid,
-    /// but one post per file is 460 posts a second on a fast sweep and the message pump cannot answer
-    /// anything else. Finished items are collected here and announced in batches a few times a second
-    /// instead — same event, same order, one post per batch.
-    /// </summary>
     void FinishItem(ScanItem item)
     {
-        DoneOne();
+        item.BypassCacheForThisItem = false;
+        item.BypassTrustForThisItem = false;
+        RecountCounters();
+        _eta.RecordItemDone();
+        Volatile.Write(ref _progressDirty, 1);
         lock (_finishedLock) _finished.Add(item);
     }
 
-    /// <summary>Announces everything finished since the last flush, in one trip to the UI thread.</summary>
     void FlushFinished()
     {
         ScanItem[] batch;
@@ -696,18 +878,14 @@ internal sealed class ScanScheduler
         }
         UiPost(() =>
         {
-            var clock = System.Diagnostics.Stopwatch.StartNew();
             foreach (var it in batch)
             {
                 try { ItemFinished?.Invoke(it); }
                 catch (Exception ex) { Log("ItemFinished handler failed: " + ex.Message, LogLevel.Warning); }
             }
-            if (clock.ElapsedMilliseconds >= 100)
-                Log($"Announcing {batch.Length} finished file(s) took {clock.ElapsedMilliseconds} ms on the UI thread.", LogLevel.Warning);
         });
     }
 
-    /// <summary>Flushes finished items to the UI a few times a second for the length of a run.</summary>
     IDisposable StartFinishedFlush()
     {
         var timer = new System.Threading.Timer(_ =>
@@ -718,134 +896,101 @@ internal sealed class ScanScheduler
         return new Restore(() => { try { timer.Dispose(); } catch { } FlushFinished(); FlushProgress(); });
     }
 
-    /// <summary>The resilient lookup chain for one file (keyless GUI when it is free, API + upload
-    /// otherwise, GUI again as the last resort), caching the result. Held under a per-md5 gate so
-    /// duplicates in a run share it. Returns the report, or null plus the reason there is none.
-    ///
-    /// Two things here decide the real throughput of a big scan:
-    ///  * The keyless browser can only serve ONE lookup at a time. Queueing every worker behind it
-    ///    turned a 16-way scan into a 1-way scan and left the API keys idle, so when a key has room
-    ///    right now the browser is skipped instead of waited for.
-    ///  * The concurrency slot is released before the analysis poll. Polling is waiting, not working;
-    ///    holding a slot through a 15-minute wait is what made uploads run one-after-another.
+    /// <summary>
+    /// Executes one autonomous <see cref="QueryCell"/> lookup (browser-first, zero-cookie, full resistance
+    /// matrix + dynamic ApiCoordinator consultation). If VT definitively answers 404 and the file is upload-eligible,
+    /// submits the file to <see cref="ApiCoordinator"/>'s priority upload queue and hands polling to WatchAnalysis.
     /// </summary>
     async Task<(VtFileReport? Report, LookupFailure Failure)> DoLookupAsync(ScanItem item, string md5, string sha256, ScanOptions opts, CancellationToken ct)
     {
         await _pause.WaitWhilePausedAsync(ct);
 
-        bool guiAvailable = Settings.KeylessGuiLookup && GuiScrapeService.IsRuntimeAvailable;
-        VtFileReport? report = null;
-        var failure = LookupFailure.LookupEmpty;
-        bool guiAnswered = false;      // the browser actually ran the lookup (rather than being skipped as busy)
-        bool vtHasNeverSeenIt = false; // the API answered 404 — asking any other channel gets the same 404
+        bool allowBrowser = (opts.ForceKeyless || Settings.KeylessGuiLookup) && BrowserSessionFactory.IsRuntimeAvailable;
+        bool allowApi = !opts.ForceKeyless && _apiCoord.HasUsableKeys;
+        bool allowUserCaptcha = !GuiScrapeService.HeadlessMode && !GuiScrapeService.ProbeMode;
 
-        // The row says which wait it is in. "VirusTotal sorgulanıyor" for every one of them left a file
-        // showing the same text for minutes while it was only queued for a connection slot, a key or the
-        // browser, and nothing on screen told those apart.
-        ItemWrite(() => { item.Detail = Strings.StatusWaitingLookupSlot; item.Status = ScanStatus.AwaitingLookup; });
-        await _lookupGate!.WaitAsync(ct);
-        int slotHeld = 1;
-        void ReleaseSlot() { if (Interlocked.Exchange(ref slotHeld, 0) == 1) _lookupGate!.Release(); }
-        try
+        ItemWrite(() => { item.Status = ScanStatus.LookingUp; item.Detail = Strings.StatusLookingUp; });
+
+        var cell = new QueryCell(_apiCoord, _pause);
+        var res = await cell.LookupAsync(
+            sha256,
+            item.UrgentOrder,
+            item.PriorityTier,
+            allowBrowser,
+            allowApi,
+            allowUserCaptcha,
+            onStatus: (rScore, detail) => ItemWrite(() =>
+            {
+                item.ResistanceScore = rScore;
+                item.Detail = detail;
+            }),
+            ct);
+
+        if (res.Report != null)
         {
-            if (guiAvailable)
-            {
-                // When a key can serve this file right now, don't queue behind the single browser —
-                // let the API take it and leave the browser for the workers that have no key room.
-                //
-                // The wait is bounded even when no key has room. The browser serves one lookup at a
-                // time; waiting on it forever meant every network worker queued behind that one
-                // instance while the per-minute key windows rolled over unused, and the measured rate
-                // was 15 lookups a minute against the 56 the keys allow. A worker that does not get
-                // the browser quickly falls through to the API below and waits for a key instead.
-                var guiWait = _rotator.HasImmediateRoom ? TimeSpan.Zero : GuiWaitWhenKeysBusy;
-                string guiNote = guiWait == TimeSpan.Zero ? Strings.StatusAskingKeyless
-                    : string.Format(Strings.StatusWaitingKeylessFormat, (int)guiWait.TotalSeconds);
-                ItemWrite(() => { item.Detail = guiNote; item.Status = ScanStatus.LookingUp; });
-                report = await GuiScrapeService.LookupAsync(sha256, ct, guiWait).WaitAsync(ct);
-                guiAnswered = report != null;
-            }
-
-            if (report == null && !_rotator.HasUsableKeys) failure = LookupFailure.UnknownNoKey;
-
-            // Every key parked until the daily reset? Then waiting 75 seconds per file to find that out
-            // again is pure delay — go straight to the keyless path, which costs no quota.
-            bool apiWorthTrying = _rotator.HasImmediateRoom
-                || _rotator.SoonestResetUtc is not { } reset
-                || reset - DateTime.UtcNow <= ApiWaitForKey
-                || !guiAvailable;
-
-            bool apiAsked = false;
-            if (report == null && _rotator.HasUsableKeys && apiWorthTrying)
-            {
-                apiAsked = true;
-                ItemWrite(() => { item.Detail = Strings.StatusAskingApi; item.Status = ScanStatus.LookingUp; });
-                var (gotKeySlot, existing) = await TryCallWithRotation(key => _api.GetFileReportAsync(md5, key, ct), ApiWaitForKey, ct);
-                report = existing;
-                if (report == null && gotKeySlot) vtHasNeverSeenIt = true; // a served 404 is an answer
-                if (report == null && gotKeySlot && !ShouldUpload(item.FilePath, opts))
-                {
-                    failure = LookupFailure.NotSubmitted;
-                    Log($"Not in VirusTotal and not submitted (upload policy): {item.FileName}", LogLevel.Debug);
-                }
-                else if (report == null && gotKeySlot)
-                {
-                    await _pause.WaitWhilePausedAsync(ct);
-                    SetStatus(item, ScanStatus.Uploading);
-                    var progress = new ActionProgress<UploadProgress>(p => ItemWrite(() =>
-                    {
-                        item.Progress = (int)Math.Round(p.Percent);
-                        item.Detail = string.Format(Strings.UploadProgressDetailFormat, p.Percent, FormatBytes(p.BytesSent), FormatBytes(p.TotalBytes), FormatBytes(p.BytesPerSecond));
-                    }));
-                    await _uploadGate!.WaitAsync(ct);
-                    (bool uploaded, string? analysisId) = (false, null);
-                    try { (uploaded, analysisId) = await TryCallWithRotation(key => _api.UploadFileAsync(item.FilePath, key, progress, ct), ApiWaitForKey, ct); }
-                    finally { _uploadGate.Release(); }
-
-                    if (uploaded && analysisId != null)
-                    {
-                        SetStatus(item, ScanStatus.Polling);
-                        ReleaseSlot(); // waiting for VirusTotal to finish must not block another file's lookup
-                        // ...and it must not hold a scan WORKER either. An analysis takes minutes; a
-                        // worker parked on one is a worker not hashing the next file, and with enough of
-                        // them parked the sweep stops moving even though most of the disk needs no
-                        // network at all. The wait goes to a background watcher and this file is
-                        // finished by whatever that watcher gets back.
-                        WatchAnalysis(item, analysisId, md5, sha256, opts, ct);
-                        return (null, LookupFailure.AnalysisPending);
-                    }
-                }
-            }
-
-            // Last resort: the API was off, spent or refused -> take the keyless browser, waiting for it
-            // this time (there is nothing else left to try). Skipped when another channel already gave a
-            // definite answer: a file still being analysed, or one the API said outright it has never
-            // seen. Both would come back identical from the browser and cost a slot to learn nothing.
-            if (report == null && guiAvailable && !guiAnswered && !vtHasNeverSeenIt && !ct.IsCancellationRequested
-                && failure is not (LookupFailure.AnalysisTimedOut or LookupFailure.NotSubmitted))
-            {
-                // Say which it was: an API that was asked and gave nothing, or keys with no room left, when the
-                // API was never asked at all.
-                string note = apiAsked ? Strings.StatusKeylessLastResort : Strings.StatusKeylessNoKeyRoom;
-                ItemWrite(() => { item.Detail = note; item.Status = ScanStatus.LookingUp; });
-                report = await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
-            }
+            _eta.RecordLookup(res.ElapsedSeconds, viaKeyless: !res.ServedByApi, triggeredUpload: false);
+            if (opts.UseCache && res.Report.TotalEngines > 0)
+                _cache.Put(md5, res.Report, item.LastingPath);
+            return (res.Report, LookupFailure.None);
         }
-        finally { ReleaseSlot(); }
 
-        if (report != null && opts.UseCache && report.TotalEngines > 0)
-            _cache.Put(md5, report, item.LastingPath);
+        if (res.NotFoundOnVt)
+        {
+            var (shouldUpload, skipReason) = EvaluateUpload(item, opts, _isLargeSweep);
+            if (!shouldUpload)
+            {
+                _eta.RecordLookup(res.ElapsedSeconds, viaKeyless: !res.ServedByApi, triggeredUpload: false);
+                ItemWrite(() => item.SkipReason = skipReason);
+                _runNotSubmittedByMd5?.TryAdd(md5, skipReason);
+                return (null, LookupFailure.NotSubmitted);
+            }
+            if (!_apiCoord.HasUsableKeys)
+            {
+                _eta.RecordLookup(res.ElapsedSeconds, viaKeyless: !res.ServedByApi, triggeredUpload: false);
+                return (null, LookupFailure.UnknownNoKey);
+            }
 
-        return (report, report != null ? LookupFailure.None : failure);
+            _eta.RecordLookup(res.ElapsedSeconds, viaKeyless: !res.ServedByApi, triggeredUpload: true);
+            await _pause.WaitWhilePausedAsync(ct);
+            ItemWrite(() =>
+            {
+                item.Status = ScanStatus.Uploading;
+                item.Detail = string.Format(Strings.StatusApiUploadQueuedFormat, Math.Max(1, _apiCoord.PendingUploadCount + 1));
+            });
+
+            _eta.UpdateUploadProgress(item.AddedSequence, Math.Max(0, item.SizeBytes), 0, 0);
+            var progress = new ActionProgress<UploadProgress>(p =>
+            {
+                _eta.UpdateUploadProgress(item.AddedSequence, p.TotalBytes, p.BytesSent, p.BytesPerSecond);
+                ItemWrite(() =>
+                {
+                    item.Progress = (int)Math.Round(p.Percent);
+                    item.Detail = string.Format(Strings.UploadProgressDetailFormat, p.Percent, FormatBytes(p.BytesSent), FormatBytes(p.TotalBytes), FormatBytes(p.BytesPerSecond));
+                });
+            });
+
+            (bool uploaded, string? analysisId) = (false, null);
+            try
+            {
+                (uploaded, analysisId) = await _apiCoord.UploadFileAsync(
+                    item.FilePath, item.UrgentOrder, item.PriorityTier, progress, ApiWaitForUpload, ct);
+            }
+            finally { _eta.EndUpload(item.AddedSequence); }
+
+            if (uploaded && analysisId != null)
+            {
+                SetStatus(item, ScanStatus.Polling);
+                WatchAnalysis(item, analysisId, md5, sha256, opts, ct);
+                return (null, LookupFailure.AnalysisPending);
+            }
+            return (null, LookupFailure.LookupEmpty);
+        }
+
+        _eta.RecordLookup(res.ElapsedSeconds, viaKeyless: !res.ServedByApi, triggeredUpload: false);
+        return (null, res.Failure);
     }
 
-    /// <summary>
-    /// Writes one line a minute saying where the sweep actually is: how many files are done out of how
-    /// many, what the free paths absorbed, how many are waiting on VirusTotal, and the rate. Without it
-    /// a 340k-file run leaves nothing in the log between "started" and "finished" but a per-file trace
-    /// nobody can add up, and a stall looks exactly like slow progress.
-    /// </summary>
-    IDisposable StartHeartbeat(int total, int workers, CancellationToken ct)
+    IDisposable StartHeartbeat(int workers, CancellationToken ct)
     {
         var started = DateTime.UtcNow;
         int lastDone = 0;
@@ -854,55 +999,43 @@ internal sealed class ScanScheduler
             try
             {
                 int done = Volatile.Read(ref _done);
+                int total = Volatile.Read(ref _total);
                 var elapsed = DateTime.UtcNow - started;
                 double perMin = elapsed.TotalMinutes > 0 ? done / elapsed.TotalMinutes : 0;
-                string eta = perMin > 0.01 ? TimeSpan.FromMinutes((total - done) / perMin).ToString(@"d\g\ hh\:mm") : "?";
+                var (_, rem) = EstimateProgress(total, done);
+                string eta = rem is { } r
+                    ? (r.TotalDays >= 1 ? r.ToString(@"d\g\ hh\:mm") : r.ToString(@"hh\:mm\:ss"))
+                    : "?";
                 Log($"Sweep progress: {done}/{total} ({(total > 0 ? done * 100.0 / total : 0):0.0}%), "
-                    + $"+{done - lastDone} in the last minute, {perMin:0.0}/min, ETA {eta} — "
+                    + $"+{done - lastDone} in last min, {perMin:0.0}/min, ETA {eta} — "
                     + $"clean={_clean} malicious={_malicious} suspicious={_suspicious} unknown={_unknown} "
                     + $"skipped={_skipped} signed={_signedSkipped} failed={_failed}; "
-                    + $"queued for VirusTotal={NetworkQueueDepth}, waiting on analysis={_pendingAnalyses.Count}, workers={workers}, "
-                    + $"keys usable={_rotator.UsableKeyCount} immediateRoom={_rotator.HasImmediateRoom}",
+                    + $"queued={NetworkQueueDepth}, analyses={_pendingAnalyses.Count}, cells={QueryCell.ActiveCellCount}, "
+                    + $"apiLoad={_apiCoord.ComputeLoadScore():0}/100, keys={_rotator.UsableKeyCount} room={_rotator.HasImmediateRoom}",
                     LogLevel.Info);
                 lastDone = done;
             }
             catch (Exception ex) { Log("Heartbeat failed: " + ex.Message, LogLevel.Warning); }
         }, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
-        ct.Register(() => { try { timer.Change(Timeout.Infinite, Timeout.Infinite); } catch (Exception ex) { Log("Heartbeat stop failed: " + ex.Message, LogLevel.Warning); } });
+        ct.Register(() => { try { timer.Change(Timeout.Infinite, Timeout.Infinite); } catch { } });
         return timer;
     }
 
-    /// <summary>One file that finished its local stage and now needs VirusTotal.</summary>
-    readonly record struct NetworkJob(ScanItem Item, string Md5, string Sha256, ScanOptions Options, int Attempt = 0);
-
-    /// <summary>How many times a file goes back to the queue before it is reported as unanswered. Each
-    /// retry waits for a channel first, so this is attempts, not a spin.</summary>
-    const int MaxLookupAttempts = 20;
-
+    const int MaxLookupAttempts = 3;
     long _channelsHeldUntilTicks;
+    static readonly TimeSpan ChannelHoldOff = TimeSpan.FromSeconds(15);
 
-    /// <summary>Parks every network worker for a while after a lookup found no channel able to answer.
-    /// Without it the workers race through the whole queue against a wall — thousands of files a minute,
-    /// none of them actually asked about.</summary>
     void HoldOffChannels(string why)
     {
         var until = DateTime.UtcNow + ChannelHoldOff;
-        if (_rotator.SoonestResetUtc is { } reset && reset > DateTime.UtcNow && reset < until) until = reset;
-
         long ticks = until.Ticks;
-        long was = Interlocked.Read(ref _channelsHeldUntilTicks);
-        if (ticks > was)
+        if (ticks > Interlocked.Read(ref _channelsHeldUntilTicks))
         {
             Interlocked.Exchange(ref _channelsHeldUntilTicks, ticks);
             Log($"Network stage holding until {until:HH:mm:ss} UTC — {why}.", LogLevel.Info);
         }
     }
 
-    static readonly TimeSpan ChannelHoldOff = TimeSpan.FromSeconds(30);
-
-    /// <summary>Waits out any hold-off before the next lookup, saying so on the row that is held. Polled in
-    /// short steps so an "unstick" that opens the hold-off is noticed within a couple of seconds, not at the
-    /// end of a 30-second wait.</summary>
     async Task WaitForAChannelAsync(ScanItem item, CancellationToken ct)
     {
         var poll = TimeSpan.FromSeconds(2);
@@ -918,23 +1051,10 @@ internal sealed class ScanScheduler
         }
     }
 
-    /// <summary>The run's options, so a manual or automatic unstick can rebuild a lookup job for a file that
-    /// was dropped after its attempts ran out.</summary>
-    ScanOptions? _currentOpts;
-
-    /// <summary>Consecutive "no channel could answer" results with no lookup succeeding in between. When this
-    /// crosses <see cref="AutoUnstickAfterEmpties"/> the stage unstuck itself automatically.</summary>
     int _consecutiveEmpty;
     long _lastAutoUnstickTicks;
-
-    /// <summary>How many lookups in a row can come back empty before the stage resets its own browser and
-    /// route without being asked. About one full set of workers plus a couple, so a genuinely blocked
-    /// address is reacted to quickly but a single slow lookup is not.</summary>
-    const int AutoUnstickAfterEmpties = 16;
+    const int AutoUnstickAfterEmpties = 12;
     static readonly TimeSpan AutoUnstickThrottle = TimeSpan.FromSeconds(45);
-
-    /// <summary>Raised (marshalled by the UI) when the queue is automatically unstuck, so the window can say so.</summary>
-    public event Action<int>? QueueUnstuck;
 
     void NoteEmptyLookup()
     {
@@ -944,44 +1064,28 @@ internal sealed class ScanScheduler
         if (now - last < AutoUnstickThrottle.Ticks) return;
         if (Interlocked.CompareExchange(ref _lastAutoUnstickTicks, now, last) != last) return;
         Interlocked.Exchange(ref _consecutiveEmpty, 0);
-        Log($"Network stage stuck: {AutoUnstickAfterEmpties} lookups in a row with no channel able to answer — unsticking automatically.", LogLevel.Warning);
+        Log($"Network stage stuck ({AutoUnstickAfterEmpties} empty cells) — unsticking automatically.", LogLevel.Warning);
         _ = UnstickAsync("stuck queue (automatic)", auto: true);
     }
 
     void NoteLookupServed() => Interlocked.Exchange(ref _consecutiveEmpty, 0);
 
-    /// <summary>
-    /// Clears the network hold-off now, throws the keyless browser and its cookies away and rebuilds it
-    /// fresh (a new Tor exit too, when Tor is on), and puts every file that was dropped for want of a
-    /// channel back in the queue. This is the manual button and the automatic recovery in one place.
-    /// Returns how many dropped files were requeued.
-    /// </summary>
     public async Task<int> UnstickAsync(string why, bool auto = false)
     {
-        Interlocked.Exchange(ref _channelsHeldUntilTicks, 0); // stop every worker's wait immediately
-
-        // A fresh browser with no cookies, and a fresh exit IP when Tor is carrying the traffic.
+        Interlocked.Exchange(ref _channelsHeldUntilTicks, 0);
         try
         {
-            if (TorService.IsActive)
-            {
-                bool rotated = await TorService.NewCircuitAsync();
-                Log(rotated ? "Unstick: Tor circuit changed." : "Unstick: Tor circuit change failed: " + (TorService.LastError ?? "?"),
-                    rotated ? LogLevel.Info : LogLevel.Warning);
-            }
+            if (TorService.IsActive) await TorService.NewCircuitAsync();
         }
-        catch (Exception ex) { Log("Unstick: Tor circuit change threw: " + ex.Message, LogLevel.Warning); }
+        catch (Exception ex) { Log("Unstick Tor rotation failed: " + ex.Message, LogLevel.Warning); }
         GuiScrapeService.ResetHard(why);
 
         int requeued = RequeueDroppedLookups();
-        Log($"Unstick ({why}): hold-off cleared, browser reset, {requeued} dropped file(s) requeued.", LogLevel.Info);
-        try { UiPost(() => { try { QueueUnstuck?.Invoke(requeued); } catch (Exception ex) { Log("QueueUnstuck handler failed: " + ex.Message, LogLevel.Warning); } }); }
-        catch (Exception ex) { Log("QueueUnstuck dispatch failed: " + ex.Message, LogLevel.Warning); }
+        Log($"Unstick ({why}): route health & browser cache slots reset, {requeued} dropped file(s) requeued.", LogLevel.Info);
+        try { UiPost(() => { try { QueueUnstuck?.Invoke(requeued); } catch { } }); } catch { }
         return requeued;
     }
 
-    /// <summary>Puts every file that was dropped as "not asked yet" back into the network queue with a clean
-    /// attempt count, so the fresh browser/route gets another shot at all of them at once.</summary>
     int RequeueDroppedLookups()
     {
         var queue = _netQueue;
@@ -989,52 +1093,41 @@ internal sealed class ScanScheduler
         if (queue == null || opts == null || !IsRunning) return 0;
 
         int requeued = 0;
-        foreach (var item in Items.ToArray())
+        foreach (var item in SnapshotItems())
         {
             if (item.Status != ScanStatus.Skipped || item.SkipReason != Strings.SkipReasonNotAskedYet) continue;
             if (string.IsNullOrEmpty(item.Md5) || string.IsNullOrEmpty(item.Sha256)) continue;
-            if (!queue.Writer.TryWrite(new NetworkJob(item, item.Md5!, item.Sha256!, opts))) break; // queue closed
-            // It had been counted done+skipped when it was dropped; put it back in flight.
+            if (!queue.TryEnqueue(new NetworkJob(item, item.ScanGeneration, item.Md5!, item.Sha256!, opts), MakeQueueKey(item))) break;
             PendingOutbox.Remove(item.FilePath);
-            Interlocked.Decrement(ref _skipped);
-            Interlocked.Decrement(ref _done);
             ItemWrite(() => { item.SkipReason = null; item.Detail = Strings.StatusWaitingLookupSlot; item.Status = ScanStatus.AwaitingLookup; });
             requeued++;
         }
-        if (requeued > 0) ReportProgress();
+        if (requeued > 0) { RecountCounters(); ReportProgress(); }
         return requeued;
     }
 
-    /// <summary>Files handed over by the scan workers, waiting for the network stage. Unbounded on
-    /// purpose: the entries are references to items that already exist, and a bounded channel would
-    /// push the backpressure back onto the disk workers — which is exactly what this separates.</summary>
-    System.Threading.Channels.Channel<NetworkJob>? _netQueue;
-
-    /// <summary>How many files have finished hashing and are waiting their turn at VirusTotal.</summary>
-    public int NetworkQueueDepth => _netQueue?.Reader.Count ?? 0;
-
-    /// <summary>
-    /// Runs the VirusTotal stage for one file at a time, forever, until the queue is completed. As many
-    /// of these run as the concurrency setting allows; nothing else in the scan waits on them.
-    /// </summary>
     async Task NetworkWorkerAsync(int index, CancellationToken ct)
     {
-        using var op = OpLog.Begin($"Network worker {index}");
+        using var op = OpLog.Begin($"Cell worker {index}");
         int handled = 0;
         try
         {
-            await foreach (var job in _netQueue!.Reader.ReadAllAsync(ct))
+            while (!ct.IsCancellationRequested)
             {
+                var (hasJob, job) = await _netQueue!.TryDequeueAsync(ct);
+                if (!hasJob) break;
+                if (job.Generation != job.Item.ScanGeneration) continue; // superseded by an urgent promotion
+
                 await WaitForAChannelAsync(job.Item, ct);
                 handled++;
-                using var fileOp = OpLog.Begin("Lookup", $"in: {job.Item.FileName} md5={job.Md5}");
+                using var fileOp = OpLog.Begin("CellLookup", $"in: {job.Item.FileName} md5={job.Md5}");
                 VtFileReport? report = null;
                 var failure = LookupFailure.LookupEmpty;
                 try
                 {
-                    // In-scan dedup: serialize lookups of identical content within one run so duplicate
-                    // files (node_modules, bundled runtimes, repeated installers) share a single VT/GUI
-                    // lookup. The first item caches the report; the rest get the cache hit here.
+                    bool bypassCache = job.Options.BypassCache || job.Options.BypassTrust
+                        || job.Item.BypassCacheForThisItem || job.Item.BypassTrustForThisItem;
+
                     var dedupGate = _md5Gates!.GetOrAdd(job.Md5, _ => new SemaphoreSlim(1, 1));
                     if (!dedupGate.Wait(0))
                     {
@@ -1043,17 +1136,34 @@ internal sealed class ScanScheduler
                     }
                     try
                     {
-                        var dup = (job.Options.UseCache && !job.Options.BypassTrust)
+                        var dup = (job.Options.UseCache && !bypassCache)
                             ? _cache.TryGet(job.Md5, job.Options.CacheDays, job.Options.ThreatCacheDays) : null;
-                        if (dup != null) { ItemWrite(() => job.Item.FromCache = true); report = dup; failure = LookupFailure.None; }
+                        if (dup != null)
+                        {
+                            ItemWrite(() => job.Item.FromCache = true);
+                            report = dup;
+                            failure = LookupFailure.None;
+                        }
+                        else if (!bypassCache && _runNotSubmittedByMd5 != null && _runNotSubmittedByMd5.TryGetValue(job.Md5, out var skipReason))
+                        {
+                            ItemWrite(() => job.Item.SkipReason = skipReason);
+                            report = null;
+                            failure = LookupFailure.NotSubmitted;
+                        }
+                        else if (_runPendingUploadByMd5 != null && _runPendingUploadByMd5.TryGetValue(job.Md5, out var pendingUpload))
+                        {
+                            SetStatus(job.Item, ScanStatus.Polling);
+                            WatchSharedAnalysis(job.Item, pendingUpload, ct);
+                            report = null;
+                            failure = LookupFailure.AnalysisPending;
+                        }
                         else (report, failure) = await DoLookupAsync(job.Item, job.Md5, job.Sha256, job.Options, ct);
                     }
                     finally { dedupGate.Release(); }
 
                     if (failure == LookupFailure.AnalysisPending)
                     {
-                        // Uploaded: the background watcher owns this item's ending now.
-                        fileOp.Note("out: uploaded — the analysis watcher will finish it");
+                        fileOp.Note("out: uploaded — analysis watcher active");
                         continue;
                     }
                 }
@@ -1062,55 +1172,43 @@ internal sealed class ScanScheduler
                 {
                     ItemWrite(() => job.Item.Error = ex.Message);
                     SetStatus(job.Item, ScanStatus.Failed);
-                    Bump(ref _failed);
                     Log($"Lookup failed for {job.Item.FileName}: {ex}", LogLevel.Error);
                     fileOp.Fail(ex.Message);
                     FinishItem(job.Item);
                     continue;
                 }
 
-                // "No channel could answer" is not a result about the file. Burning it as a failure
-                // consumed the queue at network speed and reported a third of the disk as errors, when
-                // nothing had actually been asked about those files. The job goes back to the queue and
-                // the workers hold until a key window or the keyless channel comes back.
                 if (report == null && failure == LookupFailure.LookupEmpty && !ct.IsCancellationRequested)
                 {
                     var again = job with { Attempt = job.Attempt + 1 };
-                    if (again.Attempt <= MaxLookupAttempts && _netQueue.Writer.TryWrite(again))
+                    if (again.Attempt <= MaxLookupAttempts && _netQueue.TryEnqueue(again, MakeQueueKey(job.Item)))
                     {
-                        HoldOffChannels("every channel came back empty");
-                        NoteEmptyLookup(); // enough of these in a row and the stage resets itself
+                        HoldOffChannels("cell exhausted all routes");
+                        NoteEmptyLookup();
                         string retry = string.Format(Strings.StatusRequeuedFormat, again.Attempt, MaxLookupAttempts);
                         ItemWrite(() => { job.Item.Detail = retry; job.Item.Status = ScanStatus.AwaitingLookup; });
-                        fileOp.Note($"out: no channel could answer — requeued (attempt {again.Attempt})");
+                        fileOp.Note($"out: requeued (attempt {again.Attempt})");
                         continue;
                     }
                 }
 
-                if (report != null) NoteLookupServed(); // a real answer: the channel is working again
+                if (report != null) NoteLookupServed();
                 RecordOutcome(job.Item, report, failure, fileOp);
                 FinishItem(job.Item);
             }
             op.Ok($"out: {handled} file(s) looked up");
         }
         catch (OperationCanceledException) { op.Note($"cancelled after {handled} file(s)"); }
-        catch (Exception ex) { op.Fail($"{ex.Message} (after {handled} file(s))"); Log($"Network worker {index} died: {ex}", LogLevel.Error); }
+        catch (Exception ex) { op.Fail($"{ex.Message} (after {handled} file(s))"); Log($"Cell worker {index} died: {ex}", LogLevel.Error); }
     }
 
-    /// <summary>Analyses still being waited for. The run is not over until these drain, and the count is
-    /// what the progress heartbeat reports as "waiting on VirusTotal".</summary>
-    readonly ConcurrentDictionary<string, Task> _pendingAnalyses = new(StringComparer.Ordinal);
-
-    /// <summary>How many uploaded files are still waiting for their VirusTotal analysis.</summary>
-    public int PendingAnalysisCount => _pendingAnalyses.Count;
-
-    /// <summary>
-    /// Waits for one uploaded file's analysis off the scan workers, then finishes the item. Started and
-    /// forgotten on purpose: the returned task is tracked in <see cref="_pendingAnalyses"/> and awaited
-    /// once at the end of the run, so nothing is lost and no worker is held.
-    /// </summary>
     void WatchAnalysis(ScanItem item, string analysisId, string md5, string sha256, ScanOptions opts, CancellationToken ct)
     {
+        string watchKey = $"{analysisId}#{Interlocked.Increment(ref _watcherSeq)}";
+        var sharedTcs = new TaskCompletionSource<(VtFileReport? Report, LookupFailure Failure)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _runPendingUploadByMd5?.TryAdd(md5, sharedTcs.Task);
+        _eta.BeginPoll(watchKey);
+
         var task = Task.Run(async () =>
         {
             using var op = OpLog.Begin("Analysis watch", $"in: analysis={analysisId} file={item.FileName}");
@@ -1125,62 +1223,96 @@ internal sealed class ScanScheduler
                     if (opts.UseCache && report.TotalEngines > 0) _cache.Put(md5, report, item.LastingPath);
                 }
             }
-            catch (OperationCanceledException) { SetStatus(item, ScanStatus.Cancelled); op.Note("cancelled"); return; }
+            catch (OperationCanceledException)
+            {
+                SetStatus(item, ScanStatus.Cancelled);
+                op.Note("cancelled");
+                sharedTcs.TrySetCanceled(ct);
+                return;
+            }
             catch (Exception ex)
             {
                 ItemWrite(() => item.Error = ex.Message);
                 Log($"Analysis watch failed for {item.FileName}: {ex}", LogLevel.Error);
                 op.Fail(ex.Message);
             }
-            finally { _pendingAnalyses.TryRemove(analysisId, out _); }
+            finally
+            {
+                _eta.EndPoll(watchKey, report != null);
+                _pendingAnalyses.TryRemove(watchKey, out _);
+                _runPendingUploadByMd5?.TryRemove(md5, out _);
+            }
 
+            sharedTcs.TrySetResult((report, failure));
             RecordOutcome(item, report, failure, op);
             FinishItem(item);
         }, CancellationToken.None);
 
-        _pendingAnalyses[analysisId] = task;
+        _pendingAnalyses[watchKey] = task;
     }
 
-    /// <summary>How long one file waits for a free API key before the keyless path is tried instead.
-    /// Long enough to ride out the 4-per-minute window, short enough that a day-long quota block does
-    /// not park the whole scan.</summary>
-    static readonly TimeSpan ApiWaitForKey = TimeSpan.FromSeconds(75);
-
-    /// <summary>How long one file waits for the single keyless browser before falling through to the
-    /// API. Short: the browser answers one lookup at a time, so a queue on it is dead time for every
-    /// worker in it, while a key window rolls over every minute.</summary>
-    static readonly TimeSpan GuiWaitWhenKeysBusy = TimeSpan.FromSeconds(10);
-
-    /// <summary>
-    /// Whether an unknown file should actually be submitted.
-    ///
-    /// A hash lookup costs one API request. A submission costs about thirteen: the upload, then up to
-    /// eleven status checks, then the finished report. With 500 requests a key a day, ninety uploads
-    /// spend everything fourteen keys have — and on a drive sweep the files VirusTotal has never seen
-    /// are shortcuts, build output and per-machine scripts that no verdict was ever going to exist for.
-    /// So a sweep looks up and reports what is known; submitting is for files the user picked, or for
-    /// someone who set the policy to "always" on purpose.
-    /// </summary>
-    static bool ShouldUpload(string path, ScanOptions opts) => opts.UploadPolicy switch
+    void WatchSharedAnalysis(ScanItem item, Task<(VtFileReport? Report, LookupFailure Failure)> shared, CancellationToken ct)
     {
-        0 => false,
-        2 => true,
-        _ => opts.ExplicitFileSelection && FileClass.IsWorthUploading(path),
-    };
+        string watchKey = $"shared#{Interlocked.Increment(ref _watcherSeq)}";
+        var task = Task.Run(async () =>
+        {
+            using var op = OpLog.Begin("Shared analysis watch", $"file={item.FileName}");
+            try
+            {
+                var (report, failure) = await shared.WaitAsync(ct);
+                RecordOutcome(item, report, failure, op);
+                FinishItem(item);
+            }
+            catch (OperationCanceledException) { SetStatus(item, ScanStatus.Cancelled); op.Note("cancelled"); }
+            catch (Exception ex)
+            {
+                ItemWrite(() => item.Error = ex.Message);
+                SetStatus(item, ScanStatus.Failed);
+                op.Fail(ex.Message);
+                FinishItem(item);
+            }
+            finally { _pendingAnalyses.TryRemove(watchKey, out _); }
+        }, CancellationToken.None);
 
-    /// <summary>
-    /// How long to wait before each analysis status check. Every check spends one API request, and the
-    /// old schedule was sixty checks fifteen seconds apart — one uploaded file could cost sixty units
-    /// out of a 500-a-day key. Free-tier analyses usually finish inside a minute or two, so the first
-    /// few checks are close together and the rest back off. Eleven checks now cover a LONGER window
-    /// than sixty used to.
-    /// </summary>
-    static readonly int[] PollDelaysSeconds = [20, 20, 30, 45, 60, 90, 120, 150, 180, 210, 240];
+        _pendingAnalyses[watchKey] = task;
+    }
+
+    static readonly TimeSpan ApiWaitForUpload = TimeSpan.FromMinutes(10);
+    static readonly TimeSpan ApiWaitForPoll = TimeSpan.FromSeconds(90);
+
+    static bool IsWholeDriveTarget(IEnumerable<string> paths)
+    {
+        foreach (var raw in paths)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            string trimmed = raw.Trim().Trim('"').TrimEnd('\\', '/');
+            if (trimmed.Length == 2 && trimmed[1] == ':') return true;
+        }
+        return false;
+    }
+
+    static (bool ShouldUpload, string SkipReason) EvaluateUpload(ScanItem item, ScanOptions opts, bool isLargeSweep)
+    {
+        long size = item.SizeBytes;
+        if (size == 0) return (false, Strings.SkipReasonNotSubmittedEmpty);
+        if (size > AppConstants.MaxUploadBytes) return (false, Strings.SkipReasonNotSubmittedTooLarge);
+
+        switch (opts.UploadPolicy)
+        {
+            case 0: return (false, Strings.SkipReasonNotSubmittedPolicy);
+            case 2: return (true, "");
+            default:
+                if (!FileClass.IsWorthUploading(item.FilePath))
+                    return (false, Strings.SkipReasonNotSubmitted);
+                if (isLargeSweep && !opts.ExplicitFileSelection && !item.IsPriorityBoosted)
+                    return (false, Strings.SkipReasonNotSubmittedSweep);
+                return (true, "");
+        }
+    }
+
+    static readonly int[] PollDelaysSeconds = [15, 20, 30, 45, 60, 90, 120, 150, 180, 210, 240];
     public static readonly int PollWindowMinutes = PollDelaysSeconds.Sum() / 60;
 
-    /// <summary>Waits for a submitted analysis to finish, then fetches the finished report. Returns null
-    /// when the analysis is still running after the whole poll window, which the caller reports as its own
-    /// outcome — the file did reach VirusTotal, so it must not be described as "not found".</summary>
     async Task<VtFileReport?> PollUntilCompleteAsync(string analysisId, string sha256, ScanItem item, CancellationToken ct)
     {
         for (int i = 0; i < PollDelaysSeconds.Length; i++)
@@ -1189,64 +1321,32 @@ internal sealed class ScanScheduler
             await _pause.WaitWhilePausedAsync(ct);
             await Task.Delay(TimeSpan.FromSeconds(PollDelaysSeconds[i]), ct);
 
-            var (gotKey, info) = await TryCallWithRotation(key => _api.GetAnalysisAsync(analysisId, key, ct), ApiWaitForKey, ct);
+            var (gotKey, info) = await _apiCoord.GetAnalysisAsync(analysisId, item.UrgentOrder, item.PriorityTier, ApiWaitForPoll, ct);
             if (!gotKey || info == null)
             {
-                // No key free for the status check — keep the analysis alive and try again next tick
-                // instead of throwing the whole upload away.
                 ItemWrite(() => item.Detail = Strings.PollWaitingForQuota);
                 continue;
             }
             ItemWrite(() => item.Detail = string.Format(Strings.PollProgressDetailFormat, info.Status, i + 1));
             if (info.IsCompleted)
             {
-                var (gotReportKey, finished) = await TryCallWithRotation(key => _api.GetFileReportAsync(sha256, key, ct), ApiWaitForKey, ct);
+                var (gotReportKey, finished) = await _apiCoord.LookupFileReportAsync(
+                    sha256, ApiWorkKind.Poll, item.UrgentOrder, item.PriorityTier, ApiWaitForPoll, ct);
                 if (finished != null) return finished;
-                if (!gotReportKey && GuiScrapeService.IsRuntimeAvailable)
-                    return await GuiScrapeService.LookupAsync(sha256, ct, Timeout.InfiniteTimeSpan).WaitAsync(ct);
+                if (gotReportKey)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                    (_, finished) = await _apiCoord.LookupFileReportAsync(
+                        sha256, ApiWorkKind.Poll, item.UrgentOrder, item.PriorityTier, ApiWaitForPoll, ct);
+                    if (finished != null) return finished;
+                }
+                if (!gotReportKey && BrowserSessionFactory.IsRuntimeAvailable)
+                    return await GuiScrapeService.LookupAsync(sha256, ct, TimeSpan.FromSeconds(30));
                 return null;
             }
         }
-        Log($"Analysis {analysisId} for {item.FileName} still unfinished after {PollWindowMinutes} min; giving up.", LogLevel.Warning);
+        Log($"Analysis {analysisId} for {item.FileName} still unfinished after {PollWindowMinutes} min.", LogLevel.Warning);
         return null;
-    }
-
-    /// <summary>
-    /// Runs a VirusTotal call, rotating keys on 429/auth failures. Returns
-    /// (false, default) when no key could be obtained within <paramref name="maxWait"/> or every key
-    /// refused the request — the caller then falls back to the keyless path instead of an exception.
-    /// This is what stops a scan sitting still: the old version kept re-acquiring keys and throwing,
-    /// which turned a spent daily quota into hours of 429 traffic and zero progress.
-    /// </summary>
-    async Task<(bool Served, T? Value)> TryCallWithRotation<T>(Func<string, Task<T>> call, TimeSpan maxWait, CancellationToken ct)
-    {
-        int maxAttempts = Math.Max(2, Math.Min(_rotator.UsableKeyCount + 2, 8));
-        var deadline = DateTime.UtcNow + maxWait;
-        for (int attempt = 0; attempt < maxAttempts; attempt++)
-        {
-            var left = deadline - DateTime.UtcNow;
-            if (left <= TimeSpan.Zero) return (false, default);
-
-            string? key = await _rotator.AcquireAsync(left, ct);
-            if (key == null) return (false, default);
-            try
-            {
-                // WaitAsync guarantees cancellation wins on time even if a slow HTTP path honors the token late (principle 43).
-                var value = await call(key).WaitAsync(ct);
-                _rotator.ReportSuccess(key);
-                return (true, value);
-            }
-            catch (VtRateLimitException ex) { _rotator.ReportRateLimited(key, ex.RetryAfter); }
-            catch (VtAuthException ex) { _rotator.ReportAuthError(key, ex); }
-            catch (HttpRequestException ex)
-            {
-                // A transport failure while Tor is carrying the traffic usually means a bad exit node.
-                NetworkBlockMonitor.ReportTorPathFailure("api:" + ex.HttpRequestError);
-                Log("VirusTotal API transport failure: " + ex.Message, LogLevel.Warning);
-                return (false, default);
-            }
-        }
-        return (false, default);
     }
 
     // ---- progress bookkeeping ----
@@ -1256,36 +1356,77 @@ internal sealed class ScanScheduler
     void Complete(ScanItem item, VtFileReport report)
     {
         SetStatus(item, ScanStatus.Completed);
-        PendingOutbox.Remove(item.FilePath); // healed: this file finally got a verdict
-        switch (VerdictClassifier.Of(report))
-        {
-            case VerdictClass.Malicious:
-                // Within "threat", the highest band is counted as malicious and the rest as suspicious.
-                bool topBand = ReferenceEquals(VerdictCategories.Classify(report.DetectionCount), VerdictCategories.All[^1]);
-                if (topBand) Bump(ref _malicious); else Bump(ref _suspicious);
-                break;
-            case VerdictClass.Suspicious: Bump(ref _suspicious); break;
-            case VerdictClass.Clean: Bump(ref _clean); break;
-            default: Bump(ref _unknown); break;
-        }
+        PendingOutbox.Remove(item.FilePath);
     }
 
     void TrustSkip(ScanItem item, string reason, string? publisher)
     {
         ItemWrite(() => { item.SkipReason = reason; item.Publisher = publisher; item.Status = ScanStatus.TrustedSkipped; });
-        Bump(ref _signedSkipped);
         Log($"VT skipped (trusted): {item.FileName} — {reason}", LogLevel.Info);
     }
 
-    /// <summary>
-    /// Silences per-item ListChanged for the length of a run, and restores it with one reset at the end.
-    ///
-    /// <see cref="BindingList{T}"/> subscribes to every item's PropertyChanged and answers each one by
-    /// calling IndexOf to find the row — a linear walk of the whole list. On a 340,000-file sweep that
-    /// is a 340,000-element search per property set, on the UI thread, several hundred times a second:
-    /// the window stopped answering and Windows logged the scan as hung four minutes in. The grid is
-    /// repainted by the queue view's own timer while a scan runs, so these notifications buy nothing.
-    /// </summary>
+    /// <summary>Reconciles all counters authoritatively from the live session rows so in-place rescans,
+    /// live appends, and promotions never drift or reset the progress bar.</summary>
+    void RecountCounters()
+    {
+        int total = 0, done = 0, mal = 0, susp = 0, clean = 0, unk = 0, fail = 0, skip = 0, signed = 0;
+        lock (_itemsLock)
+        {
+            total = _allItems.Count;
+            foreach (var it in _allItems)
+            {
+                switch (it.Status)
+                {
+                    case ScanStatus.Completed:
+                        done++;
+                        switch (VerdictClassifier.Of(it.Report))
+                        {
+                            case VerdictClass.Malicious:
+                                bool topBand = it.Report != null && ReferenceEquals(VerdictCategories.Classify(it.Report.DetectionCount), VerdictCategories.All[^1]);
+                                if (topBand) mal++; else susp++;
+                                break;
+                            case VerdictClass.Suspicious: susp++; break;
+                            case VerdictClass.Clean: clean++; break;
+                            default: unk++; break;
+                        }
+                        break;
+                    case ScanStatus.TrustedSkipped:
+                        done++; signed++; break;
+                    case ScanStatus.Skipped:
+                        done++; skip++; break;
+                    case ScanStatus.Failed:
+                        done++; fail++; break;
+                    case ScanStatus.Cancelled:
+                        done++; break;
+                }
+            }
+        }
+        Volatile.Write(ref _total, total);
+        Volatile.Write(ref _done, done);
+        Volatile.Write(ref _malicious, mal);
+        Volatile.Write(ref _suspicious, susp);
+        Volatile.Write(ref _clean, clean);
+        Volatile.Write(ref _unknown, unk);
+        Volatile.Write(ref _failed, fail);
+        Volatile.Write(ref _skipped, skip);
+        Volatile.Write(ref _signedSkipped, signed);
+    }
+
+    /// <summary>Adds a standalone lookup item (e.g. manual Hash Lookup) to the session cleanly.</summary>
+    public void AddManualItem(ScanItem item)
+    {
+        lock (_itemsLock)
+        {
+            if (!_allItems.Contains(item)) _allItems.Add(item);
+        }
+        UiPost(() =>
+        {
+            if (!Items.Contains(item)) Items.Add(item);
+        });
+        RecountCounters();
+        ReportProgress();
+    }
+
     IDisposable SuspendItemNotifications()
     {
         UiPost(() => Items.RaiseListChangedEvents = false);
@@ -1303,14 +1444,6 @@ internal sealed class ScanScheduler
 
     int _quietItems;
 
-    /// <summary>
-    /// Writes to one row's fields. Marshalled to the UI thread normally, because the binding list
-    /// answers a property change by touching the grid — but NOT while a run has those notifications
-    /// suspended. Then the write reaches nothing but the object's own fields, and marshalling it cost
-    /// one window message per property: at 30,000 files a minute that was over a thousand posts a
-    /// second and the message pump had nothing left for the user. The grid reads these fields when it
-    /// repaints on its own timer.
-    /// </summary>
     void ItemWrite(Action write)
     {
         if (Volatile.Read(ref _quietItems) == 1)
@@ -1320,7 +1453,6 @@ internal sealed class ScanScheduler
         else UiPost(write);
     }
 
-    /// <summary>Runs an action when disposed.</summary>
     sealed class Restore(Action onDispose) : IDisposable
     {
         int _done;
@@ -1331,15 +1463,8 @@ internal sealed class ScanScheduler
         }
     }
 
-    /// <summary>Add many items to the grid-bound list in chunks, suppressing per-item ListChanged so the
-    /// DataGridView repaints once per chunk instead of once per row — adding tens of thousands of files
-    /// no longer freezes the window for seconds at scan start. Runs on the UI thread (caller marshals).</summary>
     void BulkAdd(List<ScanItem> toAdd)
     {
-        // One reset for the whole add, not one per chunk. ResetBindings makes the grid rebuild from
-        // scratch, so resetting every 500 rows over a 346,000-file selection was 693 rebuilds of a list
-        // that kept growing — quadratic work on the UI thread, and the window stopped answering before
-        // the first file was even hashed.
         bool wasRaising = Items.RaiseListChangedEvents;
         Items.RaiseListChangedEvents = false;
         try { foreach (var item in toAdd) Items.Add(item); }
@@ -1351,83 +1476,64 @@ internal sealed class ScanScheduler
     }
 
     int _progressDirty;
-
-    void DoneOne()
-    {
-        Interlocked.Increment(ref _done);
-        lock (_rateLock) { _recent.Enqueue(_stopwatch.ElapsedMilliseconds); while (_recent.Count > 30) _recent.Dequeue(); }
-
-        // Marked, not reported. This used to raise ProgressChanged for every finished file, and the
-        // handler sets a label whose text change lays the whole scan tab out again — at 30,000 files a
-        // minute that is 500 layout passes a second and the window never answers anything else. The
-        // flush timer reports four times a second, and once more when the run ends.
-        Volatile.Write(ref _progressDirty, 1);
-    }
-
-    // What the summary line last showed about the work that is not finished yet. Only the flush timer
-    // touches these.
     int _shownAwaiting = -1, _shownAnalyses = -1;
     bool _shownPaused;
     long _shownHeldTicks;
 
-    /// <summary>
-    /// Reports progress if anything finished since the last report, or if the unfinished work changed
-    /// shape. Hashing a file finishes nothing, and neither does a pause or a hold-off on VirusTotal, so a
-    /// report driven only by finished files left the summary frozen on a number while the queue for
-    /// VirusTotal grew by thousands — the window gave no sign of what the scan was doing.
-    /// </summary>
     void FlushProgress()
     {
         int awaiting = NetworkQueueDepth, analyses = _pendingAnalyses.Count;
         bool paused = _pause.IsPaused;
         long held = Interlocked.Read(ref _channelsHeldUntilTicks);
         bool shapeChanged = awaiting != _shownAwaiting || analyses != _shownAnalyses || paused != _shownPaused || held != _shownHeldTicks;
-        if (Interlocked.Exchange(ref _progressDirty, 0) == 1 || shapeChanged)
+        bool etaTick = IsRunning && Volatile.Read(ref _done) < Volatile.Read(ref _total)
+            && (_stopwatch.ElapsedMilliseconds - Volatile.Read(ref _lastProgressEmitMs)) >= 1000;
+        if (Interlocked.Exchange(ref _progressDirty, 0) == 1 || shapeChanged || etaTick)
         {
             (_shownAwaiting, _shownAnalyses, _shownPaused, _shownHeldTicks) = (awaiting, analyses, paused, held);
             ReportProgress();
         }
     }
 
-    /// <summary>Rolling files/sec over the recent window + a remaining-time estimate, so trusted-skip
-    /// and cache hits (near-instant) at the start don't skew the rate against slow VT uploads.</summary>
-    (double Rate, TimeSpan? Remaining) ComputeRate(int total, int done)
+    (double Rate, TimeSpan? Remaining) EstimateProgress(int total, int done)
     {
-        lock (_rateLock)
-        {
-            if (_recent.Count < 2) return (0, null);
-            long span = _recent.Last() - _recent.First();
-            if (span <= 0) return (0, null);
-            double rate = (_recent.Count - 1) / (span / 1000.0);
-            int left = Math.Max(0, total - done);
-            TimeSpan? rem = rate > 0 ? TimeSpan.FromSeconds(left / rate) : null;
-            return (rate, rem);
-        }
+        bool keylessAvailable = (_currentOpts?.ForceKeyless == true || Settings.KeylessGuiLookup) && BrowserSessionFactory.IsRuntimeAvailable;
+        return _eta.Estimate(
+            total,
+            done,
+            NetworkQueueDepth,
+            _pendingAnalyses.Count,
+            Interlocked.Read(ref _channelsHeldUntilTicks),
+            _rotator.GetQuotaSnapshot(),
+            keylessAvailable,
+            keylessParked: false,
+            _pause.IsPaused);
     }
-    static void Bump(ref int counter) { Interlocked.Increment(ref counter); }
 
     void ResetCounters() { _total = _done = _malicious = _suspicious = _clean = _unknown = _failed = _skipped = _signedSkipped = 0; }
 
     void ReportProgress()
     {
+        Volatile.Write(ref _lastProgressEmitMs, _stopwatch.ElapsedMilliseconds);
+        int total = Volatile.Read(ref _total), done = Volatile.Read(ref _done);
         var p = new OverallProgress
         {
-            Total = _total,
-            Done = _done,
-            Malicious = _malicious,
-            Suspicious = _suspicious,
-            Clean = _clean,
-            Unknown = _unknown,
-            Failed = _failed,
-            Skipped = _skipped,
-            SignedSkipped = _signedSkipped,
+            Total = total,
+            Done = done,
+            Malicious = Volatile.Read(ref _malicious),
+            Suspicious = Volatile.Read(ref _suspicious),
+            Clean = Volatile.Read(ref _clean),
+            Unknown = Volatile.Read(ref _unknown),
+            Failed = Volatile.Read(ref _failed),
+            Skipped = Volatile.Read(ref _skipped),
+            SignedSkipped = Volatile.Read(ref _signedSkipped),
             AwaitingLookup = NetworkQueueDepth,
             AnalysesPending = _pendingAnalyses.Count,
             Paused = _pause.IsPaused,
         };
         long held = Interlocked.Read(ref _channelsHeldUntilTicks);
         if (held > DateTime.UtcNow.Ticks) p.NetworkHeldUntilUtc = new DateTime(held, DateTimeKind.Utc);
-        var (rate, rem) = ComputeRate(_total, _done);
+        var (rate, rem) = EstimateProgress(total, done);
         p.Elapsed = _stopwatch.Elapsed;
         p.FilesPerSec = rate;
         p.Remaining = rem;

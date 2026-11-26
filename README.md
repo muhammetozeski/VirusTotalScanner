@@ -30,8 +30,7 @@ searchable history so you can answer "did this turn malicious since I last check
 2. On first run a short wizard lets you add a VirusTotal API key and, optionally, the right‑click menu.
 3. **Settings → "Add to right‑click menu"** registers a *Scan with VirusTotal* entry for files and folders.
 
-The exe is digitally signed with a self-issued certificate; running `Install-Certificate.cmd` from the release's
-`SignatureTrust.zip` once lets Windows verify that signature (it does not remove the SmartScreen warning).
+The executables are digitally signed. To let Windows verify the signature, run `Install-Certificate.cmd` from `SignatureTrust.zip` once. The programs run without it; only the signature stays unverified.
 
 ## Features
 
@@ -120,10 +119,6 @@ dotnet build      # build
 dotnet run        # launch the GUI
 ```
 
-Releases are a single‑file, self‑contained, ReadyToRun exe (trimming stays **off** — the reflection‑based
-localization breaks under trimming). The exact publish/deploy steps are in
-[`docs/guncelleme.md`](docs/guncelleme.md).
+Releases ship both a self-contained single-file exe (`VirusTotalScanner.exe`) and a framework-dependent exe (`VirusTotalScanner-FrameworkDependent-RequiresNET10.exe`, requiring the .NET 10 Desktop Runtime). Trimming stays **off** — reflection-based localization breaks under trimming. Publish/deploy steps and architecture notes are indexed in [`docs/İçindekiler.md`](docs/İçindekiler.md) and [`docs/guncelleme.md`](docs/guncelleme.md).
 
-Runtime data (logs, cache, history, quarantine) lives next to the exe (or under
-`%AppData%\VirusTotalScanner\` when that folder isn't writable). The version is set by `<Version>` in the
-`.csproj`.
+Runtime data uses the portable three-folder layout next to the exe (or under `%AppData%\VirusTotalScanner\` when that folder isn't writable): `UserData\` (settings, language packs, `Verdicts\VerdictLedger.json`, history, allowlists, quarantine), `UserCache\` (rebuildable `Fingerprints.json`), and `AppCache\` (logs, WebView2 profiles, Tor runtime, session). The version is set by `<Version>` in the `.csproj`.

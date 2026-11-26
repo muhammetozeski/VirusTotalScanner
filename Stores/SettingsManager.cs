@@ -55,6 +55,14 @@ internal static class SettingsManager
             if (iSettingSetups.TryGetValue(key, out var setting))
                 setting.LoadFromStr(value);
         }
+
+        // Automatically upgrade unedited legacy short SafeExtensions lists to the comprehensive list.
+        string curSafe = (Settings.SafeExtensions.Value ?? "").Trim().TrimEnd(';');
+        if (string.Equals(curSafe, Settings.LegacyDefaultSafeExtensions, StringComparison.OrdinalIgnoreCase))
+        {
+            Settings.SafeExtensions.Value = Settings.DefaultSafeExtensions;
+            SaveSettings();
+        }
     }
 
     /// <summary>Guards the serialize-then-write pair. A sweep saves quota counters from every worker

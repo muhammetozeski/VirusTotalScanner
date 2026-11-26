@@ -10,6 +10,7 @@ internal static class AppServices
     public static VtApiClient Api { get; } = new();
     public static HashCache Cache { get; } = new();
     public static KeyRotator Rotator { get; private set; } = null!;
+    public static ApiCoordinator ApiCoordinator { get; private set; } = null!;
     public static ScanScheduler Scheduler { get; private set; } = null!;
 
     static bool _initialized;
@@ -34,7 +35,8 @@ internal static class AppServices
         FingerprintCache.Load();
         KnownGoodDb.Reload();
         Rotator = new KeyRotator(Vault);
-        Scheduler = new ScanScheduler(Rotator, Api, Cache);
+        ApiCoordinator = new ApiCoordinator(Rotator, Api);
+        Scheduler = new ScanScheduler(Rotator, Api, ApiCoordinator, Cache);
     }
 
     /// <summary>Persists counters and cache on shutdown.</summary>

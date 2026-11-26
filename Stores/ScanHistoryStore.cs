@@ -32,7 +32,7 @@ internal sealed class HistoryEntry
 /// </summary>
 internal static class ScanHistoryStore
 {
-    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.DataFolder, "history.json");
+    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.VerdictsFolder, "ScanHistory.json");
     const int MaxEntries = 5000;
     static readonly object Lock = new();
     static List<HistoryEntry>? _entries;
@@ -169,7 +169,7 @@ internal static class ScanHistoryStore
         {
             if (version <= _writtenVersion) return; // a newer save already reached the disk
             var clock = System.Diagnostics.Stopwatch.StartNew();
-            Directory.CreateDirectory(ConfigPathResolver.DataFolder);
+            Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder);
             AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(rows, JsonOpts));
             _writtenVersion = version;
             if (clock.ElapsedMilliseconds >= 100)

@@ -196,6 +196,7 @@ internal sealed class ScanDetailControl : UserControl
     void ConfigureEnginesGrid()
     {
         _engines.AutoGenerateColumns = false;
+        _engines.ReadOnly = true;
         _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColEngine, DataPropertyName = nameof(VtEngineResult.EngineName), Width = 160 });
         _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColCategory, DataPropertyName = nameof(VtEngineResult.Category), Width = 110 });
         _engines.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = Strings.ColResult, DataPropertyName = nameof(VtEngineResult.Result), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
@@ -261,17 +262,20 @@ internal sealed class ScanDetailControl : UserControl
         return days > 0 && r.UpdatedUtc is { } u && u < DateTime.UtcNow.AddDays(-days);
     }
 
+    Font? _engineBoldFont;
+
     void Engines_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (_engines.Rows[e.RowIndex].DataBoundItem is not VtEngineResult r) return;
         bool major = MajorEngines.IsMajor(r.EngineName);
         bool stale = r.IsDetection && IsStaleSig(r);
+        _engineBoldFont ??= new Font(_engines.Font, FontStyle.Bold);
 
         if (r.IsDetection)
         {
             // A stale-signature detection is greyed (less alarming) vs a fresh red hit.
             e.CellStyle!.ForeColor = stale ? Color.FromArgb(150, 150, 150) : Theme.Current.Danger;
-            e.CellStyle.Font = new Font(_engines.Font, FontStyle.Bold);
+            e.CellStyle.Font = _engineBoldFont;
         }
         // Engine-name column: ★ + bold for the engines that matter, 🕒 for stale-signature detections.
         // Match by DataPropertyName, not index — the leading mark column shifts indices by one.
@@ -279,7 +283,7 @@ internal sealed class ScanDetailControl : UserControl
         {
             if (stale) e.Value = "🕒 " + name;
             else if (major) e.Value = "★ " + name;
-            if (major) e.CellStyle!.Font = new Font(_engines.Font, FontStyle.Bold);
+            if (major) e.CellStyle!.Font = _engineBoldFont;
         }
     }
 
@@ -342,13 +346,13 @@ internal sealed class ScanDetailControl : UserControl
             _hero.Set(Strings.StatusSignedShort, Strings.DetailTrustedSubtitle,
                 RecommendationService.Build(item!).Headline, "✓", Theme.Current.Accent);
             _actionStrip.Visible = false;
+            EnsureLocalMetaAsync(item!);
             _meta.Text =
                 $"{Strings.DetailLblFile}{item!.FileName}\n" +
                 $"{Strings.DetailLblStatus}{item.SkipReason ?? Strings.StatusSignedShort}" +
                 (item.Publisher != null ? $"\n{Strings.DetailLblPublisher}{item.Publisher}" : "") +
-                (ZoneIdentifier.Read(item.FilePath)?.Summary is { } z ? $"\n{z}" : "") +
-                (OverlayDetector.OverlayBytes(item.FilePath) is var ov && ov > 65536
-                    ? "\n" + string.Format(Strings.OverlayNoteFormat, FormatBytes(ov)) : "") +
+                (item.CachedZoneSummary is { } z ? $"\n{z}" : "") +
+                (item.CachedOverlayBytes is > 65536 ? "\n" + string.Format(Strings.OverlayNoteFormat, FormatBytes(item.CachedOverlayBytes.Value)) : "") +
                 Strings.SignedExplain;
             _md5.Text = item.Md5 ?? "-";
             _sha.Text = item.Sha256 ?? "-";
@@ -362,6 +366,7 @@ internal sealed class ScanDetailControl : UserControl
 
         // Provenance line: where this verdict came from.
         string provenance = item!.FromCache ? Strings.ProvenanceCache : Strings.ProvenanceScan;
+        EnsureLocalMetaAsync(item);
 
         var reco = RecommendationService.Build(item);
         string heroGlyph = report.IsMalicious ? "✕" : report.DetectionCount > 0 ? "!" : report.TotalEngines == 0 ? "?" : "✓";
@@ -385,10 +390,8 @@ internal sealed class ScanDetailControl : UserControl
             (report.FamilyLabel != null ? $"\n{report.FamilyLabel}" : "") +
             (report.CapabilitySummary != null ? $"\n{report.CapabilitySummary}" : "") +
             (Settings.ShowCommunityVotes && report.VotesText != null ? $"\n{report.VotesText}" : "") +
-            (ZoneIdentifier.Read(item.FilePath)?.Summary is { } zone ? $"\n{zone}" : "") +
-            // The scan already verified the signature; verifying it again here ran WinVerifyTrust (with its
-            // revocation checks) on the UI thread every time the pane was drawn.
-            (PeIdentityService.IdentitySummary(item.FilePath, item.Trust ?? TrustService.Evaluate(item.FilePath)) is { } pe ? $"\n{pe}" : "") +
+            (item.CachedZoneSummary is { } zone ? $"\n{zone}" : "") +
+            (item.Trust != null && PeIdentityService.IdentitySummary(item.FilePath, item.Trust) is { } pe ? $"\n{pe}" : "") +
             $"\n{provenance}";
 
         _md5.Text = report.Md5 ?? item.Md5 ?? "-";
@@ -438,9 +441,9 @@ internal sealed class ScanDetailControl : UserControl
 
         if (!_zoneRead)
         {
-            try { _zoneSummary = ZoneIdentifier.Read(item.ContainerPath ?? item.FilePath)?.Summary; }
-            catch (Exception ex) { Log("Zone read for the detail pane failed: " + ex.Message, LogLevel.Debug); }
-            _zoneRead = true;
+            _zoneSummary = item.CachedZoneSummary;
+            _zoneRead = item.LocalMetaComputed;
+            if (!item.LocalMetaComputed) EnsureLocalMetaAsync(item);
         }
 
         string signature = item.Trust is not { } trust ? Strings.DetailSignatureNotChecked
@@ -563,6 +566,31 @@ internal sealed class ScanDetailControl : UserControl
         Seg(report.Suspicious, p.Warning);
         Seg(report.Harmless, p.Success);
         Seg(report.Undetected, p.Border);
+    }
+
+    void EnsureLocalMetaAsync(ScanItem item)
+    {
+        if (item.LocalMetaComputed && item.Trust != null) return;
+        _ = Task.Run(() =>
+        {
+            bool changed = false;
+            if (!item.LocalMetaComputed)
+            {
+                try { item.CachedZoneSummary = ZoneIdentifier.Read(item.ContainerPath ?? item.FilePath)?.Summary; } catch { }
+                try { item.CachedOverlayBytes = OverlayDetector.OverlayBytes(item.FilePath); } catch { }
+                item.LocalMetaComputed = true;
+                changed = true;
+            }
+            if (item.Trust == null && File.Exists(item.FilePath))
+            {
+                try { item.Trust = TrustService.Evaluate(item.FilePath); changed = true; } catch { }
+            }
+            if (changed && IsHandleCreated && !IsDisposed)
+            {
+                try { BeginInvoke(() => { if (ReferenceEquals(_item, item)) { _zoneRead = false; Populate(); } }); }
+                catch { }
+            }
+        });
     }
 
     public void ApplyTheme()

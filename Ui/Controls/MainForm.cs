@@ -188,12 +188,12 @@ internal sealed partial class MainForm : Form
         AppServices.Scheduler.Finished += () => SafeUi(() =>
         {
             ScanHistoryStore.Flush(); // commit the sweep's throttled history rows now that it's done
-            var items = AppServices.Scheduler.Items;
+            var items = AppServices.Scheduler.SnapshotItems();
             int threatCount = items.Count(i => i.Report?.IsMalicious == true);
             if (threatCount > 0) TaskbarProgress.Threat(); else TaskbarProgress.Clear();
             UiStatusHub.Report(Strings.StatusSourceScan, string.Format(Strings.StatusScanFinishedFormat, items.Count, threatCount),
                 threatCount > 0 ? StatusSeverity.Danger : StatusSeverity.Info);
-            if (Settings.NotifyScanSummary && items.Count > 0) ShowScanSummaryToast(items);
+            if (Settings.NotifyScanSummary && items.Count > 0) ShowScanSummaryToast(items.ToList());
         });
         UiStatusHub.Changed += e => SafeUi(() => ShowStatusEvent(e));
         if (UiStatusHub.Latest is { } lastEvent) ShowStatusEvent(lastEvent);

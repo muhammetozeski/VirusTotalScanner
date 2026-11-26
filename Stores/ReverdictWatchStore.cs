@@ -23,7 +23,7 @@ internal sealed class WatchEntry
 /// </summary>
 internal static class ReverdictWatchStore
 {
-    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.DataFolder, "watch.json");
+    static readonly string FilePath = System.IO.Path.Combine(ConfigPathResolver.VerdictsFolder, "ReverdictWatch.json");
     static readonly object Lock = new();
     static List<WatchEntry>? _entries;
     static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
@@ -78,7 +78,7 @@ internal static class ReverdictWatchStore
 
     static void Save()
     {
-        try { Directory.CreateDirectory(ConfigPathResolver.DataFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts)); }
+        try { Directory.CreateDirectory(ConfigPathResolver.VerdictsFolder); AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(_entries, JsonOpts)); }
         catch (Exception ex) { Log("Watch save failed: " + ex.Message, LogLevel.Warning); }
     }
 }

@@ -361,3 +361,10 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Signing credentials and local portable runtime folders
+Imzalama.pfx
+PFX-PAROLA.txt
+AppCache/
+UserCache/
+UserData/

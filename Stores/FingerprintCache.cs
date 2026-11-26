@@ -34,7 +34,7 @@ internal static class FingerprintCache
     static volatile bool _dirty;
     static long _hits, _misses;
 
-    static string FilePath => Path.Combine(ConfigPathResolver.DataFolder, "fingerprints.json");
+    static string FilePath => ConfigPathResolver.FingerprintsPath;
 
     public static int Count => _map.Count;
     public static long Hits => Interlocked.Read(ref _hits);
@@ -150,7 +150,7 @@ internal static class FingerprintCache
         using var op = OpLog.Begin("Fingerprint cache save", $"{_map.Count} entr(ies)");
         try
         {
-            Directory.CreateDirectory(ConfigPathResolver.DataFolder);
+            Directory.CreateDirectory(ConfigPathResolver.UserCacheFolder);
             // Cleared before the write, not after: an entry added while the file is being written marks
             // the store dirty again instead of being forgotten by the next check.
             _dirty = false;
